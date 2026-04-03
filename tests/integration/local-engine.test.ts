@@ -41,7 +41,7 @@ describe('Local Engine Integration: Markdown → Ingest → Recall', () => {
     expect(result.totalChunks).toBe(chunks.length)
   })
 
-  it('recalls relevant chunks for architecture query', async () => {
+  it('recalls relevant chunks for netrunning query', async () => {
     const adapter = new MarkdownAdapter()
     const chunks: SoulChunk[] = []
     for await (const chunk of adapter.adapt(MD_FIXTURES)) {
@@ -49,19 +49,19 @@ describe('Local Engine Integration: Markdown → Ingest → Recall', () => {
     }
     await engine.ingest(chunks)
 
-    const results = await engine.recall('PPT Agent JSON HTML render')
+    const results = await engine.recall('cyberdeck netrunner Blackwall ICE')
     expect(results.length).toBeGreaterThan(0)
     // Top result should contain relevant terms
     const topContent = results[0]!.chunk.content.toLowerCase()
     expect(
-      topContent.includes('ppt') ||
-      topContent.includes('html') ||
-      topContent.includes('json') ||
-      topContent.includes('agent')
+      topContent.includes('cyberdeck') ||
+      topContent.includes('netrunner') ||
+      topContent.includes('blackwall') ||
+      topContent.includes('ice')
     ).toBe(true)
   })
 
-  it('recalls relevant chunks for HTML 直出 query', async () => {
+  it('recalls relevant chunks for Soulkiller query', async () => {
     const adapter = new MarkdownAdapter()
     const chunks: SoulChunk[] = []
     for await (const chunk of adapter.adapt(MD_FIXTURES)) {
@@ -69,10 +69,10 @@ describe('Local Engine Integration: Markdown → Ingest → Recall', () => {
     }
     await engine.ingest(chunks)
 
-    const results = await engine.recall('HTML 直出 token 效率')
+    const results = await engine.recall('Soulkiller engram Mikoshi Relic')
     expect(results.length).toBeGreaterThan(0)
     const topContent = results[0]!.chunk.content
-    expect(topContent.includes('HTML') || topContent.includes('token')).toBe(true)
+    expect(topContent.includes('Soulkiller') || topContent.includes('engram') || topContent.includes('Mikoshi')).toBe(true)
   })
 
   it('respects limit option in recall', async () => {
@@ -83,7 +83,7 @@ describe('Local Engine Integration: Markdown → Ingest → Recall', () => {
     }
     await engine.ingest(chunks)
 
-    const results = await engine.recall('架构', { limit: 2 })
+    const results = await engine.recall('cyberware chrome', { limit: 2 })
     expect(results.length).toBeLessThanOrEqual(2)
   })
 
@@ -95,7 +95,7 @@ describe('Local Engine Integration: Markdown → Ingest → Recall', () => {
     }
     await engine.ingest(chunks)
 
-    const results = await engine.recall('量子计算 superconductor')
+    const results = await engine.recall('quantum computing superconductor')
     // Should return results but with low similarity
     if (results.length > 0) {
       expect(results[0]!.similarity).toBeLessThan(0.5)
@@ -170,7 +170,7 @@ describe('Local Engine Integration: Twitter → Ingest → Recall', () => {
     expect(result.chunksIngested).toBe(chunks.length)
   })
 
-  it('recalls twitter content about HTML 直出', async () => {
+  it('recalls twitter content about Soulkiller and Relic', async () => {
     const adapter = new TwitterAdapter()
     const chunks: SoulChunk[] = []
     for await (const chunk of adapter.adapt(TW_FIXTURES)) {
@@ -178,10 +178,10 @@ describe('Local Engine Integration: Twitter → Ingest → Recall', () => {
     }
     await engine.ingest(chunks)
 
-    const results = await engine.recall('HTML 直出 token')
+    const results = await engine.recall('Soulkiller engram Mikoshi Relic')
     expect(results.length).toBeGreaterThan(0)
     const topContent = results[0]!.chunk.content
-    expect(topContent.includes('HTML') || topContent.includes('token')).toBe(true)
+    expect(topContent.includes('Soulkiller') || topContent.includes('engram') || topContent.includes('Relic')).toBe(true)
   })
 })
 
@@ -226,7 +226,7 @@ describe('Local Engine Integration: Pipeline → Ingest → Recall', () => {
     expect(result.totalChunks).toBe(chunks.length)
 
     // Cross-source recall: query about HTML should find both md and twitter content
-    const results = await engine.recall('HTML 直出 token 效率', { limit: 10 })
+    const results = await engine.recall('Soulkiller engram Mikoshi Relic', { limit: 10 })
     expect(results.length).toBeGreaterThan(0)
     const resultSources = new Set(results.map((r) => r.chunk.source))
     // At least one source should be present
