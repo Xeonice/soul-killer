@@ -5,7 +5,7 @@ let _client: OpenAI | null = null
 
 export function createLLMClient(config: SoulkillerConfig): OpenAI {
   _client = new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
+    baseURL: process.env.SOULKILLER_API_URL ?? 'https://openrouter.ai/api/v1',
     apiKey: config.llm.api_key,
   })
   return _client

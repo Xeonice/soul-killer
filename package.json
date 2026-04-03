@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:visual": "vitest run --config vitest.visual.config.ts",
     "test:visual:update": "SOULKILLER_UPDATE_BASELINES=1 vitest run --config vitest.visual.config.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "E2E_DEBUG=1 vitest run --config vitest.e2e.config.ts --reporter=verbose"
   },
   "keywords": [
     "soulkiller",
@@ -44,6 +45,8 @@
     "@types/react": "^19.2.14",
     "@types/turndown": "^5.0.6",
     "ink-testing-library": "^4.0.0",
+    "node-pty": "^0.10.1",
+    "strip-ansi": "^7.2.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
