@@ -1,10 +1,8 @@
-import { fork, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import stripAnsi from 'strip-ansi'
 import { EventEmitter } from 'node:events'
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
-const PTY_HOST = path.join(import.meta.dirname, 'pty-host.cjs')
 
 export class WaitForTimeout extends Error {
   constructor(pattern: RegExp | string, elapsed: number, buffer: string) {
@@ -57,7 +55,7 @@ const KEY_LABELS: Record<string, string> = {
 
 interface TimelineEntry {
   ts: number
-  type: 'send' | 'send-key' | 'waitFor-start' | 'waitFor-match' | 'waitFor-timeout' | 'pty-data' | 'exit'
+  type: 'send' | 'send-key' | 'waitFor-start' | 'waitFor-match' | 'waitFor-timeout' | 'pty-data' | 'screen' | 'exit'
   detail: string
 }
 
@@ -67,54 +65,76 @@ export interface TestTerminalOptions {
   cols?: number
   rows?: number
   debug?: boolean
+  /** Label shown at the top of timeline output (e.g. test file + scenario name) */
+  label?: string
 }
 
 export class TestTerminal {
-  private child: ChildProcess
+  private proc: ReturnType<typeof Bun.spawn>
   private rawBuffer = ''
   private cursor = 0
-  private exitPromise: Promise<number>
   private _exitCode: number | null = null
+  private _killed = false
   private emitter = new EventEmitter()
   private debug: boolean
+  private label: string
   private timeline: TimelineEntry[] = []
   private startTime: number
 
   constructor(opts: TestTerminalOptions) {
     this.debug = opts.debug ?? !!process.env.E2E_DEBUG
+    this.label = opts.label ?? ''
     this.startTime = Date.now()
 
-    const args = JSON.stringify({
-      projectRoot: PROJECT_ROOT,
-      homeDir: opts.homeDir,
-      mockServerUrl: opts.mockServerUrl,
-      cols: opts.cols ?? 120,
-      rows: opts.rows ?? 40,
-    })
+    const cols = opts.cols ?? 120
+    const rows = opts.rows ?? 40
 
-    this.child = fork(PTY_HOST, [args], {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    })
+    const env: Record<string, string> = { ...process.env as Record<string, string> }
+    env.HOME = opts.homeDir
+    env.TERM = 'xterm-256color'
+    env.COLORTERM = 'truecolor'
+    env.SOULKILLER_SEED = '42'
+    // ink v6 detects CI=true and suppresses dynamic rendering output,
+    // but the PTY child runs an interactive CLI that needs normal TTY mode.
+    delete env.CI
+    delete env.GITHUB_ACTIONS
+    if (opts.mockServerUrl) {
+      env.SOULKILLER_API_URL = opts.mockServerUrl
+    }
 
-    this.child.on('message', (msg: { type: string; data?: string; exitCode?: number }) => {
-      if (msg.type === 'data') {
-        this.rawBuffer += msg.data!
-        if (this.debug) {
-          const clean = stripAnsi(msg.data!).replace(/\s+/g, ' ').trim()
-          if (clean) {
-            this.log('pty-data', clean.slice(0, 120))
+    const entryPoint = path.join(PROJECT_ROOT, 'src', 'index.tsx')
+
+    this.proc = Bun.spawn(['bun', entryPoint], {
+      cwd: PROJECT_ROOT,
+      env,
+      terminal: {
+        cols,
+        rows,
+        data: (_terminal, data) => {
+          const text = new TextDecoder().decode(data)
+          this.rawBuffer += text
+          if (this.debug) {
+            const lines = stripAnsi(text).split('\n').map((l) => l.trim()).filter(Boolean)
+            for (const line of lines) {
+              if (/^[│┌┐└┘├┤┬┴┼─╴╶╵╷┃┏┓┗┛┣┫┳┻╋━═║╔╗╚╝╠╣╦╩╬\s]+$/.test(line)) continue
+              if (/^\(?\d+ entries/.test(line)) continue
+              this.log('pty-data', line.slice(0, 150))
+            }
           }
-        }
-        this.emitter.emit('data')
-      } else if (msg.type === 'exit') {
-        this._exitCode = msg.exitCode ?? 0
-        this.log('exit', `code=${this._exitCode}`)
-        this.emitter.emit('exit', this._exitCode)
-      }
+          this.emitter.emit('data')
+        },
+        exit: (_terminal, exitCode) => {
+          this.log('exit', `terminal closed, pty code=${exitCode}`)
+        },
+      },
     })
 
-    this.exitPromise = new Promise<number>((resolve) => {
-      this.emitter.on('exit', resolve)
+    // Use proc.exited for the actual process exit code (terminal.exit may
+    // report a different code on Linux when the PTY closes before the process)
+    this.proc.exited.then((code) => {
+      this._exitCode = code
+      this.log('exit', `process exited, code=${code}`)
+      this.emitter.emit('exit', code)
     })
   }
 
@@ -132,25 +152,45 @@ export class TestTerminal {
   }
 
   getTimeline(): string {
-    const typeStyles: Record<string, string> = {
-      'send': '>>>',
-      'send-key': ' >>',
-      'waitFor-start': ' ? ',
-      'waitFor-match': ' OK',
-      'waitFor-timeout': ' !!',
-      'pty-data': ' <<',
-      'exit': '===',
+    const labels: Record<string, string> = {
+      'send':            'INPUT  ',
+      'send-key':        'KEY    ',
+      'waitFor-start':   'WAIT   ',
+      'waitFor-match':   'MATCH  ',
+      'waitFor-timeout': 'TIMEOUT',
+      'pty-data':        'TTY    ',
+      'screen':          'SCREEN ',
+      'exit':            'EXIT   ',
     }
     return this.timeline.map((e) => {
-      const prefix = typeStyles[e.type] ?? '   '
+      const label = labels[e.type] ?? '       '
       const ts = String(e.ts).padStart(6)
-      return `${ts}ms ${prefix}  ${e.detail}`
+      if (e.type === 'screen') {
+        const indented = e.detail.split('\n').map((l) => `          ${l}`).join('\n')
+        return `${ts}ms ${label}\n${indented}`
+      }
+      return `${ts}ms ${label}  ${e.detail}`
     }).join('\n')
   }
 
   printTimeline(): void {
-    console.log('\n┌─── E2E Timeline ────────────────────────────────────────┐')
+    const title = this.label ? `E2E: ${this.label}` : 'E2E Timeline'
+    const pad = Math.max(0, 55 - title.length)
+    console.log(`\n┌─── ${title} ${'─'.repeat(pad)}┐`)
     console.log(this.getTimeline())
+    console.log('└─────────────────────────────────────────────────────────┘\n')
+  }
+
+  getScreen(lastN = 30): string {
+    const text = stripAnsi(this.rawBuffer)
+    const lines = text.split('\n').filter((l) => l.trim())
+    return lines.slice(-lastN).join('\n')
+  }
+
+  printScreen(label?: string): void {
+    const header = label ? `Screen: ${label}` : 'Screen'
+    console.log(`\n┌─── ${header} ${'─'.repeat(Math.max(0, 50 - header.length))}┐`)
+    console.log(this.getScreen())
     console.log('└─────────────────────────────────────────────────────────┘\n')
   }
 
@@ -166,7 +206,7 @@ export class TestTerminal {
     const regex = typeof pattern === 'string' ? new RegExp(pattern) : pattern
     const start = Date.now()
 
-    this.log('waitFor-start', `${regex}  (since: ${since}, timeout: ${timeout}ms)`)
+    this.log('waitFor-start', `waiting for ${regex}  (since: ${since}, timeout: ${timeout}ms)`)
 
     return new Promise<WaitForResult>((resolve, reject) => {
       const check = () => {
@@ -183,7 +223,8 @@ export class TestTerminal {
 
       const immediate = check()
       if (immediate) {
-        this.log('waitFor-match', `"${immediate.matched.slice(0, 60)}"  (${immediate.elapsed}ms)`)
+        this.log('waitFor-match', `matched "${immediate.matched.slice(0, 60)}"  (${immediate.elapsed}ms)`)
+        if (this.debug) this.log('screen', this.getScreen(10))
         resolve(immediate)
         return
       }
@@ -192,7 +233,8 @@ export class TestTerminal {
         const result = check()
         if (result) {
           cleanup()
-          this.log('waitFor-match', `"${result.matched.slice(0, 60)}"  (${result.elapsed}ms)`)
+          this.log('waitFor-match', `matched "${result.matched.slice(0, 60)}"  (${result.elapsed}ms)`)
+          if (this.debug) this.log('screen', this.getScreen(10))
           resolve(result)
         }
       }
@@ -200,7 +242,8 @@ export class TestTerminal {
       const timer = setTimeout(() => {
         cleanup()
         const text = strip ? stripAnsi(this.rawBuffer) : this.rawBuffer
-        this.log('waitFor-timeout', `${regex}  after ${Date.now() - start}ms`)
+        this.log('waitFor-timeout', `TIMED OUT on ${regex}  after ${Date.now() - start}ms`)
+        if (this.debug) this.log('screen', this.getScreen(15))
         reject(new WaitForTimeout(pattern, Date.now() - start, text))
       }, timeout)
 
@@ -234,14 +277,24 @@ export class TestTerminal {
 
   send(input: string): void {
     this.log('send', `"${input}"`)
-    this.child.send({ type: 'write-chars', data: input + '\r' })
+    // Write character by character with small delays for ink compatibility
+    const chars = (input + '\r').split('')
+    let i = 0
+    const next = () => {
+      if (this._killed || i >= chars.length) return
+      this.proc.terminal!.write(chars[i]!)
+      i++
+      setTimeout(next, 10)
+    }
+    next()
   }
 
   sendKey(key: string): void {
+    if (this._killed) return
     const raw = KEY_MAP[key] ?? key
     const label = KEY_LABELS[raw] ?? key
     this.log('send-key', label)
-    this.child.send({ type: 'write', data: raw })
+    this.proc.terminal!.write(raw)
   }
 
   async sendAndWait(
@@ -261,18 +314,18 @@ export class TestTerminal {
   // --- Lifecycle ---
 
   kill(): void {
-    this.child.send({ type: 'kill' })
-    setTimeout(() => {
-      if (!this.child.killed) {
-        this.child.kill()
-      }
-    }, 1000)
+    this._killed = true
+    this.proc.kill()
   }
 
   async waitForExit(timeout = 10000): Promise<number> {
+    if (this._exitCode !== null) return this._exitCode
     const timer = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Process did not exit within ${timeout}ms`)), timeout)
     )
-    return Promise.race([this.exitPromise, timer])
+    const exitPromise = new Promise<number>((resolve) => {
+      this.emitter.once('exit', resolve)
+    })
+    return Promise.race([exitPromise, timer])
   }
 }

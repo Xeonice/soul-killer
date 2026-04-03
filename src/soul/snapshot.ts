@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 
 const MAX_SNAPSHOTS = 10
 
@@ -26,7 +27,7 @@ export function createSnapshot(soulDir: string, reason: string, chunkCount: numb
     throw new Error('No soul files to snapshot')
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(4).toString('hex')
   const snapshotDir = path.join(snapshotsDir, timestamp)
 
   // Copy soul/ directory recursively

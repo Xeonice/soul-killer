@@ -96,7 +96,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   const [classification, setClassification] = useState<TargetClassification | undefined>()
   const [origin, setOrigin] = useState<string | undefined>()
   const [toolCalls, setToolCalls] = useState<ToolCallDisplay[]>([])
-  const [protocolPhase, setProtocolPhase] = useState<'initiating' | 'searching' | 'analyzing' | 'complete' | 'unknown'>('initiating')
+  const [protocolPhase, setProtocolPhase] = useState<'initiating' | 'searching' | 'classifying' | 'analyzing' | 'filtering' | 'complete' | 'unknown'>('initiating')
   const [agentChunks, setAgentChunks] = useState<SoulChunk[]>([])
   const [agentElapsed, setAgentElapsed] = useState(0)
 
@@ -646,7 +646,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
             <Box key={chunk.id} flexDirection="column" paddingLeft={2} marginBottom={1}>
               <Text color={PRIMARY}>
                 [{detailScroll + i + 1}/{agentChunks.length}] <Text color={DIM}>{chunk.source}</Text>
-                {chunk.metadata?.url && <Text color={DIM}> — {truncateStr(String(chunk.metadata.url), 50)}</Text>}
+                {chunk.metadata?.url ? <Text color={DIM}> — {truncateStr(String(chunk.metadata.url), 50)}</Text> : null}
               </Text>
               <Text color={undefined}>{truncateStr(chunk.content, 200)}</Text>
             </Box>

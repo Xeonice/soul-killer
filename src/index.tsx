@@ -1,6 +1,7 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { render } from 'ink'
 import React from 'react'
 import { App } from './cli/app.js'
 
-render(<App />)
+const { waitUntilExit } = render(<App />)
+await waitUntilExit()

@@ -66,6 +66,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         default_model: selectedModel,
       },
       language,
+      animation: true,
       ...(tavilyKey.trim() ? { search: { tavily_api_key: tavilyKey.trim() } } : {}),
     }
     saveConfig(config)

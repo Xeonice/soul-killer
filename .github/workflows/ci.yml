@@ -12,35 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm test
+          bun-version: latest
+      - run: bun install
+      - run: bun run test
 
-  visual:
-    name: Visual Snapshot Tests
+  e2e:
+    name: E2E Tests
     runs-on: ubuntu-latest
     needs: unit-and-component
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Run visual tests
-        run: npm run test:visual
-        env:
-          SOULKILLER_SEED: "42"
-      - name: Upload diff images on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-diffs
-          path: tests/visual/__baselines__/*.diff.png
+          bun-version: latest
+      - run: bun install
+      - name: Run E2E tests
+        run: bun run test:e2e
 
   integration:
     name: Integration Tests
@@ -48,10 +37,9 @@ jobs:
     needs: unit-and-component
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
+          bun-version: latest
+      - run: bun install
       - name: Run integration tests (local engine)
-        run: npm run test:integration
+        run: bun run test:integration

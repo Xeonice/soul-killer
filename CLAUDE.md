@@ -10,25 +10,29 @@ Soulkiller is a Cyberpunk 2077-themed CLI REPL that extracts "souls" from digita
 
 ```bash
 # Run the REPL
-npm run dev                    # or: npx tsx src/index.tsx
+bun run dev                    # or: bun src/index.tsx
 
-# Build
-npm run build                  # tsc → dist/
+# Type checking (no JS output)
+bun run build                  # tsc --noEmit
 
 # Tests
-npm test                       # unit + component tests (vitest)
-npm run test:integration       # integration tests (real fs + LLM calls)
-npm run test:watch             # vitest watch mode
-npm run test:visual            # visual snapshot tests (Playwright + xterm.js)
-npm run test:visual:update     # update visual baselines
+bun run test                   # unit + component tests (vitest under bun)
+bun run test:integration       # integration tests (real fs + LLM calls)
+bun run test:watch             # vitest watch mode
+bun run test:e2e               # E2E tests (bun:test + Bun.spawn PTY)
+bun run test:visual            # visual snapshot tests (Playwright + xterm.js)
 
 # Run a single test file
-npx vitest run tests/unit/command-parser.test.ts
-npx vitest run tests/component/prompt.test.tsx
+bun vitest run tests/unit/command-parser.test.ts
+bun vitest run tests/component/prompt.test.tsx
 
-# Update snapshots after intentional visual changes
-npx vitest run --update
+# Run a single E2E scenario
+bun test tests/e2e/ --test-name-pattern "cold boot"
 ```
+
+## Runtime
+
+Project uses **Bun** as the sole runtime — no Node.js dependency. Package manager is bun (`bun.lock`). Entry point uses `#!/usr/bin/env bun` and `await waitUntilExit()` for clean exit codes.
 
 ## Architecture
 
@@ -92,9 +96,30 @@ src/cli/app.tsx        → Main state machine (boot → setup → idle → comma
 - **Unit tests** (`tests/unit/`) — Pure logic: adapters, parsers, config, glitch engine
 - **Component tests** (`tests/component/`) — ink-testing-library snapshots for UI components
 - **Integration tests** (`tests/integration/`) — Full ingest→recall pipeline with test fixtures; E2E with real LLM calls (requires valid API key in `~/.soulkiller/config.yaml`)
-- **Visual tests** (`tests/visual/`) — Playwright + xterm.js pixel comparison (infrastructure ready, tests pending heavy deps)
+- **E2E tests** (`tests/e2e/`) — Full CLI interaction via real PTY using `Bun.spawn` terminal API. Uses `bun:test` (not vitest) because Bun.spawn requires the Bun global. 10 scenarios covering lifecycle, wizards, soul management, conversation, error paths, and tab completion.
+- **Visual tests** (`tests/visual/`) — Playwright + xterm.js pixel comparison
 
 Test fixtures live in `tests/integration/fixtures/` (sample markdown docs + twitter archive).
+
+### E2E Test Architecture
+
+```
+tests/e2e/
+├── scenarios.test.ts          → 10 test scenarios (uses bun:test)
+├── harness/
+│   ├── test-terminal.ts       → Bun.spawn + terminal API, direct PTY control
+│   └── mock-llm-server.ts     → HTTP server mimicking OpenAI chat completions
+└── fixtures/
+    ├── test-home.ts           → Isolated HOME dir with config.yaml (animation: false)
+    └── soul-fixtures.ts       → Pre-built distilled/evolved soul data
+```
+
+Key details:
+- `TestTerminal` spawns `bun src/index.tsx` in a real PTY — no IPC middle layer
+- CI env vars (`CI`, `GITHUB_ACTIONS`) are removed from child process env because ink v6 suppresses dynamic rendering when CI=true
+- Exit code comes from `proc.exited` (not `terminal.exit` callback, which reports PTY close status, not process exit code)
+- `send()` writes chars one-by-one with 10ms delays for ink compatibility; `_killed` flag prevents writes after terminal close
+- When writing `waitFor` patterns, avoid matching autocomplete menu text — use specific wizard/output text instead
 
 ## Color Palette
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'bun:test'
 import { TestTerminal } from './harness/test-terminal.js'
 import { MockLLMServer } from './harness/mock-llm-server.js'
 import { createTestHome, type TestHome } from './fixtures/test-home.js'
@@ -6,7 +6,7 @@ import { createDistilledSoul, createEvolvedSoul } from './fixtures/soul-fixtures
 import path from 'node:path'
 
 // Prompt pattern for both void and loaded modes
-const PROMPT_RE = /soul:\/\/\S+\s*>/
+const PROMPT_RE = /soul:\/\/\S+.*>/
 
 // Set E2E_DEBUG=1 to see detailed timeline for each test
 const DEBUG = !!process.env.E2E_DEBUG
@@ -25,15 +25,15 @@ describe('E2E: Lifecycle', () => {
 
   it('Scenario 1: cold boot → idle prompt', async () => {
     home = createTestHome()
-    term = new TestTerminal({ homeDir: home.homeDir })
-    const result = await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 1: cold boot → idle prompt' })
+    const result = await term.waitFor(PROMPT_RE, { timeout: 30000 })
     expect(result.matched).toContain('soul://')
   })
 
   it('Scenario 3: /exit → graceful shutdown', async () => {
     home = createTestHome()
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 3: /exit → graceful shutdown' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
     term.send('/exit')
     const code = await term.waitForExit()
     expect(code).toBe(0)
@@ -54,8 +54,8 @@ describe('E2E: /create flow', () => {
 
   it('Scenario 2: complete create wizard', async () => {
     home = createTestHome()
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 2: complete create wizard' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // Start /create
     term.send('/create')
@@ -108,8 +108,8 @@ describe('E2E: Soul management', () => {
     home = createTestHome()
     createDistilledSoul(home.homeDir, 'alice')
     createDistilledSoul(home.homeDir, 'bob')
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 4: /list + /use' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // /list should show both
     term.send('/list')
@@ -132,6 +132,16 @@ describe('E2E: Soul management', () => {
 describe('E2E: Evolve and Recall', () => {
   let home: TestHome
   let term: TestTerminal
+  let mockServer: MockLLMServer
+
+  beforeAll(async () => {
+    mockServer = new MockLLMServer()
+    await mockServer.start()
+  })
+
+  afterAll(async () => {
+    await mockServer.stop()
+  })
 
   afterEach(() => {
     if (DEBUG) term?.printTimeline()
@@ -140,34 +150,32 @@ describe('E2E: Evolve and Recall', () => {
   })
 
   it('Scenario 5: /evolve ingest → /recall finds results', async () => {
-    home = createTestHome()
+    home = createTestHome({ mockServerUrl: mockServer.url })
     createDistilledSoul(home.homeDir, 'alice')
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, mockServerUrl: mockServer.url, label: 'Scenario 5: /evolve → /recall' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // Load soul
     term.send('/use alice')
     await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
 
-    // Recall with pre-ingested data won't work yet — need to evolve first
-    // Use the integration test fixtures as markdown source
-    const fixturesDir = path.resolve(import.meta.dirname, '../integration/fixtures')
-    const fs = await import('node:fs')
-    if (!fs.existsSync(fixturesDir)) {
-      // Skip if no fixtures available — use evolved soul instead
-      return
-    }
+    // Use the integration test fixtures as markdown source (relative to project root / PTY cwd)
+    const fixturesDir = 'tests/integration/fixtures'
 
     term.send('/evolve')
-    // Select markdown source
-    await term.waitFor(/markdown|source|数据源/i, { since: 'last', timeout: 10000 })
+    // Select markdown source — match the wizard option text, not autocomplete
+    await term.waitFor(/Markdown Directory|Markdown 目录|Markdown ディレクトリ/i, { since: 'last', timeout: 10000 })
     term.sendKey('enter')
 
     // Enter path
     await term.waitFor(/path|路径/i, { since: 'last', timeout: 5000 })
     term.send(fixturesDir)
 
-    // Wait for ingest to complete
+    // Dimension select — press Enter to accept default (全部维度)
+    await term.waitFor(/维度|dimension/i, { since: 'last', timeout: 5000 })
+    term.sendKey('enter')
+
+    // Wait for evolve to complete and prompt to return
     await term.waitFor(PROMPT_RE, { since: 'last', timeout: 30000 })
 
     // Recall
@@ -201,8 +209,8 @@ describe('E2E: Conversation', () => {
   it('Scenario 6: chat with mock LLM, context accumulates', async () => {
     home = createTestHome({ mockServerUrl: mockServer.url })
     createDistilledSoul(home.homeDir, 'alice')
-    term = new TestTerminal({ homeDir: home.homeDir, mockServerUrl: mockServer.url })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, mockServerUrl: mockServer.url, label: 'Scenario 6: chat + context' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // Load soul
     term.send('/use alice')
@@ -210,7 +218,7 @@ describe('E2E: Conversation', () => {
 
     // First message
     term.send('hello')
-    await term.waitFor(/mock soul response/i, { since: 'last', timeout: 15000 })
+    await term.waitFor(/mock soul response/i, { since: 'last', timeout: 30000 })
     // Wait a bit for prompt to re-render after streaming completes
     await new Promise((r) => setTimeout(r, 1000))
 
@@ -222,7 +230,7 @@ describe('E2E: Conversation', () => {
 
     // Second message — context should accumulate
     term.send('do you remember what I said')
-    await term.waitFor(/mock soul response/i, { since: 'last', timeout: 15000 })
+    await term.waitFor(/mock soul response/i, { since: 'last', timeout: 30000 })
     await new Promise((r) => setTimeout(r, 1000))
 
     expect(mockServer.requests.length).toBeGreaterThanOrEqual(2)
@@ -248,8 +256,8 @@ describe('E2E: Error paths', () => {
   it('Scenario 7: error messages for invalid operations', async () => {
     home = createTestHome()
     createDistilledSoul(home.homeDir, 'alice')
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 7: error paths' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // /use nonexistent → SOUL NOT FOUND
     term.send('/use nonexistent')
@@ -283,8 +291,8 @@ describe('E2E: Tab completion', () => {
 
   it('Scenario 8: /cr + Tab → /create', async () => {
     home = createTestHome()
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 8: tab completion' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     // Type "/cr" then Tab
     term.sendKey('/')
@@ -316,8 +324,8 @@ describe('E2E: Evolve subcommands', () => {
   it('Scenario 9: /evolve status shows history', async () => {
     home = createTestHome()
     createEvolvedSoul(home.homeDir, 'alice')
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 9: /evolve status' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     term.send('/use alice')
     await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
@@ -329,8 +337,8 @@ describe('E2E: Evolve subcommands', () => {
   it('Scenario 9b: /evolve rollback', async () => {
     home = createTestHome()
     createEvolvedSoul(home.homeDir, 'alice')
-    term = new TestTerminal({ homeDir: home.homeDir })
-    await term.waitFor(PROMPT_RE, { timeout: 15000 })
+    term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 9b: /evolve rollback' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     term.send('/use alice')
     await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })

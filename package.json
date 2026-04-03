@@ -8,14 +8,14 @@
     "soulkiller": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/index.tsx",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:visual": "vitest run --config vitest.visual.config.ts",
-    "test:visual:update": "SOULKILLER_UPDATE_BASELINES=1 vitest run --config vitest.visual.config.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:e2e": "E2E_DEBUG=1 vitest run --config vitest.e2e.config.ts --reporter=verbose"
+    "build": "tsc --noEmit",
+    "dev": "bun src/index.tsx",
+    "test": "bun vitest run",
+    "test:watch": "bun vitest",
+    "test:visual": "bun vitest run --config vitest.visual.config.ts",
+    "test:visual:update": "SOULKILLER_UPDATE_BASELINES=1 bun vitest run --config vitest.visual.config.ts",
+    "test:integration": "bun vitest run --config vitest.integration.config.ts",
+    "test:e2e": "E2E_DEBUG=1 bun test tests/e2e/ --timeout 60000"
   },
   "keywords": [
     "soulkiller",
@@ -45,9 +45,7 @@
     "@types/react": "^19.2.14",
     "@types/turndown": "^5.0.6",
     "ink-testing-library": "^4.0.0",
-    "node-pty": "^0.10.1",
     "strip-ansi": "^7.2.0",
-    "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
   }

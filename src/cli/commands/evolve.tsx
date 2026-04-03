@@ -204,6 +204,21 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
 
   // ── Pipeline execution ──────────────────────────────────────────────────
 
+  // Snapshot values into refs so the effect only re-fires when phase changes
+  const selectedSourceRef = useRef(selectedSource)
+  const feedPathRef = useRef(feedPath)
+  const urlsRef = useRef(urls)
+  const newChunksRef = useRef(newChunks)
+  const selectedDimensionsRef = useRef(selectedDimensions)
+  const chunksRef = useRef(chunks)
+
+  useEffect(() => { selectedSourceRef.current = selectedSource }, [selectedSource])
+  useEffect(() => { feedPathRef.current = feedPath }, [feedPath])
+  useEffect(() => { urlsRef.current = urls }, [urls])
+  useEffect(() => { newChunksRef.current = newChunks }, [newChunks])
+  useEffect(() => { selectedDimensionsRef.current = selectedDimensions }, [selectedDimensions])
+  useEffect(() => { chunksRef.current = chunks }, [chunks])
+
   useEffect(() => {
     if (phase !== 'executing') return
     let cancelled = false
@@ -211,6 +226,14 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
     const ticker = setInterval(() => {
       if (!cancelled) setElapsedMs(Date.now() - startTime)
     }, 500)
+
+    // Read from refs to avoid stale closures without adding deps
+    const curSource = selectedSourceRef.current
+    const curFeedPath = feedPathRef.current
+    const curUrls = urlsRef.current
+    const curNewChunks = newChunksRef.current
+    const curDimensions = selectedDimensionsRef.current
+    const curChunks = chunksRef.current
 
     async function runPipeline() {
       try {
@@ -240,34 +263,34 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
         updateStep(S_INGEST, { status: 'active' })
         let feedChunks: SoulChunk[] = []
 
-        if (selectedSource === 'markdown') {
+        if (curSource === 'markdown') {
           const pipeline = new IngestPipeline()
           pipeline.on('progress', (p: IngestProgress) => {
             if (!cancelled) updateStep(S_INGEST, { detail: p.message ?? `${p.current} chunks` })
           })
-          feedChunks = await pipeline.run({ adapters: [{ type: 'markdown', path: feedPath }] })
-        } else if (selectedSource === 'url') {
-          const urlSubs: SubStep[] = urls.map((u) => ({ label: u, status: 'pending' as StepStatus }))
-          updateStep(S_INGEST, { subSteps: urlSubs, detail: `0/${urls.length}` })
+          feedChunks = await pipeline.run({ adapters: [{ type: 'markdown', path: curFeedPath }] })
+        } else if (curSource === 'url') {
+          const urlSubs: SubStep[] = curUrls.map((u) => ({ label: u, status: 'pending' as StepStatus }))
+          updateStep(S_INGEST, { subSteps: urlSubs, detail: `0/${curUrls.length}` })
 
-          for (let i = 0; i < urls.length; i++) {
+          for (let i = 0; i < curUrls.length; i++) {
             if (cancelled) return
             urlSubs[i] = { ...urlSubs[i]!, status: 'active' }
-            updateStep(S_INGEST, { subSteps: [...urlSubs], detail: `${i}/${urls.length}` })
+            updateStep(S_INGEST, { subSteps: [...urlSubs], detail: `${i}/${curUrls.length}` })
 
-            const result = await extractUrl(urls[i]!)
+            const result = await extractUrl(curUrls[i]!)
             const urlChunks = urlResultToChunks(result)
             feedChunks.push(...urlChunks)
 
             if (result.error) {
-              urlSubs[i] = { label: urls[i]!, status: 'error', detail: result.error }
+              urlSubs[i] = { label: curUrls[i]!, status: 'error', detail: result.error }
             } else {
-              urlSubs[i] = { label: urls[i]!, status: 'done', detail: `${urlChunks.length} chunks${result.title ? ` · ${result.title}` : ''}` }
+              urlSubs[i] = { label: curUrls[i]!, status: 'done', detail: `${urlChunks.length} chunks${result.title ? ` · ${result.title}` : ''}` }
             }
-            updateStep(S_INGEST, { subSteps: [...urlSubs], detail: `${i + 1}/${urls.length}` })
+            updateStep(S_INGEST, { subSteps: [...urlSubs], detail: `${i + 1}/${curUrls.length}` })
           }
-        } else if (selectedSource === 'text' || selectedSource === 'feedback') {
-          feedChunks = newChunks
+        } else if (curSource === 'text' || curSource === 'feedback') {
+          feedChunks = curNewChunks
         }
 
         if (cancelled) return
@@ -284,7 +307,7 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
         // Step: 创建快照
         updateStep(S_SNAP, { status: 'active' })
         try {
-          createSnapshot(soulDir, 'pre-evolve', chunks.length + feedChunks.length)
+          createSnapshot(soulDir, 'pre-evolve', curChunks.length + feedChunks.length)
           updateStep(S_SNAP, { status: 'done' })
         } catch {
           updateStep(S_SNAP, { status: 'skipped', detail: t('evolve.no_existing_files') })
@@ -298,7 +321,7 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
         updateStep(S_SAMPLE, { status: 'done', detail: `${sampled.length}/${feedChunks.length}` })
 
         // Step: 提取特征
-        updateStep(S_EXTRACT, { status: 'active', detail: selectedDimensions.join(', ') })
+        updateStep(S_EXTRACT, { status: 'active', detail: curDimensions.join(', ') })
         const config = loadConfig()
         if (!config) throw new Error(t('evolve.config_not_init'))
         const client = getLLMClient()
@@ -309,7 +332,7 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
           (p) => {
             if (!cancelled) updateStep(S_EXTRACT, { detail: `${p.phase} ${p.status}${p.batch ? ` (${p.batch}/${p.totalBatches})` : ''}` })
           },
-          selectedDimensions,
+          curDimensions,
         )
         if (cancelled) return
         updateStep(S_EXTRACT, { status: 'done' })
@@ -328,23 +351,23 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
           updateStep(S_MERGE, { status: 'done' })
 
           updateStep(S_WRITE, { status: 'active' })
-          generateSoulFiles(soulDir, merged, selectedDimensions)
+          generateSoulFiles(soulDir, merged, curDimensions)
           updateStep(S_WRITE, { status: 'done' })
         } else {
           updateStep(S_MERGE, { status: 'skipped', detail: t('evolve.first_create') })
           updateStep(S_WRITE, { status: 'active' })
-          generateSoulFiles(soulDir, deltaFeatures, selectedDimensions)
+          generateSoulFiles(soulDir, deltaFeatures, curDimensions)
           updateStep(S_WRITE, { status: 'done' })
         }
         if (cancelled) return
 
         // Step: 记录历史
         updateStep(S_HISTORY, { status: 'active' })
-        const totalAfter = chunks.length + feedChunks.length
+        const totalAfter = curChunks.length + feedChunks.length
         appendEvolveEntry(soulDir, {
           timestamp: new Date().toISOString(),
-          sources: [{ type: selectedSource, chunk_count: feedChunks.length }],
-          dimensions_updated: selectedDimensions,
+          sources: [{ type: curSource, chunk_count: feedChunks.length }],
+          dimensions_updated: curDimensions,
           mode: 'delta',
           snapshot_id: new Date().toISOString().replace(/[:.]/g, '-'),
           total_chunks_after: totalAfter,
@@ -369,7 +392,7 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
 
     runPipeline()
     return () => { cancelled = true; clearInterval(ticker) }
-  }, [phase, selectedSource, feedPath, urls, newChunks, engine, soulName, soulDir, selectedDimensions, chunks, updateStep])
+  }, [phase, soulName, soulDir, updateStep]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-complete
   useEffect(() => {
