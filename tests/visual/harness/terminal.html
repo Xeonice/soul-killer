@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Soulkiller Visual Test Harness</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #181818;
+      overflow: hidden;
+    }
+    #terminal {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script type="module">
+    import { Terminal } from '@xterm/xterm';
+    import { FitAddon } from '@xterm/addon-fit';
+    import '@xterm/xterm/css/xterm.css';
+
+    const term = new Terminal({
+      cols: 120,
+      rows: 40,
+      fontFamily: 'monospace',
+      fontSize: 14,
+      theme: {
+        background: '#181818',
+        foreground: '#00F7FF',
+        cursor: '#00F7FF',
+        cursorAccent: '#181818',
+      },
+      allowTransparency: false,
+    });
+
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+
+    // Connect to WebSocket bridge
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onmessage = (event) => {
+      const data = typeof event.data === 'string'
+        ? event.data
+        : new TextDecoder().decode(event.data);
+      term.write(data);
+    };
+
+    term.onData((data) => {
+      ws.send(data);
+    });
+
+    ws.onclose = () => {
+      term.write('\r\n[connection closed]\r\n');
+    };
+  </script>
+</body>
+</html>

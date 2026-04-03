@@ -1,0 +1,13 @@
+services:
+  engine:
+    build: .
+    container_name: soulkiller-engine
+    ports:
+      - "6600:6600"
+    volumes:
+      - soulkiller-data:/data
+    environment:
+      - SOULKILLER_DATA=/data
+
+volumes:
+  soulkiller-data:

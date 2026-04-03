@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CommandPalette > renders all items with first selected 1`] = `
+"┌──────────────────────────────────────────┐
+│ COMMANDS                                 │
+│ ❯ /create        交互式创建分身          │
+│   /evolve        导入数据并重新蒸馏分身  │
+│   /status        当前分身状态            │
+│   /help          帮助                    │
+└──────────────────────────────────────────┘"
+`;

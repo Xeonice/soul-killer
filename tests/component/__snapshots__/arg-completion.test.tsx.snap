@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CommandPalette with custom title (soul completion) > snapshot: filtered single soul 1`] = `
+"┌──────────────────────────────────────────┐
+│ SOULS                                    │
+│ ❯ 强尼银手           4,777 chunks        │
+└──────────────────────────────────────────┘"
+`;
+
+exports[`CommandPalette with custom title (soul completion) > snapshot: full soul list with first selected 1`] = `
+"┌──────────────────────────────────────────┐
+│ SOULS                                    │
+│ ❯ 强尼银手           4,777 chunks        │
+│   douglastang    前端工程师              │
+│   test-soul      50 chunks               │
+└──────────────────────────────────────────┘"
+`;

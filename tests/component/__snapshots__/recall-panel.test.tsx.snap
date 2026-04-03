@@ -1,0 +1,46 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SoulRecallPanel > renders fully populated panel after all results are revealed 1`] = `
+"┌────────────────────────────────────────────────┐
+│  SOUL_RECALL                                   │
+│                                                │
+│   scanning memory cortex...                    │
+│                                                │
+│   ▸ data/conversations/2024-01-15.md           │
+│     ░░░░░░░░░░░░░░░░░░░░░░░    sim: 0.92       │
+│   ▸ data/notes/architecture-thoughts.md        │
+│     ░░░░░░░░░░░░░░░░░░░░░░     sim: 0.87       │
+│   ▸ data/journal/weekly-review.md              │
+│     ░░░░░░░░░░░░░░░░░░░        sim: 0.74       │
+│                                                │
+│   3 memories loaded · 42ms                     │
+└────────────────────────────────────────────────┘"
+`;
+
+exports[`SoulRecallPanel > renders initial state with no results revealed yet 1`] = `
+"┌────────────────────────────────────────────────┐
+│  SOUL_RECALL                                   │
+│                                                │
+│   scanning memory cortex...                    │
+│                                                │
+│   ▸ data/conversations/2024-01-15.md           │
+│     ░░░░░░░░░░░░░░░░░░░░░░░    sim: 0.92       │
+│   ▸ data/notes/architecture-thoughts.md        │
+│     ░░░░░░░░░░░░░░░░░░░░░░     sim: 0.87       │
+│   ▸ data/journal/weekly-review.md              │
+│     ░░░░░░░░░░░░░░░░░░░        sim: 0.74       │
+│                                                │
+│   3 memories loaded · 42ms                     │
+└────────────────────────────────────────────────┘"
+`;
+
+exports[`SoulRecallPanel > renders with empty results list showing footer immediately 1`] = `
+"┌────────────────────────────────────────────────┐
+│  SOUL_RECALL                                   │
+│                                                │
+│   scanning memory cortex...                    │
+│                                                │
+│                                                │
+│   0 memories loaded · 5ms                      │
+└────────────────────────────────────────────────┘"
+`;

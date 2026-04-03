@@ -1,0 +1,51 @@
+{
+  "name": "soulkiller",
+  "version": "0.1.0",
+  "description": "Extract your digital soul and create distributable AI avatars",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "soulkiller": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:visual": "vitest run --config vitest.visual.config.ts",
+    "test:visual:update": "SOULKILLER_UPDATE_BASELINES=1 vitest run --config vitest.visual.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "keywords": [
+    "soulkiller",
+    "ai",
+    "avatar",
+    "digital-soul",
+    "cli",
+    "repl"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.37",
+    "@mozilla/readability": "^0.6.0",
+    "ai": "^6.0.142",
+    "chalk": "^5.6.2",
+    "ink": "^6.8.0",
+    "jsdom": "^29.0.1",
+    "openai": "^6.33.0",
+    "react": "^19.2.4",
+    "turndown": "^7.2.2",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.1",
+    "@types/react": "^19.2.14",
+    "@types/turndown": "^5.0.6",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

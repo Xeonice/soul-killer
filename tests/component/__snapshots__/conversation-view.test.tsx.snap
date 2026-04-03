@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ConversationView > snapshot: multi-turn conversation 1`] = `
+"❯ 你好强尼
+◈ 强尼银手
+"Wake the fuck up, samurai! 这可不是什么好时候..."
+────────────────────────────────────────
+
+❯ 你对企业怎么看？
+◈ 强尼银手
+企业？那群吸血的混蛋。Arasaka、Militech，全他妈一个样。
+"
+`;

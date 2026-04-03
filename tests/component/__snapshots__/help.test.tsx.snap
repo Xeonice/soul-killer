@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`HelpCommand > renders full help output 1`] = `
+"  SOULKILLER v0.1.0 — Commands
+
+  创建 & 数据
+    /create               交互式创建分身
+    /evolve               补充数据并进化分身（支持多源/增量蒸馏）
+
+  分身管理
+    /status               当前分身状态
+    /list                 列出本地所有分身
+
+  消费
+    /use                  加载本地分身
+    /feedback             评价最近一条分身回复
+
+  设置
+    /config               查看/修改配置
+
+  其他
+    /help                 帮助
+    /exit                 退出
+
+  输入自然语言直接与已加载的分身对话。"
+`;

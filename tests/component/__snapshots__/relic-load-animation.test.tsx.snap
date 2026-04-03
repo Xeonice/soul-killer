@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RelicLoadAnimation > snapshot of initial phase (seeded glitch) 1`] = `
+"
+    ▓ ▄st█▄└ish┴┴▓ ▌┐u┘a┘ │i┼┴┌┐┘
+"
+`;

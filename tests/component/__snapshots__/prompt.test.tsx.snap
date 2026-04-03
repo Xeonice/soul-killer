@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SoulPrompt > mode=loaded with soulName shows soul name in prompt 1`] = `"◈ soul://douglastang >"`;
+
+exports[`SoulPrompt > mode=relic with soulName shows [RELIC] indicator 1`] = `"◈ soul://douglastang [RELIC] >"`;
+
+exports[`SoulPrompt > mode=void shows soul://void prompt 1`] = `"◈ soul://void >"`;
+
+exports[`SoulPrompt > status=malfunction shows [!MALFUNCTION] indicator 1`] = `"◈ soul://douglastang [!MALFUNCTION] >"`;
+
+exports[`SoulPrompt > status=recall shows [RECALL] indicator 1`] = `"◈ soul://douglastang [░░░░ RECALL] >"`;
+
+exports[`SoulPrompt > status=streaming shows [STREAMING] indicator 1`] = `"◈ soul://douglastang [░░░░ STREAMING] >"`;

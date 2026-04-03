@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PathPalette > renders items with first selected 1`] = `
+"┌────────────────────────────────────────────────┐
+│ PATH                                           │
+│ ❯ 📁 notes/                                    │
+│   📁 docs/                                     │
+│   📄 README.md                                 │
+│   📄 package.json                              │
+└────────────────────────────────────────────────┘"
+`;
