@@ -2,6 +2,8 @@ export type SupportedLanguage = 'zh' | 'ja' | 'en'
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['zh', 'ja', 'en']
 
+export type SearchProvider = 'searxng' | 'exa' | 'tavily'
+
 export interface SoulkillerConfig {
   llm: {
     provider: 'openrouter'
@@ -10,7 +12,9 @@ export interface SoulkillerConfig {
     distill_model?: string
   }
   search?: {
+    provider?: SearchProvider
     tavily_api_key?: string
+    exa_api_key?: string
   }
   language: SupportedLanguage
   animation: boolean
@@ -55,6 +59,13 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     pricingKey: 'model.pricing.claude_sonnet',
     tagKey: 'model.tag.quality',
     useCase: 'distill',
+  },
+  {
+    id: 'z-ai/glm-5',
+    name: 'GLM-5',
+    pricingKey: 'model.pricing.glm5',
+    tagKey: 'model.tag.agent',
+    useCase: 'chat',
   },
   {
     id: 'openrouter/auto',

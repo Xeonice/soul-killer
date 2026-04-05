@@ -2,12 +2,14 @@ import React from 'react'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { render } from 'ink-testing-library'
 import { SoulkillerProtocolPanel } from '../../src/cli/animation/soulkiller-protocol-panel.js'
+import { setLocale } from '../../src/i18n/index.js'
 
 describe('SoulkillerProtocolPanel', () => {
   const originalSeed = process.env.SOULKILLER_SEED
 
   beforeAll(() => {
     process.env.SOULKILLER_SEED = '42'
+    setLocale('en')
   })
 
   afterAll(() => {
@@ -16,6 +18,7 @@ describe('SoulkillerProtocolPanel', () => {
     } else {
       delete process.env.SOULKILLER_SEED
     }
+    setLocale('zh')
   })
 
   it('renders initiating phase with glitch text', () => {

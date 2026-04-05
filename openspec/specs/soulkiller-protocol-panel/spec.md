@@ -104,7 +104,23 @@ The panel SHALL use a seeded GlitchEngine for deterministic output in tests.
 - WHEN the GlitchEngine is initialized with a seed value
 - THEN all glitch effects MUST produce identical output for the same seed
 - THEN test assertions can rely on deterministic rendered text
-## MODIFIED Requirements
+### Requirement: Protocol panel displays tool calls grouped by agent phase
+The protocol panel SHALL group tool calls by their agent phase (searching/classifying/analyzing) and render each group under a phase header with a completion indicator.
+
+#### Scenario: Three-phase display
+- **WHEN** the agent has completed reconnaissance (2 searches), planning (1 planSearch), and is collecting (3 searches + 1 checkCoverage)
+- **THEN** the panel shows three phase groups: "阶段一：目标侦察 ✓", "阶段二：目标分析 ✓", "阶段三：深度采集 ⠹" with their respective tool calls nested underneath
+
+#### Scenario: Tool-specific icons
+- **WHEN** tool calls are rendered
+- **THEN** search uses 🔍, extractPage uses 📄, planSearch uses 📋, checkCoverage uses 📊
+
+### Requirement: ToolCallDisplay carries phase information
+The `ToolCallDisplay` interface SHALL include an optional `phase` field of type `AgentPhase` so tool calls can be grouped by phase.
+
+#### Scenario: Phase tagged on tool call
+- **WHEN** a tool call event occurs during the "analyzing" phase
+- **THEN** the tool call is added to state with `phase: 'analyzing'`
 
 ### Requirement: Panel shows realtime tool call progress
 The Soulkiller Protocol Panel SHALL display each tool call in real-time as the agent executes.
@@ -120,3 +136,12 @@ The Soulkiller Protocol Panel SHALL display each tool call in real-time as the a
 #### Scenario: Multiple tool calls shown sequentially
 - **WHEN** the agent makes 4 search calls
 - **THEN** each call is shown as a separate line in the extraction section with its query and status
+
+---
+
+### Requirement: Panel displays search plan dimensions
+The protocol panel SHALL display a dimension priority indicator after classification is revealed, showing each of the 6 dimensions with a visual marker for its priority level.
+
+#### Scenario: Dimensions shown after classification
+- **WHEN** the panel has classification and searchPlan data
+- **THEN** a dimension line is rendered showing all 6 dimensions with ● (required) ◐ (important) ○ (supplementary) indicators

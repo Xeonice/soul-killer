@@ -5,17 +5,15 @@ import path from 'node:path'
 import os from 'node:os'
 import { TextInput, CheckboxSelect } from '../components/text-input.js'
 import { SoulkillerProtocolPanel } from '../animation/soulkiller-protocol-panel.js'
-import { DistillProgressPanel, createInitialPhases, type PhaseState } from '../components/distill-progress.js'
+import { DistillProgressPanel, type DistillToolCallDisplay } from '../components/distill-progress.js'
 import { IngestPipeline } from '../../ingest/pipeline.js'
 import type { AdapterType } from '../../ingest/pipeline.js'
-import { sampleChunks } from '../../distill/sampler.js'
-import { extractFeatures, type DistillProgress, type DistillPhase } from '../../distill/extractor.js'
-import { generateSoulFiles } from '../../distill/generator.js'
+import { distillSoul, type DistillAgentProgress } from '../../distill/distill-agent.js'
 import { getLLMClient } from '../../llm/client.js'
 import { loadConfig } from '../../config/loader.js'
 import { generateManifest, packageSoul, readManifest } from '../../soul/package.js'
 import { captureSoul, type CaptureProgress, type TargetClassification } from '../../agent/soul-capture-agent.js'
-import type { ToolCallDisplay } from '../animation/soulkiller-protocol-panel.js'
+import type { ToolCallDisplay, AgentPhase, SearchPlanDimDisplay } from '../animation/soulkiller-protocol-panel.js'
 import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
 import type { IngestProgress, SoulChunk } from '../../ingest/types.js'
@@ -52,9 +50,9 @@ type CreateStep =
   | 'done'
   | 'error'
 
-type DataSourceOption = 'markdown' | 'twitter'
+type DataSourceOption = 'web-search' | 'markdown' | 'twitter'
 type ConflictChoice = 'overwrite' | 'append' | 'rename'
-type SearchConfirmChoice = 'confirm' | 'retry' | 'detail' | 'supplement'
+type SearchConfirmChoice = 'confirm' | 'retry' | 'detail'
 
 interface CreateCommandProps {
   onComplete: (soulName: string, soulDir: string) => void
@@ -91,17 +89,23 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   const [searchConfirmCursor, setSearchConfirmCursor] = useState(0)
   const [detailScroll, setDetailScroll] = useState(0)
   const [filterProgress, setFilterProgress] = useState<{ kept: number; total: number } | undefined>()
+  const [errorCursor, setErrorCursor] = useState(0)
 
   // Agent state
   const [classification, setClassification] = useState<TargetClassification | undefined>()
   const [origin, setOrigin] = useState<string | undefined>()
   const [toolCalls, setToolCalls] = useState<ToolCallDisplay[]>([])
-  const [protocolPhase, setProtocolPhase] = useState<'initiating' | 'searching' | 'classifying' | 'analyzing' | 'filtering' | 'complete' | 'unknown'>('initiating')
+  const [protocolPhase, setProtocolPhase] = useState<AgentPhase>('initiating')
+  const currentPhaseRef = useRef<AgentPhase>('initiating')
   const [agentChunks, setAgentChunks] = useState<SoulChunk[]>([])
   const [agentElapsed, setAgentElapsed] = useState(0)
+  const [searchPlan, setSearchPlan] = useState<SearchPlanDimDisplay[]>([])
+
+  const agentLogRef = useRef<import('../../utils/agent-logger.js').AgentLogger | undefined>(undefined)
 
   // Distill progress state
-  const [distillPhases, setDistillPhases] = useState(createInitialPhases())
+  const [distillToolCalls, setDistillToolCalls] = useState<DistillToolCallDisplay[]>([])
+  const [distillPhase, setDistillPhase] = useState<'distilling' | 'complete'>('distilling')
 
   // Unified input handler
   useInput((_input, key) => {
@@ -155,9 +159,9 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
     if (step === 'search-confirm') {
       if (key.escape) { onCancel(); return }
       if (key.upArrow) setSearchConfirmCursor((c) => Math.max(0, c - 1))
-      if (key.downArrow) setSearchConfirmCursor((c) => Math.min(3, c + 1))
+      if (key.downArrow) setSearchConfirmCursor((c) => Math.min(2, c + 1))
       if (key.return) {
-        const choices: SearchConfirmChoice[] = ['confirm', 'detail', 'retry', 'supplement']
+        const choices: SearchConfirmChoice[] = ['confirm', 'detail', 'retry']
         handleSearchConfirmChoice(choices[searchConfirmCursor]!)
       }
       return
@@ -172,6 +176,21 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
       }
       if (key.upArrow) setDetailScroll((s) => Math.max(0, s - 1))
       if (key.downArrow) setDetailScroll((s) => Math.min(Math.max(0, agentChunks.length - 1), s + 1))
+      return
+    }
+
+    // Error screen
+    if (step === 'error') {
+      if (key.escape) { onCancel(); return }
+      if (key.upArrow) setErrorCursor(0)
+      if (key.downArrow) setErrorCursor(1)
+      if (key.return) {
+        if (errorCursor === 0) {
+          retryFlow()
+        } else {
+          onCancel()
+        }
+      }
       return
     }
   })
@@ -189,13 +208,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   }
 
   function proceedAfterConflictCheck() {
-    if (soulType === 'public') {
-      setStep('capturing')
-      setProtocolPhase('initiating')
-      runAgentCapture(soulName)
-    } else {
-      setStep('data-sources')
-    }
+    setStep('data-sources')
   }
 
   function handleConflictChoice(choice: ConflictChoice) {
@@ -224,19 +237,22 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
 
   function handleSearchConfirmChoice(choice: SearchConfirmChoice) {
     if (choice === 'confirm') {
-      setStep('data-sources')
+      // Continue to local sources if any were selected, otherwise distill
+      proceedToLocalSources()
     } else if (choice === 'detail') {
       setDetailScroll(0)
       setStep('search-detail')
     } else if (choice === 'retry') {
       setAgentChunks([])
       setToolCalls([])
+      currentPhaseRef.current = 'initiating'
       setClassification(undefined)
       setOrigin(undefined)
       setChunkCount(0)
-      setStep('name')
-    } else {
-      setStep('data-sources')
+      setSearchPlan([])
+      setStep('capturing')
+      setProtocolPhase('initiating')
+      runAgentCapture(soulName)
     }
   }
 
@@ -275,6 +291,25 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
     setStep('confirm')
   }
 
+  function retryFlow() {
+    // Reset agent state but preserve user inputs (soulName, soulType, description, etc.)
+    setToolCalls([])
+    setClassification(undefined)
+    setOrigin(undefined)
+    setAgentChunks([])
+    setAgentElapsed(0)
+    setChunkCount(0)
+    setSearchPlan([])
+    setProtocolPhase('initiating')
+    currentPhaseRef.current = 'initiating'
+    agentLogRef.current?.close()
+    agentLogRef.current = undefined
+    setError('')
+    setErrorCursor(0)
+
+    setStep('data-sources')
+  }
+
   async function runAgentCapture(name: string) {
     const config = loadConfig()
     if (!config) {
@@ -285,12 +320,14 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
     try {
       const result = await captureSoul(name, config, (progress: CaptureProgress) => {
         if (progress.type === 'phase') {
+          currentPhaseRef.current = progress.phase
           setProtocolPhase(progress.phase)
         } else if (progress.type === 'tool_call') {
           setToolCalls((prev) => [...prev, {
             tool: progress.tool,
             query: progress.query,
             status: 'running',
+            phase: currentPhaseRef.current,
           }])
         } else if (progress.type === 'tool_result') {
           setToolCalls((prev) => {
@@ -304,6 +341,8 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
         } else if (progress.type === 'classification') {
           setClassification(progress.classification)
           setOrigin(progress.origin)
+        } else if (progress.type === 'search_plan') {
+          setSearchPlan(progress.dimensions)
         } else if (progress.type === 'filter_progress') {
           setFilterProgress({ kept: progress.kept, total: progress.total })
         } else if (progress.type === 'chunks_extracted') {
@@ -314,10 +353,14 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
       setClassification(result.classification)
       setOrigin(result.origin)
       setAgentElapsed(result.elapsedMs)
+      agentLogRef.current = result.agentLog
 
       if (result.classification === 'UNKNOWN_ENTITY' || result.chunks.length === 0) {
+        result.agentLog?.close()
+        agentLogRef.current = undefined
         setProtocolPhase('unknown')
-        setTimeout(() => setStep('data-sources'), 2000)
+        // Web search failed/empty — continue to local sources if any selected
+        setTimeout(() => proceedToLocalSources(), 2000)
       } else {
         setAgentChunks(result.chunks)
         setChunkCount(result.chunks.length)
@@ -332,14 +375,40 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   }
 
   function handleSourcesSubmit(selected: DataSourceOption[]) {
+    setSelectedSources(selected)
+
     if (selected.length === 0) {
+      // Nothing selected — skip to distill with synthetic chunks only
       const syntheticChunks = createSyntheticChunks(soulName, description, parsedTags)
       const allChunks = [...appendChunks, ...agentChunks, ...syntheticChunks]
       setChunkCount(allChunks.length)
       startDistill(soulName, allChunks)
       return
     }
-    setSelectedSources(selected)
+
+    if (selected.includes('web-search')) {
+      // Start with web search
+      setStep('capturing')
+      setProtocolPhase('initiating')
+      runAgentCapture(soulName)
+    } else {
+      // No web search — go straight to local sources
+      proceedToLocalSources(selected)
+    }
+  }
+
+  function proceedToLocalSources(sources?: DataSourceOption[]) {
+    const localSources = (sources ?? selectedSources).filter((s) => s !== 'web-search')
+    if (localSources.length === 0) {
+      // No local sources — go to distill
+      const syntheticChunks = createSyntheticChunks(soulName, description, parsedTags)
+      const allChunks = [...appendChunks, ...agentChunks, ...syntheticChunks]
+      setChunkCount(allChunks.length)
+      startDistill(soulName, allChunks)
+      return
+    }
+    // Set up local source processing
+    setSelectedSources(localSources)
     setCurrentSourceIndex(0)
     setStep('source-path')
   }
@@ -386,18 +455,25 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
     }
   }
 
-  function handleDistillProgress(progress: DistillProgress) {
-    setDistillPhases((prev) => {
-      const next = { ...prev }
-      if (progress.status === 'started') {
-        next[progress.phase] = { status: 'active' }
-      } else if (progress.status === 'in_progress') {
-        next[progress.phase] = { status: 'active', batch: progress.batch, totalBatches: progress.totalBatches }
-      } else if (progress.status === 'done') {
-        next[progress.phase] = { status: 'done' }
-      }
-      return next
-    })
+  function handleDistillAgentProgress(progress: DistillAgentProgress) {
+    if (progress.type === 'phase') {
+      setDistillPhase(progress.phase)
+    } else if (progress.type === 'tool_call') {
+      setDistillToolCalls((prev) => [...prev, {
+        tool: progress.tool,
+        detail: progress.detail,
+        status: 'running',
+      }])
+    } else if (progress.type === 'tool_result') {
+      setDistillToolCalls((prev) => {
+        const updated = [...prev]
+        const last = updated.findLastIndex((tc) => tc.tool === progress.tool && tc.status === 'running')
+        if (last !== -1) {
+          updated[last] = { ...updated[last]!, status: 'done', resultSummary: progress.resultSummary }
+        }
+        return updated
+      })
+    }
   }
 
   async function startDistill(name: string, chunks: SoulChunk[]) {
@@ -406,7 +482,8 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
       packageSoul(soulDir)
 
       setStep('distilling')
-      setDistillPhases(createInitialPhases())
+      setDistillToolCalls([])
+      setDistillPhase('distilling')
 
       const config = loadConfig()
       if (!config) {
@@ -415,26 +492,26 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
         return
       }
 
-      const client = getLLMClient()
-      const model = config.llm.distill_model ?? config.llm.default_model
-      const sampled = sampleChunks(chunks)
-      const features = await extractFeatures(client, model, sampled, name, parsedTags, handleDistillProgress)
+      const aLog = agentLogRef.current
+      const result = await distillSoul(name, chunks, soulDir, config, parsedTags, handleDistillAgentProgress, aLog)
 
-      // Generate phase
-      handleDistillProgress({ phase: 'generate', status: 'started' })
-      generateSoulFiles(soulDir, features)
+      // Generate manifest (agent writes soul files, we write manifest)
       generateManifest(soulDir, name, name, description, chunks.length, ['zh'], soulType, parsedTags)
-      handleDistillProgress({ phase: 'generate', status: 'done' })
+
+      result.agentLog?.close()
+      agentLogRef.current = undefined
 
       setStep('done')
       onComplete(name, soulDir)
     } catch (err) {
+      agentLogRef.current?.close()
       setError(String(err))
       setStep('error')
     }
   }
 
   const sourceLabels: Record<DataSourceOption, string> = {
+    'web-search': t('create.source.web_search'),
     markdown: t('create.source.markdown'),
     twitter: 'Twitter Archive',
   }
@@ -450,11 +527,17 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   }
 
   if (step === 'error') {
+    const options = [t('create.error.retry'), t('create.error.back')]
     return (
       <Box flexDirection="column" paddingLeft={2}>
         <Text color={ACCENT}>✗ {t('create.failed')}</Text>
-        <Text color={DIM}>{error}</Text>
-        <Text color={DIM}>{t('create.esc_hint')}</Text>
+        <Text color={DIM}>  {error}</Text>
+        <Text> </Text>
+        {options.map((opt, i) => (
+          <Text key={i} color={i === errorCursor ? ACCENT : DIM}>
+            {i === errorCursor ? '  ❯ ' : '    '}{opt}
+          </Text>
+        ))}
       </Box>
     )
   }
@@ -602,6 +685,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
           elapsedTime={agentElapsed}
           filterProgress={filterProgress}
           phase={protocolPhase}
+          searchPlan={searchPlan}
         />
       )}
 
@@ -616,13 +700,34 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
           {origin && <Text>  <Text color={PRIMARY}>{t('create.search.origin')}:</Text> {origin}</Text>}
           <Text>  <Text color={PRIMARY}>{t('create.search.fragments')}:</Text> {agentChunks.length} {t('create.search.unit')}</Text>
           <Text> </Text>
+          {agentChunks.length > 0 && (() => {
+            const dimCounts: Record<string, number> = {}
+            for (const c of agentChunks) {
+              const dim = String(c.metadata?.extraction_step ?? '')
+              if (dim) dimCounts[dim] = (dimCounts[dim] ?? 0) + 1
+            }
+            const entries = Object.entries(dimCounts).sort(([, a], [, b]) => b - a)
+            if (entries.length === 0) return null
+            const maxCount = Math.max(...entries.map(([, v]) => v))
+            return (
+              <Box flexDirection="column" paddingLeft={2} marginBottom={1}>
+                <Text color={PRIMARY}>  {t('create.search.coverage')}:</Text>
+                {entries.map(([dim, count]) => {
+                  const barLen = Math.round((count / maxCount) * 8)
+                  const bar = '█'.repeat(barLen).padEnd(8)
+                  return (
+                    <Text key={dim} color={DIM}>    {dim.padEnd(12)} {bar} {count}</Text>
+                  )
+                })}
+              </Box>
+            )
+          })()}
           <Box flexDirection="column" paddingLeft={2}>
-            {(['confirm', 'detail', 'retry', 'supplement'] as const).map((choice, i) => {
+            {(['confirm', 'detail', 'retry'] as const).map((choice, i) => {
               const labels = {
                 confirm: t('create.search.confirm'),
                 detail: t('create.search.detail'),
                 retry: t('create.search.retry'),
-                supplement: t('create.search.supplement'),
               }
               return (
                 <Text key={choice}>
@@ -645,7 +750,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
           {agentChunks.slice(detailScroll, detailScroll + 5).map((chunk, i) => (
             <Box key={chunk.id} flexDirection="column" paddingLeft={2} marginBottom={1}>
               <Text color={PRIMARY}>
-                [{detailScroll + i + 1}/{agentChunks.length}] <Text color={DIM}>{chunk.source}</Text>
+                [{detailScroll + i + 1}/{agentChunks.length}] <Text color={DIM}>{chunk.source}{chunk.metadata?.extraction_step ? ` · ${chunk.metadata.extraction_step}` : ''}</Text>
                 {chunk.metadata?.url ? <Text color={DIM}> — {truncateStr(String(chunk.metadata.url), 50)}</Text> : null}
               </Text>
               <Text color={undefined}>{truncateStr(chunk.content, 200)}</Text>
@@ -659,17 +764,6 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
 
       {step === 'data-sources' && (
         <>
-          {soulType === 'public' && protocolPhase === 'unknown' && (
-            <SoulkillerProtocolPanel
-              targetName={soulName}
-              classification="UNKNOWN_ENTITY"
-              toolCalls={toolCalls}
-              phase="unknown"
-            />
-          )}
-          {soulType === 'public' && agentChunks.length > 0 && (
-            <Text color={DIM}>  {t('create.source.online_fragments', { count: String(agentChunks.length) })}</Text>
-          )}
           {appendChunks.length > 0 && (
             <Text color={DIM}>  {t('create.source.existing_fragments', { count: String(appendChunks.length) })}</Text>
           )}
@@ -677,8 +771,9 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
           <Text color={PRIMARY}>▓ {t('create.source.select')}：</Text>
           <CheckboxSelect<DataSourceOption>
             items={[
-              { value: 'markdown', label: t('create.source.markdown') },
-              { value: 'twitter', label: 'Twitter Archive' },
+              ...(soulType === 'public' ? [{ value: 'web-search' as const, label: t('create.source.web_search'), checked: true }] : []),
+              { value: 'markdown' as const, label: t('create.source.markdown') },
+              { value: 'twitter' as const, label: 'Twitter Archive' },
             ]}
             onEscape={onCancel}
             onSubmit={handleSourcesSubmit}
@@ -712,7 +807,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
         <>
           <Text color={DIM}>  {t('create.label.target')}: {soulName}</Text>
           <Text color={DIM}>  fragments: {chunkCount}</Text>
-          <DistillProgressPanel phases={distillPhases} />
+          <DistillProgressPanel toolCalls={distillToolCalls} phase={distillPhase} />
         </>
       )}
     </Box>

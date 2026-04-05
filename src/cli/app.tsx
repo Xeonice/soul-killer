@@ -34,6 +34,11 @@ import type { EngineAdapter, RecallResult } from '../engine/adapter.js'
 import type { SoulChunk } from '../ingest/types.js'
 import { PRIMARY, ACCENT, DIM } from './animation/colors.js'
 import { setLocale, t } from '../i18n/index.js'
+import { assembleContext } from '../world/context-assembler.js'
+import { loadBindings } from '../world/binding.js'
+import { emptyTagSet } from '../tags/taxonomy.js'
+import { WorldCommand } from './commands/world.js'
+import { listWorlds } from '../world/manifest.js'
 
 type AppPhase = 'boot' | 'setup' | 'idle' | 'command' | 'exit'
 
@@ -60,6 +65,12 @@ const soulCompletionProvider = () => listLocalSouls().map((s) => ({
   group: 'souls',
 }))
 
+const worldCompletionProvider = () => listWorlds().map((w) => ({
+  name: w.name,
+  description: w.display_name || w.description,
+  group: 'worlds',
+}))
+
 const ARG_COMPLETION_MAP: ArgCompletionMap = {
   use: {
     provider: soulCompletionProvider,
@@ -68,6 +79,10 @@ const ARG_COMPLETION_MAP: ArgCompletionMap = {
   evolve: {
     provider: soulCompletionProvider,
     title: 'SOULS',
+  },
+  world: {
+    provider: worldCompletionProvider,
+    title: 'WORLDS',
   },
 }
 
@@ -471,6 +486,18 @@ export function App() {
           }))
           return
         }
+        case 'world':
+          setState((s) => ({
+            ...s,
+            interactiveMode: true,
+            commandOutput: (
+              <WorldCommand
+                soulDir={state.soulDir}
+                onClose={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+              />
+            ),
+          }))
+          return
         default: {
           const suggestion = suggestCommand(parsed.name)
           const msg = suggestion
@@ -532,7 +559,18 @@ export function App() {
     }))
     conversationRef.current.push({ role: 'user', content: userText })
 
-    const systemPrompt = buildSystemPrompt(soulFiles)
+    const bindings = state.soulDir ? loadBindings(state.soulDir) : []
+    const systemPrompt = await assembleContext({
+      soulFiles,
+      soulName: state.soulName ?? 'unknown',
+      soulDisplayName: state.soulName ?? 'unknown',
+      soulTags: emptyTagSet(),
+      bindings,
+      userInput: userText,
+      recentMessages: conversationRef.current,
+      recallResults: state.lastRecallResults,
+      engine: engineRef.current ?? undefined,
+    })
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...conversationRef.current,

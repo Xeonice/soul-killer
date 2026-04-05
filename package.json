@@ -15,7 +15,9 @@
     "test:visual": "bun vitest run --config vitest.visual.config.ts",
     "test:visual:update": "SOULKILLER_UPDATE_BASELINES=1 bun vitest run --config vitest.visual.config.ts",
     "test:integration": "bun vitest run --config vitest.integration.config.ts",
-    "test:e2e": "E2E_DEBUG=1 bun test tests/e2e/ --timeout 60000"
+    "test:e2e": "E2E_DEBUG=1 bun test tests/e2e/ --timeout 60000",
+    "verify": "bun acceptance/cli.ts verify",
+    "diagnose": "bun acceptance/cli.ts diagnose"
   },
   "keywords": [
     "soulkiller",
@@ -32,6 +34,7 @@
     "@mozilla/readability": "^0.6.0",
     "ai": "^6.0.142",
     "chalk": "^5.6.2",
+    "exa-js": "^2.11.0",
     "ink": "^6.8.0",
     "jsdom": "^29.0.1",
     "openai": "^6.33.0",

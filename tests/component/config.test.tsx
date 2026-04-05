@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { ConfigCommand } from '../../src/cli/commands/config.js'
 import { setLocale } from '../../src/i18n/index.js'
+import { AGENT_LOG_DIR } from '../../src/utils/agent-logger.js'
 
 const mockConfig = {
   llm: {
@@ -45,5 +46,19 @@ describe('ConfigCommand', () => {
     const { lastFrame } = render(<ConfigCommand onClose={() => {}} />)
     const output = lastFrame() ?? ''
     expect(output).toContain('❯')
+  })
+
+  it('shows Clean Agent Logs menu item', () => {
+    setLocale('zh')
+    const { lastFrame } = render(<ConfigCommand onClose={() => {}} />)
+    const output = lastFrame() ?? ''
+    expect(output).toContain('清理日志')
+  })
+
+  it('shows Clean Agent Logs in English', () => {
+    setLocale('en')
+    const { lastFrame } = render(<ConfigCommand onClose={() => {}} />)
+    const output = lastFrame() ?? ''
+    expect(output).toContain('Clean Logs')
   })
 })

@@ -15,6 +15,9 @@ exports[`HelpCommand > renders full help output 1`] = `
     /use                  加载本地分身
     /feedback             评价最近一条分身回复
 
+  世界
+    /world                世界管理（create/entry/bind/list/show/distill/evolve）
+
   设置
     /config               查看/修改配置
 

@@ -31,6 +31,14 @@ The system SHALL distinguish between slash commands and natural language input. 
 - THEN the system displays an "unknown command" message
 - THEN the system suggests similar known commands or displays `/help`
 
+```acceptance
+fixture: void
+steps:
+  - wait-prompt:
+  - send: "/foobar"
+  - expect: "UNKNOWN COMMAND"
+```
+
 ### Requirement: Slash Command Routing
 
 The system SHALL maintain a registry of slash command handlers. Each handler MUST be registered with a command name, optional aliases, a description, and an execute function. The dispatcher MUST match the input command name against registered handlers and invoke the matching handler with parsed arguments.
@@ -63,6 +71,14 @@ When a soul is loaded, the system SHALL forward all non-command input to the con
 
 - WHEN no soul is loaded and the user types "hello"
 - THEN the system displays a message: "No soul loaded. Use /ingest to create one or /load to load an existing soul."
+
+```acceptance
+fixture: void
+steps:
+  - wait-prompt:
+  - send: "hello"
+  - expect: "NO SOUL"
+```
 
 ### Requirement: Interactive Prompts
 
@@ -138,6 +154,15 @@ The `/help` command SHALL display all available commands grouped by category. Ea
 - THEN commands are grouped under category headings
 - THEN each entry shows name, aliases, and description
 
+```acceptance
+fixture: void
+steps:
+  - wait-prompt:
+  - send: "/help"
+  - expect: "COMMANDS|commands"
+  - not-expect: "UNKNOWN COMMAND"
+```
+
 ### Requirement: Exit Command
 
 The `/exit` command SHALL trigger the exit animation sequence and then terminate the process with `process.exit(0)`.
@@ -147,6 +172,14 @@ The `/exit` command SHALL trigger the exit animation sequence and then terminate
 - WHEN the user types `/exit`
 - THEN the exit animation plays in full
 - THEN the process exits with code 0
+
+```acceptance
+fixture: void
+steps:
+  - wait-prompt:
+  - send: "/exit"
+  - wait-exit: 0
+```
 
 ### Requirement: All command output uses i18n
 

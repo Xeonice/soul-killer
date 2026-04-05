@@ -53,6 +53,7 @@ export function loadSoulFiles(soulDir: string): {
   identity: string
   style: string
   behaviors: Record<string, string>
+  examples: Record<string, string>
 } | null {
   const soulPath = path.join(soulDir, 'soul')
   const identityPath = path.join(soulPath, 'identity.md')
@@ -75,5 +76,16 @@ export function loadSoulFiles(soulDir: string): {
     }
   }
 
-  return { identity, style, behaviors }
+  const examples: Record<string, string> = {}
+  const examplesPath = path.join(soulDir, 'examples')
+  if (fs.existsSync(examplesPath)) {
+    for (const file of fs.readdirSync(examplesPath)) {
+      if (file.endsWith('.md')) {
+        const name = file.replace('.md', '')
+        examples[name] = fs.readFileSync(path.join(examplesPath, file), 'utf-8')
+      }
+    }
+  }
+
+  return { identity, style, behaviors, examples }
 }

@@ -6,19 +6,19 @@ exports[`SoulkillerProtocolPanel > snapshot: complete phase 1`] = `
 │                                                      │
 │   ▓ initiating soul capture...         ✓             │
 │                                                      │
-│   ▓ target acquired: Linus Torvalds                  │
-│     classification: PUBLIC ENTITY                    │
-│     origin: Linux Foundation                         │
-│                                                      │
-│   ▓ extracting neural patterns...                    │
+│   ▓Phase 1: Reconnaissance ✓                         │
 │     ▸ 🔍 Linus Torvalds who is → 5 results ✓         │
-│     ▸ 📖 Linus Torvalds → 2 results ✓                │
+│     ▸ 🔍 Linus Torvalds → 2 results ✓                │
 │     ▸ 🔍 Linus Torvalds interview opinio… → 4        │
 │ results ✓                                            │
 │     ▸ 🔍 Linus Torvalds personality MBTI → 3 results │
 │  ✓                                                   │
 │                                                      │
-│   ▓ soul fragments captured: 32                      │
+│   ▓ target acquired: Linus Torvalds                  │
+│     classification: PUBLIC ENTITY                    │
+│     origin: Linux Foundation                         │
+│                                                      │
+│   ▓soul fragments captured: 32                       │
 │     extraction time: 8.5s                            │
 │                                                      │
 └──────────────────────────────────────────────────────┘"

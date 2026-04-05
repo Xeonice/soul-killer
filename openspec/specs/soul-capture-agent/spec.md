@@ -1,129 +1,12 @@
 # Soul Capture Agent
 
-### Requirement: Auto-classify target type
-
-The agent SHALL automatically identify the target type through a two-phase process: (1) program-driven deterministic search, (2) single LLM analysis call.
-
-WHEN a user provides a target name, the agent MUST:
-1. Execute deterministic searches: Tavily search for the name, Tavily search for name + hint (if provided), Wikipedia search in Chinese, Wikipedia search in English
-2. Collect all search results into a context document
-3. Call the LLM once (without tools) with the search context, requesting a JSON response with classification, english_name, origin, and summary
-4. Parse the JSON response to determine the target classification
-
-The agent SHALL NOT use LLM tool-calling loops for search. All searches are program-initiated.
-
-#### Scenario: Fictional character identification
-
-- **WHEN** the user inputs "大卫·马丁内斯" with hint "cyberpunk edge runner 的主角"
-- **THEN** the agent executes Tavily search for "大卫·马丁内斯" and "大卫·马丁内斯 cyberpunk edge runner 的主角"
-- **THEN** the agent executes Wikipedia search in Chinese and English
-- **THEN** the agent calls LLM once with all search results
-- **THEN** the LLM returns JSON with classification DIGITAL_CONSTRUCT
-
-#### Scenario: Name-only identification (no hint)
-
-- **WHEN** the user inputs "Elon Musk" with no hint
-- **THEN** the agent executes Tavily search for "Elon Musk"
-- **THEN** the agent executes Wikipedia search in Chinese and English
-- **THEN** the LLM returns JSON with classification PUBLIC_ENTITY
-
-#### Scenario: All searches fail
-
-- **WHEN** all search sources return errors or no results
-- **THEN** the LLM analysis SHALL still be called with empty context
-- **THEN** classification SHALL be UNKNOWN_ENTITY
-
-#### Scenario: LLM analysis returns invalid JSON
-
-- **WHEN** the LLM response cannot be parsed as valid JSON
-- **THEN** the agent SHALL retry the LLM call once
-- **THEN** if retry also fails, classification SHALL be UNKNOWN_ENTITY
-
----
-
-### Requirement: 4-step soul capture workflow
-
-The agent SHALL execute a sequential workflow: deterministic_search, llm_classify, strategy_deep_search, convert_chunks.
-
-#### Scenario: Full workflow execution
-
-- **WHEN** the agent begins soul capture for a target
-- **THEN** Step 1 (deterministic_search): the agent executes programmatic Tavily + Wikipedia searches
-- **THEN** Step 2 (llm_classify): the agent sends search results to LLM for classification, receiving JSON output
-- **THEN** Step 3 (strategy_deep_search): the agent selects a SearchStrategy based on classification and executes it to collect deep extractions
-- **THEN** Step 4 (convert_chunks): all search extractions are filtered for relevance and converted to SoulChunk[]
-
-#### Scenario: Strategy selection by classification
-
-- **WHEN** classification is DIGITAL_CONSTRUCT
-- **THEN** Step 3 SHALL use the DIGITAL_CONSTRUCT strategy (DuckDuckGo + page extraction)
-
-- **WHEN** classification is PUBLIC_ENTITY
-- **THEN** Step 3 SHALL use the PUBLIC_ENTITY strategy (Tavily + Wikipedia)
-
-- **WHEN** classification is HISTORICAL_RECORD
-- **THEN** Step 3 SHALL use the HISTORICAL_RECORD strategy (Wikipedia-first + Tavily)
-
-- **WHEN** classification is UNKNOWN_ENTITY
-- **THEN** Step 3 SHALL be skipped
-
----
-
-### Requirement: DIGITAL_CONSTRUCT gathering strategy
-
-The agent SHALL use fiction-specific search strategies for DIGITAL_CONSTRUCT targets.
-
-#### Scenario: Gathering deep data for fictional character
-
-- WHEN the target is classified as DIGITAL_CONSTRUCT
-- THEN the gather_deep step MUST execute Tavily searches for:
-  - Character quotes and dialogue lines
-  - Character analysis and personality breakdowns
-  - Character relationships and story arcs
-- THEN search queries SHALL target game wikis, anime wikis, movie databases, and fan analysis sites
-
----
-
-### Requirement: PUBLIC_ENTITY gathering strategy
-
-The agent SHALL use public-figure-specific search strategies for PUBLIC_ENTITY targets.
-
-#### Scenario: Gathering deep data for public figure
-
-- WHEN the target is classified as PUBLIC_ENTITY
-- THEN the gather_deep step MUST execute Tavily searches for:
-  - Interviews and public statements
-  - Speeches and presentations
-  - Opinions and public positions
-  - Social media presence and communication style
-
----
-
-### Requirement: HISTORICAL_RECORD gathering strategy
-
-The agent SHALL use historical-figure-specific search strategies for HISTORICAL_RECORD targets.
-
-#### Scenario: Gathering deep data for historical figure
-
-- WHEN the target is classified as HISTORICAL_RECORD
-- THEN the gather_deep step MUST execute Tavily searches for:
-  - Famous quotes and attributed sayings
-  - Philosophical positions and core ideas
-  - Published writings and known works
-  - Historical accounts and biographical analyses
-
----
-
 ### Requirement: UNKNOWN_ENTITY fallback behavior
+WHEN 搜索结果不足以进行有意义的提取时，agent SHALL 通过 reportFindings 返回空 extractions 和 UNKNOWN_ENTITY 分类。
 
-WHEN search results are insufficient for meaningful extraction, the agent SHALL return empty chunks and signal manual mode.
-
-#### Scenario: Insufficient search results trigger manual fallback
-
-- WHEN the target is classified as UNKNOWN_ENTITY
-- THEN the agent MUST return an empty SoulChunk[] array
-- THEN the agent MUST signal that manual data source selection is required
-- THEN the user SHALL be presented with manual data source options
+#### Scenario: 搜索无果触发 UNKNOWN_ENTITY
+- **WHEN** agent 多次搜索后未找到关于目标的有意义信息
+- **THEN** agent 调用 reportFindings，classification 为 UNKNOWN_ENTITY，extractions 为空数组
+- **AND** 系统 SHALL 将用户引导至手动数据源选择模式
 
 ---
 
@@ -154,56 +37,7 @@ The Tavily API key SHALL be optional. When absent, the agent is skipped entirely
 - WHEN the Tavily API key is present in configuration
 - THEN the soul capture agent SHALL be invoked as the first step of the /create flow
 
-### Requirement: Agent uses manual loop with realtime progress
-The Soul Capture Agent SHALL use a manual agent loop instead of single generateText, emitting progress for each tool call.
-
-#### Scenario: Each tool call is visible to UI
-- **WHEN** the agent calls the search tool
-- **THEN** a progress event is emitted with the tool name and search query before execution
-- **AND** a progress event is emitted with the result count after execution
-
-#### Scenario: Classification is extracted during loop
-- **WHEN** the agent receives search results about the target
-- **THEN** the classification is extracted from LLM text output during the loop (not from final JSON)
-- **AND** a classification progress event is emitted
-
-#### Scenario: Loop terminates when LLM stops calling tools
-- **WHEN** the LLM responds without requesting tool calls
-- **THEN** the agent loop exits and returns the accumulated chunks
-
-#### Scenario: Max iterations prevent infinite loop
-- **WHEN** the agent has executed 15 loop iterations
-- **THEN** the loop exits regardless of LLM behavior
-
-### Requirement: Agent uses classification-specific search queries
-After identifying the target classification, the agent SHALL use predefined search query templates specific to that classification instead of letting the LLM freely decide what to search.
-
-#### Scenario: DIGITAL_CONSTRUCT search strategy
-- **WHEN** the agent identifies the target as DIGITAL_CONSTRUCT
-- **THEN** the agent searches for: character wiki/fandom, quotes/dialogue, personality analysis
-- **AND** searches use the English name with keywords like "character", "wiki", "quotes", "personality"
-
-#### Scenario: PUBLIC_ENTITY search strategy
-- **WHEN** the agent identifies the target as PUBLIC_ENTITY
-- **THEN** the agent searches for: interviews/speeches, opinions/philosophy, personality/communication style
-
-#### Scenario: HISTORICAL_RECORD search strategy
-- **WHEN** the agent identifies the target as HISTORICAL_RECORD
-- **THEN** the agent searches for: philosophy/famous quotes, biography/legacy, writings
-
-### Requirement: Agent extracts and uses English name
-After the initial identification search, the agent SHALL extract the English name from Wikipedia results and use it for subsequent searches.
-
-#### Scenario: Chinese name mapped to English
-- **WHEN** user inputs "强尼银手" and Wikipedia returns "Johnny Silverhand"
-- **THEN** subsequent searches use "Johnny Silverhand" as the primary query name
-
-### Requirement: Two-round search strategy
-The agent SHALL use a two-round approach: Round 1 for identification (free search), Round 2 for targeted collection (predefined queries based on classification).
-
-#### Scenario: Round 1 then Round 2
-- **WHEN** Round 1 completes with classification DIGITAL_CONSTRUCT
-- **THEN** Round 2 executes predefined character-specific searches without LLM deciding queries
+---
 
 ### Requirement: Search results include full page content
 After DuckDuckGo search returns URLs, the agent SHALL use the page extractor to fetch full content for the top 3 results, replacing snippets with full Markdown content.
@@ -217,6 +51,8 @@ After DuckDuckGo search returns URLs, the agent SHALL use the page extractor to 
 #### Scenario: Tavily results with short content
 - **WHEN** Tavily returns a result with content shorter than 200 characters
 - **THEN** the page extractor is triggered for that URL to get full content
+
+---
 
 ### Requirement: Conditional agent invocation
 
@@ -233,14 +69,26 @@ The Soul Capture Agent SHALL only be invoked when `soulType` is `public`. When `
 - **WHEN** a soul is created with `soulType: public`
 - **THEN** the `captureSoul()` function SHALL be called with the name and optional hint
 
+---
+
 ### Requirement: Hint parameter in captureSoul
+`captureSoul()` 函数 SHALL 接受可选的 `hint?: string` 参数。hint SHALL 作为额外上下文拼接到 agent 的 user message 中，帮助 LLM 更准确地定位目标。
 
-The `captureSoul()` function SHALL accept an optional `hint?: string` parameter. When provided, the hint SHALL be used as a search query suffix in the deterministic search step (not passed to an LLM tool-calling prompt).
+#### Scenario: Hint 作为上下文传递给 agent
+- **WHEN** `captureSoul("大卫·马丁内斯", config, onProgress, "cyberpunk edge runner 的主角")` 被调用
+- **THEN** agent 的 user message 中包含 hint 信息
+- **AND** LLM 利用 hint 来引导初始搜索方向
 
-#### Scenario: Hint used as search suffix
+---
 
-- **WHEN** `captureSoul("大卫·马丁内斯", config, onProgress, "cyberpunk edge runner 的主角")` is called
-- **THEN** the deterministic search step SHALL execute an additional Tavily search for "大卫·马丁内斯 cyberpunk edge runner 的主角"
+### Requirement: Agent extracts and uses English name
+Agent SHALL 在搜索过程中自主识别并使用目标的英文名进行后续搜索。此行为由 system prompt 引导，不再依赖代码逻辑提取。
+
+#### Scenario: 中文名映射到英文
+- **WHEN** 用户输入 "强尼银手"，agent 从 Wikipedia 搜索结果中发现 "Johnny Silverhand"
+- **THEN** agent 自主使用 "Johnny Silverhand" 进行后续英文搜索
+
+---
 
 ### Requirement: Search result confirmation before proceeding
 
@@ -256,3 +104,42 @@ After Agent search completes with valid results, the system SHALL pause at a `se
 
 - **WHEN** Agent search completes with UNKNOWN_ENTITY classification
 - **THEN** the system SHALL transition directly to data-sources step (existing behavior)
+
+---
+
+### Requirement: Max iterations prevent infinite loop
+Agent 的 ToolLoopAgent SHALL 配置 `stopWhen: stepCountIs(30)`，确保循环不会无限执行。
+
+#### Scenario: 30 步上限
+- **WHEN** agent 已执行 30 步
+- **THEN** 循环强制停止，无论 LLM 是否调用了 reportFindings
+
+---
+
+### Requirement: Agent loop event processing
+The `captureSoul` function SHALL create an `AgentLogger` instance at the start of execution and integrate it with the `fullStream` event loop. It SHALL return the logger instance via `CaptureResult.agentLog` without closing it, so the caller can extend the log with distillation data.
+
+#### Scenario: Full logging integration
+- **WHEN** `captureSoul` is called and completes a 12-step agent loop
+- **THEN** an `AgentLogger` is created at the start, all 12 steps are logged with their events, and `writeResult()` + `writeAnalysis()` are called before the function returns
+
+#### Scenario: AgentLogger returned in CaptureResult
+- **WHEN** `captureSoul` returns a result
+- **THEN** `CaptureResult.agentLog` contains the open `AgentLogger` instance (not closed)
+
+#### Scenario: AgentLogger passed to tools
+- **WHEN** `createAgentTools` is called
+- **THEN** the `AgentLogger` instance is passed via the options parameter
+
+#### Scenario: text-delta events captured
+- **WHEN** the model emits `text-delta` events during a step
+- **THEN** `agentLog.modelOutput(text)` is called for each delta
+
+---
+
+### Requirement: Agent emits search plan progress event
+The `captureSoul` function SHALL emit a `search_plan` progress event when the `planSearch` tool completes, containing the dimension list with priorities.
+
+#### Scenario: planSearch result triggers event
+- **WHEN** the planSearch tool returns a result with 6 dimensions
+- **THEN** `onProgress` is called with `{ type: 'search_plan', dimensions: [{ dimension, priority }...] }`

@@ -25,6 +25,9 @@ const COMMAND_TEMPLATES: CommandTemplate[] = [
   { name: 'use', descriptionKey: 'cmd.use', groupKey: 'cmd.group.consume' },
   { name: 'feedback', descriptionKey: 'cmd.feedback', groupKey: 'cmd.group.consume' },
 
+  // 世界
+  { name: 'world', descriptionKey: 'cmd.world', groupKey: 'cmd.group.world' },
+
   // 设置
   { name: 'config', descriptionKey: 'cmd.config', groupKey: 'cmd.group.settings' },
 

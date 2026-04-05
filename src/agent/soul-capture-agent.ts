@@ -1,12 +1,13 @@
-import { generateText } from 'ai'
+import { ToolLoopAgent, stepCountIs, hasToolCall } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { SoulkillerConfig } from '../config/schema.js'
 import type { SoulChunk } from '../ingest/types.js'
-import { createSearchTools } from './tools/search-factory.js'
 import { webExtractionToChunks, type WebSearchExtraction } from '../ingest/web-adapter.js'
+import { createAgentTools } from './tools/search-factory.js'
 import { logger } from '../utils/logger.js'
-import { getStrategyForClassification } from './strategies/index.js'
-import type { SearchExecutors } from './strategies/types.js'
+import { AgentLogger } from '../utils/agent-logger.js'
+import { ensureSearxng } from './tools/searxng-search.js'
+import type { SoulDimension } from './dimensions.js'
 
 export type TargetClassification =
   | 'DIGITAL_CONSTRUCT'
@@ -14,11 +15,18 @@ export type TargetClassification =
   | 'HISTORICAL_RECORD'
   | 'UNKNOWN_ENTITY'
 
+export interface SearchPlanDimension {
+  dimension: string
+  priority: string
+  queries: string[]
+}
+
 export type CaptureProgress =
   | { type: 'phase'; phase: 'initiating' | 'searching' | 'classifying' | 'analyzing' | 'filtering' | 'complete' | 'unknown' }
   | { type: 'tool_call'; tool: string; query: string }
   | { type: 'tool_result'; tool: string; resultCount: number }
   | { type: 'classification'; classification: TargetClassification; origin?: string }
+  | { type: 'search_plan'; dimensions: SearchPlanDimension[] }
   | { type: 'filter_progress'; kept: number; total: number }
   | { type: 'chunks_extracted'; count: number }
 
@@ -27,31 +35,92 @@ export interface CaptureResult {
   origin?: string
   chunks: SoulChunk[]
   elapsedMs: number
+  agentLog?: AgentLogger
 }
 
 export type OnProgress = (progress: CaptureProgress) => void
 
-const CLASSIFY_PROMPT = `You are the Soulkiller Protocol. Your task is to CLASSIFY a target based on search results.
+const CAPTURE_SYSTEM_PROMPT = `You are a research assistant specialized in building comprehensive digital profiles of people and characters. Your job is to gather detailed information about a target from public web sources.
 
-Analyze the provided search results about a target and output a JSON object (no markdown, no code fences, just raw JSON):
+## Mission
 
-{
-  "classification": "DIGITAL_CONSTRUCT",
-  "english_name": "English Name",
-  "origin": "source work, organization, or era",
-  "summary": "one paragraph about who/what this is"
-}
+Given a target name, research and collect information across 6 profile dimensions. Search systematically until you have sufficient coverage.
 
-classification must be exactly one of:
-- DIGITAL_CONSTRUCT = fictional character from game, anime, movie, novel, etc.
-- PUBLIC_ENTITY = real living or recently active public figure
-- HISTORICAL_RECORD = historical figure (no longer alive or active for decades)
-- UNKNOWN_ENTITY = cannot find meaningful information from the search results
+## Profile Dimensions
 
-Output ONLY the JSON object, nothing else.`
+A complete profile requires data across these dimensions:
 
+1. **identity** (REQUIRED) — Who they are: background, origin, role, affiliations
+2. **quotes** (REQUIRED) — Their actual words: dialogue, famous lines, catchphrases, direct quotes
+3. **expression** (REQUIRED) — How they communicate: tone, word choice, rhetoric, humor style, speech patterns
+4. **thoughts** (IMPORTANT) — What they believe: values, philosophy, opinions, worldview
+5. **behavior** (IMPORTANT) — How they act: decision patterns, conflict response, habits
+6. **relations** (SUPPLEMENTARY) — Who they connect with: key relationships, social dynamics
 
-// ========== Main Entry ==========
+You need at least 3 dimensions covered, with at least 2 of the 3 REQUIRED dimensions, before you can report.
+
+## Workflow
+
+### Phase 1: Reconnaissance (first 2 steps)
+Search broadly to identify the target. The search engine automatically queries multiple sources including web pages, Wikipedia, and forums. Try different keywords and languages.
+
+### Phase 2: Planning (step 3)
+Call planSearch with a summary of what you found. Include:
+- The classification (DIGITAL_CONSTRUCT for fictional characters, PUBLIC_ENTITY for public figures, HISTORICAL_RECORD for historical figures, or UNKNOWN_ENTITY if not found)
+- The English name (if discovered)
+- The local/original name
+- The origin (source work, organization, era)
+
+planSearch will return a structured research plan with recommended queries for each dimension.
+
+### Phase 3: Collection (step 4+)
+Follow the research plan. For each dimension:
+- Use the recommended queries from the plan
+- Adjust queries if results are poor
+- Use extractPage for promising but short snippets
+- Search in multiple languages (中文, English, 日本語)
+
+After every 3-4 searches, call checkCoverage to see which dimensions are still missing. Focus your remaining searches on uncovered dimensions, especially REQUIRED ones.
+
+## When to Stop
+
+Call reportFindings when:
+- checkCoverage shows canReport=true (3+ dimensions, 2+ required)
+- OR you've exhausted search angles after 10+ searches
+- OR the target is UNKNOWN_ENTITY (no results found)
+
+When reporting, tag each extraction with its dimension.
+
+## Extraction Guidelines
+
+When calling reportFindings, submit MANY separate extractions — aim for 3-8 per covered dimension, 20-40 total. Quality comes from breadth:
+
+- Each extraction = ONE distinct piece of information (one quote, one fact, one observation)
+- Do NOT merge multiple search results into a single extraction
+- Do NOT summarize — preserve raw content, direct quotes, and specific details
+- Copy interesting paragraphs verbatim from search results rather than paraphrasing
+- Include the source URL for every extraction
+- For **quotes** dimension: each famous line or dialogue should be its own extraction
+- For **identity** dimension: separate background, timeline, roles into individual extractions
+- For **expression** dimension: each speech pattern example should be its own extraction
+
+Bad: One extraction with 10 paragraphs covering everything about identity
+Good: 5 separate extractions, each with a specific identity fact
+
+## Rules
+
+- IMPORTANT: Always use tools — do not generate plain text responses. Each step should result in a tool call.
+- Follow the workflow strictly: search first (2 rounds), then planSearch, then collect by dimension, then checkCoverage, then reportFindings.
+- Do NOT fabricate information. Only report what you actually found.
+- Do NOT search the same query twice.
+- Prefer content with direct quotes, personality analysis, and behavioral patterns — these make the profile vivid and authentic.
+- When you discover the target's English name, use it for English-language searches.
+- Always call planSearch before deep collection — it gives you the research strategy.`
+
+const DOOM_LOOP_THRESHOLD = 3
+const MAX_STEPS = 30
+
+const COLLECTION_START = 3   // step 3+: collection phase for UI
 
 export async function captureSoul(
   name: string,
@@ -62,7 +131,6 @@ export async function captureSoul(
   const startTime = Date.now()
   logger.info('[captureSoul] Start:', { name, hint, model: config.llm.default_model })
 
-  const { executors } = createSearchTools(config)
   const provider = createOpenAICompatible({
     name: 'openrouter',
     apiKey: config.llm.api_key,
@@ -70,317 +138,213 @@ export async function captureSoul(
   })
   const model = provider(config.llm.default_model)
 
-  onProgress?.({ type: 'phase', phase: 'initiating' })
-
-  // ========== Step 1: Deterministic Search ==========
-  logger.info('[captureSoul] Step 1: Deterministic search')
-  onProgress?.({ type: 'phase', phase: 'searching' })
-  const searchExtractions = await runDeterministicSearch(name, hint, executors, onProgress)
-  logger.info('[captureSoul] Step 1 done:', searchExtractions.length, 'extractions')
-
-  // ========== Step 2: LLM Classification ==========
-  logger.info('[captureSoul] Step 2: LLM classification')
-  onProgress?.({ type: 'phase', phase: 'classifying' })
-  const { classification, englishName, origin } = await classifyWithLLM(name, hint, searchExtractions, model)
-  logger.info('[captureSoul] Step 2 done:', { classification, englishName, origin })
-
-  onProgress?.({ type: 'classification', classification, origin })
-
-  // ========== Step 3: Strategy-based Deep Search ==========
-  const allExtractions = [...searchExtractions]
-
-  if (classification !== 'UNKNOWN_ENTITY') {
-    logger.info('[captureSoul] Step 3: Strategy deep search for', classification)
-    onProgress?.({ type: 'phase', phase: 'analyzing' })
-
-    const strategy = getStrategyForClassification(classification)
-    const cn = name !== englishName ? name : ''
-    const deepExtractions = await strategy.search(englishName, cn, origin ?? '', executors, onProgress)
-    allExtractions.push(...deepExtractions)
-
-    logger.info('[captureSoul] Step 3 done: total', allExtractions.length, 'extractions (initial:', searchExtractions.length, '+ deep:', deepExtractions.length, ')')
-  } else {
-    logger.info('[captureSoul] Step 3 skipped: classification is UNKNOWN_ENTITY')
+  // Initialize SearXNG if configured as search provider
+  let searxngAvailable = false
+  if (config.search?.provider === 'searxng') {
+    searxngAvailable = await ensureSearxng()
+    logger.info('[captureSoul] SearXNG available:', searxngAvailable)
   }
 
-  // ========== Step 4: Relevance Filter ==========
-  const targetDesc = `${name}${origin ? ` (${origin})` : ''}${hint ? ` — ${hint}` : ''}`
-  let filteredExtractions: WebSearchExtraction[]
-  if (classification !== 'UNKNOWN_ENTITY' && allExtractions.length > 0) {
-    logger.info('[captureSoul] Step 4: Relevance filter on', allExtractions.length, 'extractions')
-    onProgress?.({ type: 'phase', phase: 'filtering' })
-    filteredExtractions = await filterRelevantExtractions(allExtractions, targetDesc, model, onProgress)
-    logger.info('[captureSoul] Step 4 done:', filteredExtractions.length, '/', allExtractions.length, 'kept')
-  } else {
-    logger.info('[captureSoul] Step 4 skipped: no extractions to filter')
-    filteredExtractions = []
-  }
+  // Resolve search provider name for logging
+  const configProvider = config.search?.provider
+  const resolvedProvider = configProvider === 'searxng' && searxngAvailable ? 'searxng'
+    : configProvider === 'exa' && config.search?.exa_api_key ? 'exa'
+    : configProvider === 'tavily' && config.search?.tavily_api_key ? 'tavily'
+    : searxngAvailable ? 'searxng'
+    : config.search?.exa_api_key ? 'exa'
+    : config.search?.tavily_api_key ? 'tavily'
+    : 'none'
 
-  // ========== Convert to chunks ==========
-  const chunks = webExtractionToChunks(filteredExtractions)
-  logger.info('[captureSoul] Final chunks:', chunks.length, '| elapsed:', Date.now() - startTime, 'ms')
-
-  onProgress?.({ type: 'chunks_extracted', count: chunks.length })
-  onProgress?.({
-    type: 'phase',
-    phase: classification === 'UNKNOWN_ENTITY' ? 'unknown' : 'complete',
-  })
-
-  return {
-    classification,
-    origin,
-    chunks,
-    elapsedMs: Date.now() - startTime,
-  }
-}
-
-// ========== Step 1: Deterministic Search ==========
-
-async function runDeterministicSearch(
-  name: string,
-  hint: string | undefined,
-  executors: SearchExecutors,
-  onProgress?: OnProgress,
-): Promise<WebSearchExtraction[]> {
-  const extractions: WebSearchExtraction[] = []
-
-  const queries: { tool: 'search' | 'wikipedia'; query: string; lang?: string }[] = [
-    { tool: 'search', query: name },
-    { tool: 'wikipedia', query: name, lang: 'zh' },
-    { tool: 'wikipedia', query: name, lang: 'en' },
-  ]
-
-  if (hint) {
-    queries.splice(1, 0, { tool: 'search', query: `${name} ${hint}` })
-  }
-
-  logger.debug('[deterministicSearch] Queries planned:', queries.length, queries.map((q) => `${q.tool}:"${q.query}"`).join(', '))
-
-  for (const q of queries) {
-    onProgress?.({ type: 'tool_call', tool: q.tool, query: q.query })
-
-    try {
-      if (q.tool === 'search') {
-        const results = await executors.search(q.query)
-        logger.debug('[deterministicSearch] Tavily:', q.query, '→', results.length, 'results')
-        for (const r of results) {
-          logger.debug('[deterministicSearch]   -', r.title, '|', r.url, '|', r.content.slice(0, 80))
-        }
-        onProgress?.({ type: 'tool_result', tool: 'search', resultCount: results.length })
-        for (const r of results) {
-          extractions.push({ content: r.content, url: r.url, searchQuery: q.query, extractionStep: 'identify' })
-        }
-      } else {
-        const results = await executors.wikipedia(q.query, q.lang)
-        logger.debug('[deterministicSearch] Wikipedia', q.lang, ':', q.query, '→', results.length, 'results')
-        for (const r of results) {
-          logger.debug('[deterministicSearch]   -', r.title, '|', r.url, '|', r.extract.slice(0, 80))
-        }
-        onProgress?.({ type: 'tool_result', tool: 'wikipedia', resultCount: results.length })
-        for (const r of results) {
-          extractions.push({ content: r.extract, url: r.url, searchQuery: q.query, extractionStep: 'gather_base' })
-        }
-      }
-    } catch (err) {
-      logger.warn('[deterministicSearch] Failed:', q.tool, q.query, err)
-      onProgress?.({ type: 'tool_result', tool: q.tool, resultCount: 0 })
-    }
-  }
-
-  logger.info('[deterministicSearch] Done:', extractions.length, 'total extractions')
-  return extractions
-}
-
-// ========== Step 2: LLM Classification ==========
-
-interface ClassificationResult {
-  classification: TargetClassification
-  englishName: string
-  origin?: string
-}
-
-async function classifyWithLLM(
-  name: string,
-  hint: string | undefined,
-  extractions: WebSearchExtraction[],
-  llmModel: ReturnType<ReturnType<typeof createOpenAICompatible>>,
-): Promise<ClassificationResult> {
-  const defaultResult: ClassificationResult = { classification: 'UNKNOWN_ENTITY', englishName: name }
-
-  const contextParts = extractions.slice(0, 10).map((e, i) =>
-    `[${i + 1}] ${e.url ?? 'unknown'}\n${e.content.slice(0, 400)}`
-  )
-  const searchContext = contextParts.join('\n\n---\n\n')
-
-  const userContent = [
-    `Target: "${name}"`,
-    hint ? `User hint: ${hint}` : '',
-    '',
-    'Search results:',
-    searchContext || '(no search results found)',
+  const userMessage = [
+    `Research and build a comprehensive profile of: "${name}"`,
+    hint ? `Hint: ${hint}` : '',
   ].filter(Boolean).join('\n')
 
-  logger.debug('[classifyWithLLM] Input context length:', userContent.length, 'chars,', extractions.length, 'extractions used')
+  const agentLog = new AgentLogger(userMessage, {
+    model: config.llm.default_model,
+    provider: resolvedProvider,
+    raw: { search: config.search, temperature: 0 },
+  })
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      logger.debug('[classifyWithLLM] Attempt', attempt, 'calling LLM...')
-      const result = await generateText({
-        model: llmModel,
-        messages: [
-          { role: 'system', content: CLASSIFY_PROMPT },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0,
-      })
+  const tools = createAgentTools(config, { searxngAvailable, agentLog })
 
-      const text = result.text.trim()
-      logger.debug('[classifyWithLLM] Attempt', attempt, 'response:', text.slice(0, 500))
+  onProgress?.({ type: 'phase', phase: 'initiating' })
 
-      if (!text) {
-        logger.warn('[classifyWithLLM] Attempt', attempt, 'returned empty text')
-        continue
+  let stepCount = 0
+  let currentPhase = 'initiating'
+  const toolCallTimers = new Map<string, number>()
+
+  const agent = new ToolLoopAgent({
+    model,
+    instructions: CAPTURE_SYSTEM_PROMPT,
+    tools,
+    toolChoice: 'auto',
+    temperature: 0,
+    stopWhen: [
+      stepCountIs(MAX_STEPS),
+      hasToolCall('reportFindings'),
+    ],
+    prepareStep: async ({ stepNumber, steps }) => {
+      // Last step: force reportFindings
+      if (stepNumber >= MAX_STEPS - 1) {
+        logger.info('[captureSoul] Last step, forcing reportFindings')
+        return { toolChoice: { type: 'tool' as const, toolName: 'reportFindings' as const } }
       }
 
-      const parsed = parseIdentificationJSON(text)
-      if (parsed) {
-        logger.info('[classifyWithLLM] Parsed successfully:', parsed)
-        return {
-          classification: parsed.classification,
-          englishName: parsed.english_name || name,
-          origin: parsed.origin,
-        }
-      }
+      // Doom loop detection
+      if (steps.length >= DOOM_LOOP_THRESHOLD) {
+        const recent = steps.slice(-DOOM_LOOP_THRESHOLD)
+        const calls = recent
+          .map((s) => s.toolCalls?.[0])
+          .filter((c): c is NonNullable<typeof c> => c != null)
 
-      logger.warn('[classifyWithLLM] Attempt', attempt, 'JSON parse failed, raw:', text.slice(0, 300))
-    } catch (err) {
-      logger.error('[classifyWithLLM] Attempt', attempt, 'error:', err)
-    }
-  }
-
-  logger.warn('[classifyWithLLM] All attempts failed, returning UNKNOWN_ENTITY')
-  return defaultResult
-}
-
-// ========== Relevance Filter ==========
-
-async function filterRelevantExtractions(
-  extractions: WebSearchExtraction[],
-  targetDesc: string,
-  llmModel: ReturnType<ReturnType<typeof createOpenAICompatible>>,
-  onProgress?: OnProgress,
-): Promise<WebSearchExtraction[]> {
-  if (extractions.length === 0) return []
-
-  logger.info('[filter] Start: filtering', extractions.length, 'extractions for target:', targetDesc)
-
-  const BATCH_SIZE = 10
-  const relevant: WebSearchExtraction[] = []
-  let processed = 0
-
-  for (let i = 0; i < extractions.length; i += BATCH_SIZE) {
-    const batch = extractions.slice(i, i + BATCH_SIZE)
-
-    // Log what we're sending to the filter
-    logger.debug('[filter] Batch', Math.floor(i / BATCH_SIZE) + 1, ':', batch.length, 'items')
-    for (const [idx, e] of batch.entries()) {
-      logger.debug('[filter]   [' + (idx + 1) + ']', e.url ?? 'no-url', '|', e.content.slice(0, 100))
-    }
-
-    const numbered = batch.map((e, idx) =>
-      `[${idx + 1}] ${e.url ?? 'no-url'}\n${e.content.slice(0, 300)}`
-    ).join('\n\n---\n\n')
-
-    try {
-      const result = await generateText({
-        model: llmModel,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a relevance filter. Given a target and a batch of search results, determine which results are about the SAME person/character.
-
-Reply with ONLY the numbers of relevant results, comma-separated. Example: "1,3,5"
-If none are relevant, reply "NONE".`,
-          },
-          {
-            role: 'user',
-            content: `Target: ${targetDesc}\n\nSearch results:\n\n${numbered}`,
-          },
-        ],
-        temperature: 0,
-      })
-
-      const text = result.text.trim()
-      logger.debug('[filter] LLM raw response:', JSON.stringify(text))
-
-      if (text.toUpperCase() === 'NONE') {
-        logger.debug('[filter] LLM said NONE — 0 kept from this batch')
-      } else {
-        const indices = text.split(/[,\s]+/)
-          .map((s) => parseInt(s, 10))
-          .filter((n) => !isNaN(n) && n >= 1 && n <= batch.length)
-
-        logger.debug('[filter] Parsed indices:', indices, '(from raw:', JSON.stringify(text), ')')
-
-        if (indices.length === 0) {
-          logger.warn('[filter] LLM response could not be parsed as indices:', JSON.stringify(text), '— keeping all as fallback')
-          relevant.push(...batch)
-        } else {
-          for (const idx of indices) {
-            relevant.push(batch[idx - 1]!)
+        if (calls.length === DOOM_LOOP_THRESHOLD) {
+          const first = calls[0]!
+          const allSame = calls.every(
+            (c) => c.toolName === first.toolName && JSON.stringify(c.input) === JSON.stringify(first.input),
+          )
+          if (allSame) {
+            logger.warn('[captureSoul] Doom loop detected, forcing reportFindings')
+            return { toolChoice: { type: 'tool' as const, toolName: 'reportFindings' as const } }
           }
         }
       }
-    } catch (err) {
-      logger.warn('[filter] LLM call failed, keeping all:', err)
-      relevant.push(...batch)
-    }
 
-    processed += batch.length
-    onProgress?.({ type: 'filter_progress', kept: relevant.length, total: processed })
+      return {}
+    },
+  })
+
+  logger.info('[captureSoul] Running ToolLoopAgent (streaming)...')
+  const streamResult = await agent.stream({ prompt: userMessage })
+
+  // Consume fullStream for real-time progress events + session logging
+  for await (const event of streamResult.fullStream) {
+    if (event.type === 'start-step') {
+      stepCount++
+      if (stepCount === 1) {
+        currentPhase = 'searching'
+        onProgress?.({ type: 'phase', phase: 'searching' })
+      } else if (stepCount === 3) {
+        currentPhase = 'classifying'
+        onProgress?.({ type: 'phase', phase: 'classifying' })
+      } else if (stepCount === COLLECTION_START + 1) {
+        currentPhase = 'analyzing'
+        onProgress?.({ type: 'phase', phase: 'analyzing' })
+      }
+      agentLog.startStep(stepCount, currentPhase)
+    } else if (event.type === 'text-delta') {
+      agentLog.modelOutput(event.text)
+    } else if (event.type === 'tool-call') {
+      toolCallTimers.set(event.toolName, Date.now())
+      agentLog.toolCall(event.toolName, event.input)
+
+      if (event.toolName === 'search') {
+        const input = event.input as { query: string }
+        onProgress?.({ type: 'tool_call', tool: 'search', query: input.query })
+      } else if (event.toolName === 'extractPage') {
+        const input = event.input as { url: string }
+        onProgress?.({ type: 'tool_call', tool: 'extractPage', query: input.url })
+      } else if (event.toolName === 'planSearch') {
+        onProgress?.({ type: 'tool_call', tool: 'planSearch', query: 'generating search plan...' })
+      } else if (event.toolName === 'checkCoverage') {
+        onProgress?.({ type: 'tool_call', tool: 'checkCoverage', query: 'analyzing coverage...' })
+      } else if (event.toolName === 'reportFindings') {
+        onProgress?.({ type: 'tool_call', tool: 'reportFindings', query: 'compiling report...' })
+      }
+    } else if (event.type === 'tool-result') {
+      const startTime = toolCallTimers.get(event.toolName) ?? Date.now()
+      const durationMs = Date.now() - startTime
+      agentLog.toolResult(event.toolName, event.output, durationMs)
+
+      if (event.toolName === 'search') {
+        const output = event.output as { results: unknown[] }
+        onProgress?.({ type: 'tool_result', tool: 'search', resultCount: output.results.length })
+      } else if (event.toolName === 'extractPage') {
+        const output = event.output as { content: string }
+        onProgress?.({ type: 'tool_result', tool: 'extractPage', resultCount: output.content ? 1 : 0 })
+      } else if (event.toolName === 'planSearch') {
+        onProgress?.({ type: 'tool_result', tool: 'planSearch', resultCount: 1 })
+        const planOutput = event.output as { dimensions?: { dimension: string; priority: string; queries: string[] }[] }
+        if (planOutput.dimensions) {
+          onProgress?.({ type: 'search_plan', dimensions: planOutput.dimensions.map((d) => ({ dimension: d.dimension, priority: d.priority, queries: d.queries ?? [] })) })
+        }
+      } else if (event.toolName === 'checkCoverage') {
+        const output = event.output as { totalCovered: number; canReport?: boolean }
+        onProgress?.({ type: 'tool_result', tool: 'checkCoverage', resultCount: output.totalCovered })
+        if (output.canReport) {
+          currentPhase = 'filtering'
+          onProgress?.({ type: 'phase', phase: 'filtering' })
+        }
+      }
+    }
   }
 
-  logger.info('[filter] Done:', relevant.length, '/', extractions.length, 'kept')
-  return relevant
-}
+  logger.info('[captureSoul] Stream finished. Steps:', stepCount)
 
-// ========== JSON Parsing ==========
+  // Extract reportFindings from staticToolCalls
+  const staticCalls = await streamResult.staticToolCalls
+  const findingsCall = staticCalls.find((tc) => tc.toolName === 'reportFindings')
 
-interface IdentificationResult {
-  classification: TargetClassification
-  english_name?: string
-  origin?: string
-  summary?: string
-}
-
-const VALID_CLASSIFICATIONS = new Set<string>([
-  'DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD', 'UNKNOWN_ENTITY',
-])
-
-function parseIdentificationJSON(text: string): IdentificationResult | null {
-  try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      logger.debug('[parseJSON] No JSON object found in text')
-      return null
+  if (findingsCall) {
+    const args = findingsCall.input as {
+      classification: TargetClassification
+      origin?: string
+      summary: string
+      extractions: { content: string; url?: string; searchQuery: string; dimension: SoulDimension }[]
     }
 
-    const obj = JSON.parse(jsonMatch[0]) as Record<string, unknown>
-    const rawClass = String(obj.classification ?? '').toUpperCase()
+    logger.info('[captureSoul] reportFindings:', {
+      classification: args.classification,
+      origin: args.origin,
+      extractionCount: args.extractions.length,
+    })
 
-    if (!VALID_CLASSIFICATIONS.has(rawClass)) {
-      logger.debug('[parseJSON] Invalid classification:', rawClass)
-      return null
+    onProgress?.({ type: 'classification', classification: args.classification, origin: args.origin })
+
+    const webExtractions: WebSearchExtraction[] = args.extractions.map((e) => ({
+      content: e.content,
+      url: e.url,
+      searchQuery: e.searchQuery,
+      extractionStep: e.dimension,
+    }))
+
+    const chunks = webExtractionToChunks(webExtractions)
+
+    onProgress?.({ type: 'chunks_extracted', count: chunks.length })
+    onProgress?.({
+      type: 'phase',
+      phase: args.classification === 'UNKNOWN_ENTITY' ? 'unknown' : 'complete',
+    })
+
+    const result: CaptureResult = {
+      classification: args.classification,
+      origin: args.origin,
+      chunks,
+      elapsedMs: Date.now() - startTime,
     }
 
-    return {
-      classification: rawClass as TargetClassification,
-      english_name: obj.english_name ? String(obj.english_name) : undefined,
-      origin: obj.origin ? String(obj.origin) : undefined,
-      summary: obj.summary ? String(obj.summary) : undefined,
-    }
-  } catch (err) {
-    logger.debug('[parseJSON] JSON.parse error:', err)
-    return null
+    agentLog.writeResult(result, stepCount)
+    agentLog.writeAnalysis(result, args.extractions.map((e) => ({
+      dimension: e.dimension,
+      content: e.content,
+    })))
+
+    return { ...result, agentLog }
   }
+
+  // Fallback: agent hit max steps without calling reportFindings
+  logger.warn('[captureSoul] No reportFindings call found, returning UNKNOWN_ENTITY')
+  onProgress?.({ type: 'chunks_extracted', count: 0 })
+  onProgress?.({ type: 'phase', phase: 'unknown' })
+
+  const fallbackResult: CaptureResult = {
+    classification: 'UNKNOWN_ENTITY',
+    chunks: [],
+    elapsedMs: Date.now() - startTime,
+  }
+
+  agentLog.writeResult(fallbackResult, stepCount)
+  agentLog.writeAnalysis(fallbackResult)
+
+  return { ...fallbackResult, agentLog }
 }

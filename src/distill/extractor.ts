@@ -1,6 +1,7 @@
 import type OpenAI from 'openai'
 import type { SoulChunk } from '../ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
+import type { AgentLogger } from '../utils/agent-logger.js'
 import { t } from '../i18n/index.js'
 
 function formatTagHints(tags?: TagSet): string {
@@ -56,6 +57,7 @@ export async function extractFeatures(
   tags?: TagSet,
   onProgress?: OnDistillProgress,
   dimensions?: DistillDimension[],
+  agentLog?: AgentLogger,
 ): Promise<ExtractedFeatures> {
   const name = targetName || t('extractor.default_name')
   const dims = dimensions ?? ['identity', 'style', 'behaviors']
@@ -74,11 +76,13 @@ export async function extractFeatures(
   // Extract identity
   if (dims.includes('identity')) {
     onProgress?.({ phase: 'identity', status: 'started' })
+    agentLog?.distillPhase('identity', 'started', `${totalBatches} batches`)
     const identityResults: string[] = []
     for (let bi = 0; bi < batches.length; bi++) {
       if (totalBatches > 1) {
         onProgress?.({ phase: 'identity', status: 'in_progress', batch: bi + 1, totalBatches })
       }
+      const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
       const res = await client.chat.completions.create({
         model,
@@ -87,20 +91,29 @@ export async function extractFeatures(
           { role: 'user', content },
         ],
       })
-      identityResults.push(res.choices[0]?.message?.content ?? '')
+      const output = res.choices[0]?.message?.content ?? ''
+      identityResults.push(output)
+      agentLog?.distillBatch('identity', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
     onProgress?.({ phase: 'identity', status: 'done' })
+    const mergeStart = Date.now()
     identity = await mergeResults(client, model, identityResults, 'identity')
+    if (identityResults.length > 1) {
+      agentLog?.distillMerge('identity', identityResults.length, Date.now() - mergeStart, identity.length)
+    }
+    agentLog?.distillPhase('identity', 'done')
   }
 
   // Extract style
   if (dims.includes('style')) {
     onProgress?.({ phase: 'style', status: 'started' })
+    agentLog?.distillPhase('style', 'started', `${totalBatches} batches`)
     const styleResults: string[] = []
     for (let bi = 0; bi < batches.length; bi++) {
       if (totalBatches > 1) {
         onProgress?.({ phase: 'style', status: 'in_progress', batch: bi + 1, totalBatches })
       }
+      const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
       const res = await client.chat.completions.create({
         model,
@@ -109,20 +122,29 @@ export async function extractFeatures(
           { role: 'user', content },
         ],
       })
-      styleResults.push(res.choices[0]?.message?.content ?? '')
+      const output = res.choices[0]?.message?.content ?? ''
+      styleResults.push(output)
+      agentLog?.distillBatch('style', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
     onProgress?.({ phase: 'style', status: 'done' })
+    const mergeStart = Date.now()
     style = await mergeResults(client, model, styleResults, 'style')
+    if (styleResults.length > 1) {
+      agentLog?.distillMerge('style', styleResults.length, Date.now() - mergeStart, style.length)
+    }
+    agentLog?.distillPhase('style', 'done')
   }
 
   // Extract behaviors
   if (dims.includes('behaviors')) {
     onProgress?.({ phase: 'behavior', status: 'started' })
+    agentLog?.distillPhase('behavior', 'started', `${totalBatches} batches`)
     const behaviorResults: string[] = []
     for (let bi = 0; bi < batches.length; bi++) {
       if (totalBatches > 1) {
         onProgress?.({ phase: 'behavior', status: 'in_progress', batch: bi + 1, totalBatches })
       }
+      const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
       const res = await client.chat.completions.create({
         model,
@@ -131,10 +153,13 @@ export async function extractFeatures(
           { role: 'user', content },
         ],
       })
-      behaviorResults.push(res.choices[0]?.message?.content ?? '')
+      const output = res.choices[0]?.message?.content ?? ''
+      behaviorResults.push(output)
+      agentLog?.distillBatch('behavior', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
     onProgress?.({ phase: 'behavior', status: 'done' })
     behaviors = parseBehaviors(behaviorResults.join('\n\n---\n\n'))
+    agentLog?.distillPhase('behavior', 'done')
   }
 
   // Merge phase notification

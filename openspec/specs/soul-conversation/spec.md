@@ -14,6 +14,34 @@ The system SHALL implement the following conversation pipeline: user types natur
 - AND send the prompt to the LLM via OpenRouter
 - AND stream the LLM response token-by-token to the terminal
 
+```acceptance
+fixture: distilled-soul
+soul-name: alice
+real-config: true
+timeout: 60s
+steps:
+  - wait-prompt:
+  - send: "/use alice"
+  - expect: "soul://alice"
+  - wait-prompt:
+  - send: "hello, who are you?"
+  - expect: "alice|Alice|test|soul|AI"
+    timeout: 30s
+  - wait-prompt:
+    timeout: 30s
+```
+
+### Requirement: 对话 system prompt 通过 Context Assembler 构建
+对话流程 SHALL 将 system prompt 构建从直接拼接 soul files 改为通过 `ContextAssembler` 统一组装。ContextAssembler 接收 soul files、已绑定的 world 列表、对话历史和用户输入，返回完整的 system prompt。
+
+#### Scenario: 有世界绑定的对话
+- **WHEN** soul "johnny" 绑定了 "night-city"，用户发送消息
+- **THEN** ContextAssembler 加载世界条目、执行触发匹配、模板渲染，组装完整 system prompt 后传给 LLM
+
+#### Scenario: 无世界绑定的对话（向后兼容）
+- **WHEN** soul "johnny" 没有绑定任何世界，用户发送消息
+- **THEN** ContextAssembler 输出与原有 buildSystemPrompt 行为一致
+
 #### Scenario: No soul files exist yet
 
 - WHEN the user types a message
@@ -145,3 +173,25 @@ The conversation state (display messages and LLM context) SHALL be logically bou
 #### Scenario: /create completion clears conversation
 - **WHEN** a new soul is created via /create and the flow completes
 - **THEN** the conversation state SHALL be empty for the newly created soul
+
+### Requirement: Conversation system loads examples as few-shot
+The `assembleContext` and `buildLegacyPrompt` functions SHALL read example files from `soulDir/examples/*.md` and inject them into the system prompt as few-shot conversation examples.
+
+#### Scenario: Examples injected into system prompt
+- **WHEN** a soul has 3 example files in examples/
+- **THEN** the system prompt includes an "## Examples" section after behaviors, containing all example conversations
+
+#### Scenario: No examples directory
+- **WHEN** a soul has no examples/ directory or it is empty
+- **THEN** the system prompt is generated without an Examples section (backward compatible)
+
+### Requirement: loadSoulFiles returns examples
+The `loadSoulFiles` function SHALL return an `examples` field containing all example file contents.
+
+#### Scenario: Load soul with examples
+- **WHEN** loadSoulFiles is called for a soul with 3 example files
+- **THEN** the result includes `examples: { "greeting": "...", "conflict": "...", "philosophy": "..." }`
+
+#### Scenario: Load soul without examples
+- **WHEN** loadSoulFiles is called for a soul with no examples
+- **THEN** the result includes `examples: {}` (empty object)

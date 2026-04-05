@@ -23,7 +23,7 @@ export async function extractPageContent(url: string): Promise<string | null> {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Soulkiller/0.1)',
+        'User-Agent': 'Mozilla/5.0 (compatible; ProfileBot/0.1)',
         'Accept': 'text/html',
       },
     })

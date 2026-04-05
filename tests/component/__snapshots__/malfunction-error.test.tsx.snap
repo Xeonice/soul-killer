@@ -4,16 +4,16 @@ exports[`MalfunctionError > severity=critical renders ASCII art header 1`] = `
 "┌──────────────────────────────────────────────────┐
 │  CRITICAL                                        │
 │                                                  │
-│   ┘│█┼██╗█┐┘─██╗ ██╗▒█├█│█┼┘╗▐└█ ██┤▓█░╗         │
-│   ██╔┐═░╝█▄░┼═██╗▐█║╚▌═│█╔═▌▌██║▓░╔│┘══╝         │
-│   ┬█║    ██┐█▐█╔╝██║   ▒│║   ██║██║              │
-│   █─║    █┴╔┬▌▒█╗██║   █▄░   ─█║██└              │
-│   █████▄│┌█║  █░┴┬█║   ┤▐┘   █┼║╚████▒▒└         │
-│   ╚══▐▄═╝┴═│  ╚═╝╚═│   ╚═╝   ╚═╝ ╚═┐══┬┬         │
+│   ██████╗██████╗ ██╗████████╗██╗ ██████╗         │
+│   ██╔═══╝██╔══██╗██║╚══██╔══╝██║██╔════╝         │
+│   ██║    ██████╔╝██║   ██║   ██║██║              │
+│   ██║    ██╔══██╗██║   ██║   ██║██║              │
+│   ██████╗██║  ██║██║   ██║   ██║╚██████╗         │
+│   ╚═════╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝ ╚═════╝         │
 │                                                  │
-│   ██ S┌ul co▄ru┐tio┬ det│cted ██                 │
+│   ██ Soul corruption detected ██                 │
 │                                                  │
-│   Cor█ ▓oul m░trix has b┐en fatall├ co▒▌upted.   │
+│   Core soul matrix has been fatally corrupted.   │
 │                                                  │
 │   ▸ Restore from backup                          │
 │   ▸ Re-run /evolve                               │
@@ -24,10 +24,10 @@ exports[`MalfunctionError > severity=malfunction renders malfunction border and 
 "┌──────────────────────────────────────────────────┐
 │  MALFUNCTION                                     │
 │                                                  │
-│   ██ Retr┌eval fail│re ██                        │
+│   ██ Retrieval failure ██                        │
 │                                                  │
-│   ─n┐▄█e t█ reach ░he memory cort└x du┴ing       │
-│ r▌cal┘.                                          │
+│   Unable to reach the memory cortex during       │
+│ recall.                                          │
 │                                                  │
 │   ▸ Check soul integrity with /status            │
 └──────────────────────────────────────────────────┘"
