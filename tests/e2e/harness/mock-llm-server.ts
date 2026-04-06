@@ -7,15 +7,36 @@ export interface RecordedRequest {
   timestamp: number
 }
 
+export interface ToolCallResponse {
+  tool_calls: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+}
+
+export type MockResponse =
+  | { type: 'text'; content: string }
+  | { type: 'tool_calls'; tool_calls: ToolCallResponse['tool_calls'] }
+
 export class MockLLMServer {
   private server: http.Server | null = null
   private _port: number
   private _requests: RecordedRequest[] = []
   private responseText: string
+  private _responseQueue: MockResponse[] = []
 
   constructor(opts?: { port?: number; responseText?: string }) {
     this._port = opts?.port ?? 0
     this.responseText = opts?.responseText ?? 'I am a mock soul response.'
+  }
+
+  /**
+   * Queue a sequence of responses. Each request pops the next response.
+   * When queue is empty, falls back to default responseText.
+   */
+  setResponseQueue(responses: MockResponse[]): void {
+    this._responseQueue = [...responses]
   }
 
   get port(): number {
@@ -75,12 +96,102 @@ export class MockLLMServer {
         timestamp: Date.now(),
       })
 
-      if (parsed.stream) {
+      // Check response queue first
+      const queued = this._responseQueue.shift()
+
+      if (queued) {
+        if (queued.type === 'tool_calls') {
+          this.toolCallResponse(res, queued.tool_calls, parsed.stream ?? false)
+        } else if (parsed.stream) {
+          this.streamResponseText(res, queued.content)
+        } else {
+          this.jsonResponseText(res, queued.content)
+        }
+      } else if (parsed.stream) {
         this.streamResponse(res)
       } else {
         this.jsonResponse(res)
       }
     })
+  }
+
+  private toolCallResponse(
+    res: http.ServerResponse,
+    toolCalls: ToolCallResponse['tool_calls'],
+    stream: boolean,
+  ) {
+    if (stream) {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      })
+
+      const chunk = {
+        id: `chatcmpl-mock-tc`,
+        object: 'chat.completion.chunk',
+        choices: [{
+          index: 0,
+          delta: {
+            role: 'assistant',
+            tool_calls: toolCalls.map((tc, i) => ({
+              index: i,
+              id: tc.id,
+              type: 'function',
+              function: { name: tc.function.name, arguments: tc.function.arguments },
+            })),
+          },
+          finish_reason: null,
+        }],
+      }
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`)
+
+      const done = {
+        id: `chatcmpl-mock-tc-done`,
+        object: 'chat.completion.chunk',
+        choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+      }
+      res.write(`data: ${JSON.stringify(done)}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+    } else {
+      const response = {
+        id: 'chatcmpl-mock-tc',
+        object: 'chat.completion',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: toolCalls,
+          },
+          finish_reason: 'tool_calls',
+        }],
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(response))
+    }
+  }
+
+  private streamResponseText(res: http.ServerResponse, text: string) {
+    const saved = this.responseText
+    this.responseText = text
+    this.streamResponse(res)
+    this.responseText = saved
+  }
+
+  private jsonResponseText(res: http.ServerResponse, text: string) {
+    const response = {
+      id: 'chatcmpl-mock',
+      object: 'chat.completion',
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: text },
+        finish_reason: 'stop',
+      }],
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(response))
   }
 
   private streamResponse(res: http.ServerResponse) {

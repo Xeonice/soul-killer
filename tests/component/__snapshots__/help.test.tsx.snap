@@ -16,7 +16,10 @@ exports[`HelpCommand > renders full help output 1`] = `
     /feedback             评价最近一条分身回复
 
   世界
-    /world                世界管理（create/entry/bind/list/show/distill/evolve）
+    /world                世界管理（创建/管理已有世界）
+
+  导出
+    /export               导出 Soul + World 为 Cloud Skill
 
   设置
     /config               查看/修改配置

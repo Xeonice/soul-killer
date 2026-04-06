@@ -3,49 +3,35 @@ import { Text, Box, useInput } from 'ink'
 import { WorldCreateWizard } from './world-create-wizard.js'
 import { WorldEntryCommand } from './world-entry.js'
 import { WorldBindCommand } from './world-bind.js'
-import { WorldListCommand, WorldShowCommand } from './world-list.js'
-import { WorldDistillCommand, WorldEvolveCommand } from './world-distill.js'
-import { listWorlds } from '../../world/manifest.js'
-import { TextInput } from '../components/text-input.js'
-import type { AdapterType } from '../../ingest/pipeline.js'
-import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
+import { WorldShowCommand } from './world-list.js'
+import { listWorlds, deleteWorld, type WorldManifest } from '../../world/manifest.js'
+import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
 
-type SubAction =
-  | 'menu'
+type WorldPhase =
+  | 'top-menu'
   | 'create'
-  | 'entry'
-  | 'bind'
-  | 'unbind'
-  | 'list'
-  | 'show'
-  | 'distill'
-  | 'evolve'
+  | 'world-list'
+  | 'action-menu'
+  | 'action-running'
+  | 'confirm-delete'
 
-// Intermediate collection steps
-type CollectStep =
-  | 'none'
-  | 'collect-name'         // world name for create
-  | 'collect-world-select' // select existing world
-  | 'collect-source-path'  // source path for distill/evolve
-  | 'collect-adapter'      // adapter type for distill/evolve
+type WorldAction = 'show' | 'entry' | 'distill' | 'bind' | 'unbind' | 'delete'
 
-interface MenuItem {
-  action: SubAction
+interface ActionItem {
+  action: WorldAction
   labelKey: string
   descKey: string
   needsSoul?: boolean
 }
 
-const MENU_ITEMS: MenuItem[] = [
-  { action: 'create', labelKey: 'world.menu.create', descKey: 'world.menu.create_desc' },
-  { action: 'list', labelKey: 'world.menu.list', descKey: 'world.menu.list_desc' },
+const ACTION_ITEMS: ActionItem[] = [
   { action: 'show', labelKey: 'world.menu.show', descKey: 'world.menu.show_desc' },
   { action: 'entry', labelKey: 'world.menu.entry', descKey: 'world.menu.entry_desc' },
+  { action: 'distill', labelKey: 'world.menu.distill', descKey: 'world.menu.distill_merged_desc' },
   { action: 'bind', labelKey: 'world.menu.bind', descKey: 'world.menu.bind_desc', needsSoul: true },
   { action: 'unbind', labelKey: 'world.menu.unbind', descKey: 'world.menu.unbind_desc', needsSoul: true },
-  { action: 'distill', labelKey: 'world.menu.distill', descKey: 'world.menu.distill_desc' },
-  { action: 'evolve', labelKey: 'world.menu.evolve', descKey: 'world.menu.evolve_desc' },
+  { action: 'delete', labelKey: 'world.menu.delete', descKey: 'world.menu.delete_desc' },
 ]
 
 interface WorldCommandProps {
@@ -54,162 +40,178 @@ interface WorldCommandProps {
 }
 
 export function WorldCommand({ soulDir, onClose }: WorldCommandProps) {
-  const [cursor, setCursor] = useState(0)
-  const [action, setAction] = useState<SubAction>('menu')
-  const [collectStep, setCollectStep] = useState<CollectStep>('none')
+  const [phase, setPhase] = useState<WorldPhase>('top-menu')
+  const [topCursor, setTopCursor] = useState(0)
+  const [worldCursor, setWorldCursor] = useState(0)
+  const [actionCursor, setActionCursor] = useState(0)
+  const [selectedWorld, setSelectedWorld] = useState<WorldManifest | null>(null)
+  const [currentAction, setCurrentAction] = useState<WorldAction | null>(null)
+  const [confirmCursor, setConfirmCursor] = useState(0)
 
-  // Collected params
-  const [worldName, setWorldName] = useState('')
-  const [sourcePath, setSourcePath] = useState('')
-  const [adapterType, setAdapterType] = useState<AdapterType>('markdown')
-  const [worldSelectCursor, setWorldSelectCursor] = useState(0)
+  const [worlds, setWorlds] = useState(() => listWorlds())
+  const hasWorlds = worlds.length > 0
 
-  const worlds = listWorlds()
+  // Top menu: 2 items (创建 + 管理)
+  const topItems = [
+    { label: t('world.menu.create'), desc: t('world.menu.create_desc'), disabled: false },
+    { label: t('world.menu.manage'), desc: t('world.menu.manage_desc'), disabled: !hasWorlds },
+  ]
 
-  useInput((input, key) => {
-    // ESC from any sub-action returns to menu
-    if (action !== 'menu' && key.escape) {
-      backToMenu()
+  useInput((_input, key) => {
+    if (phase === 'top-menu') {
+      if (key.upArrow) setTopCursor((c) => (c - 1 + topItems.length) % topItems.length)
+      if (key.downArrow) setTopCursor((c) => (c + 1) % topItems.length)
+      if (key.escape) { onClose(); return }
+      if (key.return) {
+        if (topCursor === 0) {
+          setPhase('create')
+        } else if (topCursor === 1 && hasWorlds) {
+          setPhase('world-list')
+          setWorldCursor(0)
+        }
+      }
       return
     }
-    if (action !== 'menu') return
-    if (collectStep !== 'none' && collectStep !== 'collect-world-select') return
 
-    if (collectStep === 'collect-world-select') {
-      if (key.upArrow && worlds.length > 0) {
-        setWorldSelectCursor((c) => (c - 1 + worlds.length) % worlds.length)
-        return
-      }
-      if (key.downArrow && worlds.length > 0) {
-        setWorldSelectCursor((c) => (c + 1) % worlds.length)
-        return
-      }
-      if (key.escape) {
-        setCollectStep('none')
-        return
-      }
+    if (phase === 'world-list') {
+      if (key.upArrow) setWorldCursor((c) => (c - 1 + worlds.length) % worlds.length)
+      if (key.downArrow) setWorldCursor((c) => (c + 1) % worlds.length)
+      if (key.escape) { setPhase('top-menu'); return }
       if (key.return && worlds.length > 0) {
-        const selected = worlds[worldSelectCursor]!
-        handleWorldSelected(selected.name)
-        return
+        setSelectedWorld(worlds[worldCursor]!)
+        setActionCursor(0)
+        setPhase('action-menu')
       }
       return
     }
 
-    if (key.upArrow) {
-      setCursor((c) => (c - 1 + MENU_ITEMS.length) % MENU_ITEMS.length)
-      return
-    }
-    if (key.downArrow) {
-      setCursor((c) => (c + 1) % MENU_ITEMS.length)
-      return
-    }
-    if (key.escape) {
-      onClose()
-      return
-    }
-    if (key.return) {
-      const item = MENU_ITEMS[cursor]!
-      if (item.needsSoul && !soulDir) {
-        // Can't proceed without a loaded soul
-        return
+    if (phase === 'action-menu') {
+      if (key.upArrow) setActionCursor((c) => (c - 1 + ACTION_ITEMS.length) % ACTION_ITEMS.length)
+      if (key.downArrow) setActionCursor((c) => (c + 1) % ACTION_ITEMS.length)
+      if (key.escape) { setPhase('world-list'); return }
+      if (key.return) {
+        const item = ACTION_ITEMS[actionCursor]!
+        if (item.needsSoul && !soulDir) return
+        if (item.action === 'delete') {
+          setConfirmCursor(0)
+          setPhase('confirm-delete')
+        } else {
+          setCurrentAction(item.action)
+          setPhase('action-running')
+        }
       }
-      handleMenuSelect(item.action)
+      return
+    }
+
+    if (phase === 'confirm-delete') {
+      if (key.upArrow || key.downArrow) setConfirmCursor((c) => (c + 1) % 2)
+      if (key.escape) { setPhase('action-menu'); return }
+      if (key.return) {
+        if (confirmCursor === 0 && selectedWorld) {
+          deleteWorld(selectedWorld.name)
+          setSelectedWorld(null)
+          setWorlds(listWorlds())
+          setWorldCursor(0)
+          setPhase(listWorlds().length > 0 ? 'world-list' : 'top-menu')
+        } else {
+          setPhase('action-menu')
+        }
+      }
+      return
+    }
+
+    // action-running: ESC handled by sub-components via onComplete
+    if (phase === 'action-running' && key.escape) {
+      backToActionMenu()
       return
     }
   })
 
-  function handleMenuSelect(selectedAction: SubAction) {
-    switch (selectedAction) {
-      case 'list':
-        setAction('list')
-        break
-      case 'create':
-        setAction('create')
-        break
-      case 'show':
-      case 'entry':
-      case 'bind':
-      case 'unbind':
-        if (worlds.length === 0) {
-          // No worlds to select from
-          return
-        }
-        setAction(selectedAction)
-        setCollectStep('collect-world-select')
-        break
-      case 'distill':
-      case 'evolve':
-        if (worlds.length === 0 && selectedAction === 'evolve') return
-        if (selectedAction === 'distill') {
-          setAction(selectedAction)
-          setCollectStep('collect-name')
-        } else {
-          setAction(selectedAction)
-          setCollectStep('collect-world-select')
-        }
-        break
-    }
+  function backToTopMenu() {
+    setPhase('top-menu')
+    setSelectedWorld(null)
+    setCurrentAction(null)
   }
 
-  function handleWorldSelected(name: string) {
-    setWorldName(name)
-    const currentAction = action
+  function backToActionMenu() {
+    setPhase('action-menu')
+    setCurrentAction(null)
+  }
+
+  // ─── Phase: Create ───
+  if (phase === 'create') {
+    return <WorldCreateWizard soulDir={soulDir} onComplete={backToTopMenu} onCancel={backToTopMenu} />
+  }
+
+  // ─── Phase: Action running ───
+  if (phase === 'action-running' && selectedWorld && currentAction) {
+    const wn = selectedWorld.name
 
     if (currentAction === 'show') {
-      setCollectStep('none')
-      // show is rendered directly
-    } else if (currentAction === 'entry') {
-      setCollectStep('none')
-    } else if (currentAction === 'bind' || currentAction === 'unbind') {
-      setCollectStep('none')
-    } else if (currentAction === 'evolve') {
-      setCollectStep('collect-source-path')
-    } else {
-      setCollectStep('none')
+      return (
+        <Box flexDirection="column">
+          <WorldShowCommand worldName={wn} />
+          <Text color={DIM} dimColor>{'\n'}{t('world.nav.back')}</Text>
+        </Box>
+      )
+    }
+
+    if (currentAction === 'entry') {
+      return <WorldEntryCommand worldName={wn} onComplete={backToActionMenu} />
+    }
+
+    if (currentAction === 'distill') {
+      return <WorldCreateWizard supplementWorld={wn} soulDir={soulDir} onComplete={backToActionMenu} onCancel={backToActionMenu} />
+    }
+
+    if ((currentAction === 'bind' || currentAction === 'unbind') && soulDir) {
+      return <WorldBindCommand worldName={wn} soulDir={soulDir} action={currentAction} onComplete={backToActionMenu} />
     }
   }
 
-  function handleNameCollected(name: string) {
-    setWorldName(name)
-    if (action === 'distill') {
-      setCollectStep('collect-source-path')
-    } else {
-      setCollectStep('none')
-    }
-  }
-
-  function handleSourcePathCollected(p: string) {
-    setSourcePath(p)
-    setCollectStep('none')
-  }
-
-  function backToMenu() {
-    setAction('menu')
-    setCollectStep('none')
-    setWorldName('')
-    setSourcePath('')
-  }
-
-  // ─── Render: Collecting params ───
-
-  if (action === 'create') {
-    return <WorldCreateWizard onComplete={backToMenu} onCancel={backToMenu} />
-  }
-
-  if (action === 'distill' && collectStep === 'collect-name') {
+  // ─── Phase: Confirm delete ───
+  if (phase === 'confirm-delete' && selectedWorld) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text color={ACCENT} bold>{t('world.menu.distill')}</Text>
-        <Box>
-          <Text color={DIM}>{t('world.collect.name')}: </Text>
-          <TextInput onSubmit={handleNameCollected} />
-        </Box>
+        <Text color={WARNING} bold>⚠ {t('world.delete.confirm_title', { name: selectedWorld.name })}</Text>
+        <Text color={DIM}>  {selectedWorld.entry_count} entries</Text>
+        <Text> </Text>
+        {[t('world.delete.yes'), t('world.delete.no')].map((label, i) => (
+          <Text key={i}>
+            <Text color={i === confirmCursor ? ACCENT : DIM}>{i === confirmCursor ? '  ❯ ' : '    '}</Text>
+            <Text color={i === confirmCursor ? (i === 0 ? WARNING : PRIMARY) : DIM}>{label}</Text>
+          </Text>
+        ))}
       </Box>
     )
   }
 
-  if (collectStep === 'collect-world-select') {
+  // ─── Phase: Top menu ───
+  if (phase === 'top-menu') {
+    return (
+      <Box flexDirection="column" paddingLeft={2}>
+        <Text color={ACCENT} bold>{t('world.menu.title')}</Text>
+        <Text color={DIM}>  {t('world.menu.hint')}</Text>
+        <Text> </Text>
+        {topItems.map((item, i) => {
+          const isSelected = i === topCursor
+          return (
+            <Text key={i}>
+              <Text color={isSelected ? ACCENT : DIM}>{isSelected ? '  ❯ ' : '    '}</Text>
+              <Text color={item.disabled ? DARK : isSelected ? PRIMARY : DIM} bold={isSelected} dimColor={item.disabled}>
+                {item.label.padEnd(12)}
+              </Text>
+              <Text color={DIM}>{item.desc}</Text>
+              {item.disabled && <Text color={DARK}> ({t('world.menu.no_worlds')})</Text>}
+            </Text>
+          )
+        })}
+      </Box>
+    )
+  }
+
+  // ─── Phase: World list ───
+  if (phase === 'world-list') {
     return (
       <Box flexDirection="column" paddingLeft={2}>
         <Text color={ACCENT} bold>{t('world.collect.select_world')}</Text>
@@ -217,95 +219,43 @@ export function WorldCommand({ soulDir, onClose }: WorldCommandProps) {
         <Text> </Text>
         {worlds.map((w, i) => (
           <Text key={w.name}>
-            <Text color={i === worldSelectCursor ? ACCENT : DIM}>
-              {i === worldSelectCursor ? '  ❯ ' : '    '}
+            <Text color={i === worldCursor ? ACCENT : DIM}>
+              {i === worldCursor ? '  ❯ ' : '    '}
             </Text>
-            <Text color={i === worldSelectCursor ? PRIMARY : DIM} bold={i === worldSelectCursor}>
+            <Text color={i === worldCursor ? PRIMARY : DIM} bold={i === worldCursor}>
               {w.name}
             </Text>
-            <Text color={DIM}> ({w.display_name})</Text>
+            <Text color={DIM}> {w.display_name} ({w.entry_count} entries)</Text>
           </Text>
         ))}
       </Box>
     )
   }
 
-  if ((action === 'distill' || action === 'evolve') && collectStep === 'collect-source-path') {
+  // ─── Phase: Action menu ───
+  if (phase === 'action-menu' && selectedWorld) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text color={ACCENT} bold>{action === 'distill' ? t('world.menu.distill') : t('world.menu.evolve')}</Text>
-        <Text color={DIM}>  {t('world.collect.world')}: {worldName}</Text>
-        <Box>
-          <Text color={DIM}>{t('world.collect.source_path')}: </Text>
-          <TextInput pathCompletion onSubmit={handleSourcePathCollected} />
-        </Box>
-      </Box>
-    )
-  }
-
-  // ─── Render: Sub-actions ───
-
-  if (action === 'list') {
-    return (
-      <Box flexDirection="column">
-        <WorldListCommand />
-        <Text color={DIM} dimColor>{'\n'}{t('world.nav.back')}</Text>
-      </Box>
-    )
-  }
-
-  if (action === 'show' && worldName && collectStep === 'none') {
-    return (
-      <Box flexDirection="column">
-        <WorldShowCommand worldName={worldName} />
-        <Text color={DIM} dimColor>{'\n'}{t('world.nav.back')}</Text>
-      </Box>
-    )
-  }
-
-  // create is handled above via WorldCreateWizard
-
-  if (action === 'entry' && worldName && collectStep === 'none') {
-    return <WorldEntryCommand worldName={worldName} onComplete={backToMenu} />
-  }
-
-  if ((action === 'bind' || action === 'unbind') && worldName && soulDir && collectStep === 'none') {
-    return <WorldBindCommand worldName={worldName} soulDir={soulDir} action={action} onComplete={backToMenu} />
-  }
-
-  if (action === 'distill' && worldName && sourcePath && collectStep === 'none') {
-    return <WorldDistillCommand worldName={worldName} sourcePath={sourcePath} adapterType={adapterType} onComplete={backToMenu} />
-  }
-
-  if (action === 'evolve' && worldName && sourcePath && collectStep === 'none') {
-    return <WorldEvolveCommand worldName={worldName} sourcePath={sourcePath} adapterType={adapterType} onComplete={backToMenu} />
-  }
-
-  // ─── Render: Main menu ───
-
-  return (
-    <Box flexDirection="column" paddingLeft={2}>
-      <Text color={ACCENT} bold>{t('world.menu.title')}</Text>
-      <Text color={DIM}>  {t('world.menu.hint')}</Text>
-      <Text> </Text>
-
-      {MENU_ITEMS.map((item, i) => {
-        const isSelected = i === cursor
-        const disabled = item.needsSoul && !soulDir
-
-        return (
-          <Text key={item.action}>
-            <Text color={isSelected ? ACCENT : DIM}>
-              {isSelected ? '  ❯ ' : '    '}
+        <Text color={ACCENT} bold>{selectedWorld.name} — {selectedWorld.display_name}</Text>
+        <Text color={DIM}>  {t('world.menu.hint')}</Text>
+        <Text> </Text>
+        {ACTION_ITEMS.map((item, i) => {
+          const isSelected = i === actionCursor
+          const disabled = item.needsSoul && !soulDir
+          return (
+            <Text key={item.action}>
+              <Text color={isSelected ? ACCENT : DIM}>{isSelected ? '  ❯ ' : '    '}</Text>
+              <Text color={disabled ? DARK : isSelected ? PRIMARY : DIM} bold={isSelected} dimColor={disabled}>
+                {t(item.labelKey).padEnd(12)}
+              </Text>
+              <Text color={DIM}>{t(item.descKey)}</Text>
+              {disabled && <Text color={DARK}> ({t('world.menu.need_soul')})</Text>}
             </Text>
-            <Text color={disabled ? DIM : isSelected ? PRIMARY : DIM} bold={isSelected} dimColor={disabled}>
-              {t(item.labelKey).padEnd(12)}
-            </Text>
-            <Text color={DIM}>{t(item.descKey)}</Text>
-            {disabled && <Text color={DIM}> (需先 /use 加载分身)</Text>}
-          </Text>
-        )
-      })}
-    </Box>
-  )
+          )
+        })}
+      </Box>
+    )
+  }
+
+  return null
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from 'bun:test'
 import { TestTerminal } from './harness/test-terminal.js'
 import { MockLLMServer } from './harness/mock-llm-server.js'
 import { createTestHome, type TestHome } from './fixtures/test-home.js'
-import { createDistilledSoul, createEvolvedSoul } from './fixtures/soul-fixtures.js'
+import { createDistilledSoul, createEvolvedSoul, createTestWorld, bindWorldToSoul } from './fixtures/soul-fixtures.js'
 import path from 'node:path'
 
 // Prompt pattern for both void and loaded modes
@@ -111,11 +111,17 @@ describe('E2E: Soul management', () => {
     term = new TestTerminal({ homeDir: home.homeDir, label: 'Scenario 4: /list + /use' })
     await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
-    // /list should show both
+    // /list should show both souls in the interactive list
     term.send('/list')
     await term.waitFor(/alice/, { since: 'last', timeout: 5000 })
-    const listResult = term.getBuffer()
-    expect(listResult).toContain('bob')
+    // Both souls render in the same frame, so check buffer directly
+    const listBuffer = term.getBuffer()
+    expect(listBuffer).toContain('bob')
+
+    // Exit the interactive list with Esc
+    await new Promise((r) => setTimeout(r, 200))
+    term.sendKey('escape')
+    await term.waitFor(PROMPT_RE, { since: 'last', timeout: 10000 })
 
     // /use alice — wait for prompt to change to soul://alice
     term.send('/use alice')
@@ -163,17 +169,23 @@ describe('E2E: Evolve and Recall', () => {
     const fixturesDir = 'tests/integration/fixtures'
 
     term.send('/evolve')
-    // Select markdown source — match the wizard option text, not autocomplete
-    await term.waitFor(/Markdown Directory|Markdown 目录|Markdown ディレクトリ/i, { since: 'last', timeout: 10000 })
+    // Wait for the data-sources checkbox to appear (not the autocomplete menu)
+    // The checkbox renders ◉ (selected) or ◯ (unselected) markers
+    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: 10000 })
+    // Data sources checkbox: Web Search is pre-selected (◉), Markdown is not (◯)
+    // Space (deselect Web Search) → Down → Space (select Markdown) → Enter
+    // Add delays for ink to process each keypress
+    term.sendKey(' ')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey('down')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey(' ')
+    await new Promise((r) => setTimeout(r, 100))
     term.sendKey('enter')
 
-    // Enter path
-    await term.waitFor(/path|路径/i, { since: 'last', timeout: 5000 })
+    // Enter path for markdown source
+    await term.waitFor(/path/i, { since: 'last', timeout: 5000 })
     term.send(fixturesDir)
-
-    // Dimension select — press Enter to accept default (全部维度)
-    await term.waitFor(/维度|dimension/i, { since: 'last', timeout: 5000 })
-    term.sendKey('enter')
 
     // Wait for evolve to complete and prompt to return
     await term.waitFor(PROMPT_RE, { since: 'last', timeout: 30000 })
@@ -346,5 +358,230 @@ describe('E2E: Evolve subcommands', () => {
     term.send('/evolve rollback')
     // Should show confirmation or "no snapshots" message
     await term.waitFor(/rollback|confirm|Y\/n|snapshot/i, { since: 'last', timeout: 10000 })
+  })
+})
+
+// ─── Group 9: /export flow ─────────────────────────────────────
+
+describe('E2E: /export flow', () => {
+  let home: TestHome
+  let term: TestTerminal
+  let mockServer: MockLLMServer
+
+  beforeAll(async () => {
+    mockServer = new MockLLMServer()
+    await mockServer.start()
+  })
+
+  afterAll(async () => {
+    await mockServer.stop()
+  })
+
+  afterEach(() => {
+    if (DEBUG) term?.printTimeline()
+    term?.kill()
+    home?.cleanup()
+  })
+
+  it('Scenario 10: /export triggers Export Protocol panel', async () => {
+    home = createTestHome({ mockServerUrl: mockServer.url })
+    // Create soul + world + binding so export has something to work with
+    const { soulDir } = createDistilledSoul(home.homeDir, 'v-export')
+    // Add capabilities and milestones files
+    const nodeFs = await import('node:fs')
+    nodeFs.writeFileSync(path.join(soulDir, 'soul', 'capabilities.md'), '# Capabilities\nSandevistan, Mantis Blades')
+    nodeFs.writeFileSync(path.join(soulDir, 'soul', 'milestones.md'), '# Milestones\n## [2077] Relic implant')
+    createTestWorld(home.homeDir, 'night-city', {
+      displayName: 'Night City',
+      description: 'A cyberpunk megalopolis',
+    })
+    bindWorldToSoul(soulDir, 'night-city')
+
+    // Queue tool calling responses for the Export Agent:
+    // Step 1: Agent calls list_souls
+    // Step 2: Agent calls list_worlds (only 1 soul, skip selection)
+    // Step 3: Agent calls read_soul + read_world
+    // Step 4: Agent calls ask_user for tone selection
+    // Step 5: Agent calls ask_user for structure confirmation
+    // Step 6: Agent calls package_skill
+    const tc = (id: string, name: string, args: Record<string, unknown>) => ({
+      id,
+      type: 'function' as const,
+      function: { name, arguments: JSON.stringify(args) },
+    })
+
+    mockServer.setResponseQueue([
+      // Step 1: call list_souls
+      { type: 'tool_calls', tool_calls: [tc('tc1', 'list_souls', {})] },
+      // Step 2: only 1 soul, call list_worlds with bound_to_soul
+      { type: 'tool_calls', tool_calls: [tc('tc2', 'list_worlds', { bound_to_soul: 'v-export' })] },
+      // Step 3: only 1 world, call read_soul + read_world
+      { type: 'tool_calls', tool_calls: [
+        tc('tc3a', 'read_soul', { name: 'v-export' }),
+        tc('tc3b', 'read_world', { name: 'night-city' }),
+      ]},
+      // Step 4: ask user for tone
+      { type: 'tool_calls', tool_calls: [tc('tc4', 'ask_user', {
+        question: 'Select story tone',
+        options: [
+          { label: 'Neon Noir', description: 'Dark alleys and conspiracies' },
+          { label: 'Street Survival', description: 'Every day is a fight' },
+        ],
+      })] },
+      // Step 5: ask user for structure confirmation
+      { type: 'tool_calls', tool_calls: [tc('tc5', 'ask_user', {
+        question: 'Confirm structure',
+        options: [
+          { label: 'Use recommended (3 acts, 3 endings)' },
+          { label: 'Customize' },
+        ],
+      })] },
+      // Step 6: package
+      { type: 'tool_calls', tool_calls: [tc('tc6', 'package_skill', {
+        soul_name: 'v-export',
+        world_name: 'night-city',
+        story_spec: {
+          genre: 'Neon Noir',
+          tone: 'Dark alleys and conspiracies',
+          acts: 3,
+          endings_min: 3,
+          rounds: '8-12',
+          constraints: [],
+        },
+      })] },
+      // Step 7: agent wraps up with text
+      { type: 'text', content: 'Export complete.' },
+    ])
+
+    term = new TestTerminal({ homeDir: home.homeDir, mockServerUrl: mockServer.url, label: 'Scenario 10: /export' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
+
+    // Start export
+    term.send('/export')
+
+    // Should see the Export Protocol panel
+    await term.waitFor(/EXPORT PROTOCOL/i, { since: 'last', timeout: 15000 })
+
+    // Agent will call list_souls, list_worlds, read_soul, read_world
+    // Then present tone selection — wait for the select UI
+    await term.waitFor(/Neon Noir|Select|tone/i, { since: 'last', timeout: 20000 })
+
+    // Select first option (Neon Noir)
+    term.sendKey('enter')
+
+    // Wait for structure confirmation — use specific text to avoid matching status bar "confirm"
+    await term.waitFor(/Confirm structure|Use recommended/i, { since: 'last', timeout: 10000 })
+
+    // Confirm with Enter
+    term.sendKey('enter')
+
+    // Wait for export to complete — look for the result panel output
+    await term.waitFor(/export complete|SKILL\.md|\.claude\/skills|story-spec\.md/i, { since: 'last', timeout: 20000 })
+
+    // Verify the export directory was created
+    const fs = await import('node:fs')
+    const exportDir = path.join(home.homeDir, '.soulkiller', 'exports', 'soulkiller:v-export-in-night-city')
+    expect(fs.existsSync(exportDir)).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'SKILL.md'))).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'story-spec.md'))).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'soul', 'identity.md'))).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'soul', 'capabilities.md'))).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'soul', 'milestones.md'))).toBe(true)
+    expect(fs.existsSync(path.join(exportDir, 'world', 'world.json'))).toBe(true)
+  })
+})
+
+// ─── Group 10: /create distill produces capabilities + milestones ──
+
+describe('E2E: Distill with new dimensions', () => {
+  let home: TestHome
+  let term: TestTerminal
+  let mockServer: MockLLMServer
+
+  beforeAll(async () => {
+    mockServer = new MockLLMServer()
+    await mockServer.start()
+  })
+
+  afterAll(async () => {
+    await mockServer.stop()
+  })
+
+  afterEach(() => {
+    if (DEBUG) term?.printTimeline()
+    term?.kill()
+    home?.cleanup()
+  })
+
+  it('Scenario 11: /evolve distill writes capabilities.md and milestones.md', async () => {
+    home = createTestHome({ mockServerUrl: mockServer.url })
+    createDistilledSoul(home.homeDir, 'dim-test')
+    term = new TestTerminal({ homeDir: home.homeDir, mockServerUrl: mockServer.url, label: 'Scenario 11: distill new dimensions' })
+    await term.waitFor(PROMPT_RE, { timeout: 30000 })
+
+    // Load soul
+    term.send('/use dim-test')
+    await term.waitFor(/soul:\/\/dim-test/, { since: 'last', timeout: 10000 })
+
+    // Queue distill agent tool calling responses:
+    // The evolve flow: ingest markdown → distill agent runs
+    // Distill agent will call LLM multiple times, each time we return a tool_call
+    const tc = (id: string, name: string, args: Record<string, unknown>) => ({
+      id,
+      type: 'function' as const,
+      function: { name, arguments: JSON.stringify(args) },
+    })
+
+    mockServer.setResponseQueue([
+      // Step 1: sampleChunks (overview)
+      { type: 'tool_calls', tool_calls: [tc('d1', 'sampleChunks', {})] },
+      // Step 2: writeIdentity
+      { type: 'tool_calls', tool_calls: [tc('d2', 'writeIdentity', { content: '## Background\nA test character for dimension testing.' })] },
+      // Step 3: writeStyle
+      { type: 'tool_calls', tool_calls: [tc('d3', 'writeStyle', { content: '## Communication\nDirect and concise.\n\n## Characteristic Expressions\n- "Test quote"' })] },
+      // Step 4: writeCapabilities
+      { type: 'tool_calls', tool_calls: [tc('d4', 'writeCapabilities', { content: '## Abilities\n- Sword mastery A\n- Magic resistance B' })] },
+      // Step 5: writeMilestones
+      { type: 'tool_calls', tool_calls: [tc('d5', 'writeMilestones', { content: '## [Year 1] Birth\nBorn into the world.\n→ Journey begins' })] },
+      // Step 6: writeBehavior
+      { type: 'tool_calls', tool_calls: [tc('d6', 'writeBehavior', { name: 'honor-code', content: 'Always keeps promises.' })] },
+      // Step 7: writeExample
+      { type: 'tool_calls', tool_calls: [tc('d7', 'writeExample', { scenario: 'greeting', messages: [{ role: 'user', content: 'Hello' }, { role: 'character', content: 'Greetings.' }] })] },
+      // Step 8: reviewSoul
+      { type: 'tool_calls', tool_calls: [tc('d8', 'reviewSoul', {})] },
+      // Step 9: finalize
+      { type: 'tool_calls', tool_calls: [tc('d9', 'finalize', { summary: 'Distillation complete with capabilities and milestones.' })] },
+    ])
+
+    // Start evolve with markdown fixture
+    const fixturesDir = 'tests/integration/fixtures'
+    term.send('/evolve')
+    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: 10000 })
+    term.sendKey(' ')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey('down')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey(' ')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey('enter')
+
+    await term.waitFor(/path/i, { since: 'last', timeout: 5000 })
+    term.send(fixturesDir)
+
+    // Wait for distill to complete
+    await term.waitFor(PROMPT_RE, { since: 'last', timeout: 30000 })
+
+    // Verify capabilities.md and milestones.md were created
+    const nodeFs = await import('node:fs')
+    const soulDir = path.join(home.homeDir, '.soulkiller', 'souls', 'dim-test', 'soul')
+    expect(nodeFs.existsSync(path.join(soulDir, 'capabilities.md'))).toBe(true)
+    expect(nodeFs.existsSync(path.join(soulDir, 'milestones.md'))).toBe(true)
+
+    // Verify content
+    const capContent = nodeFs.readFileSync(path.join(soulDir, 'capabilities.md'), 'utf-8')
+    expect(capContent).toContain('Sword mastery')
+
+    const milContent = nodeFs.readFileSync(path.join(soulDir, 'milestones.md'), 'utf-8')
+    expect(milContent).toContain('Year 1')
   })
 })

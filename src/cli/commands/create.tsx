@@ -12,7 +12,7 @@ import { distillSoul, type DistillAgentProgress } from '../../distill/distill-ag
 import { getLLMClient } from '../../llm/client.js'
 import { loadConfig } from '../../config/loader.js'
 import { generateManifest, packageSoul, readManifest } from '../../soul/package.js'
-import { captureSoul, type CaptureProgress, type TargetClassification } from '../../agent/soul-capture-agent.js'
+import { captureSoul, type CaptureProgress } from '../../agent/soul-capture-agent.js'
 import type { ToolCallDisplay, AgentPhase, SearchPlanDimDisplay } from '../animation/soulkiller-protocol-panel.js'
 import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
@@ -21,10 +21,16 @@ import type { SoulType, SoulManifest } from '../../soul/manifest.js'
 import { type TagSet, emptyTagSet } from '../../tags/taxonomy.js'
 import { parseTags } from '../../tags/parser.js'
 import { createSyntheticChunks } from '../../ingest/synthetic-adapter.js'
+import { sampleChunks } from '../../distill/sampler.js'
+import { extractFeatures } from '../../distill/extractor.js'
+import { mergeSoulFiles, type MergeInput } from '../../distill/merger.js'
+import { generateSoulFiles, loadSoulFiles } from '../../distill/generator.js'
+import { createSnapshot } from '../../soul/snapshot.js'
+import { appendEvolveEntry } from '../../soul/package.js'
 
 const SOULS_DIR = path.join(os.homedir(), '.soulkiller', 'souls')
 
-function getClassificationLabels(): Record<TargetClassification, string> {
+function getClassificationLabels(): Record<string, string> {
   return {
     DIGITAL_CONSTRUCT: t('create.class.digital_construct'),
     PUBLIC_ENTITY: t('create.class.public_entity'),
@@ -57,14 +63,39 @@ type SearchConfirmChoice = 'confirm' | 'retry' | 'detail'
 interface CreateCommandProps {
   onComplete: (soulName: string, soulDir: string) => void
   onCancel: () => void
+  /** When provided, enter supplement mode (skip to data-sources, merge after distill) */
+  supplementSoul?: { name: string; dir: string }
 }
 
-export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
-  const [step, setStep] = useState<CreateStep>('type-select')
-  const [soulType, setSoulType] = useState<SoulType>('public')
-  const [soulName, setSoulName] = useState('')
-  const [description, setDescription] = useState('')
-  const [parsedTags, setParsedTags] = useState<TagSet>(emptyTagSet())
+export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCommandProps) {
+  // If supplementSoul provided, load manifest and start at data-sources
+  const initState = (() => {
+    if (supplementSoul) {
+      const manifest = readManifest(supplementSoul.dir)
+      if (manifest) {
+        return {
+          step: 'data-sources' as CreateStep,
+          soulType: manifest.soulType,
+          soulName: manifest.name,
+          description: manifest.description,
+          tags: manifest.tags,
+        }
+      }
+    }
+    return {
+      step: 'type-select' as CreateStep,
+      soulType: 'public' as SoulType,
+      soulName: '',
+      description: '',
+      tags: emptyTagSet(),
+    }
+  })()
+
+  const [step, setStep] = useState<CreateStep>(initState.step)
+  const [soulType, setSoulType] = useState<SoulType>(initState.soulType)
+  const [soulName, setSoulName] = useState(initState.soulName)
+  const [description, setDescription] = useState(initState.description)
+  const [parsedTags, setParsedTags] = useState<TagSet>(initState.tags)
   const [tagsRaw, setTagsRaw] = useState('')
   const [parsingTags, setParsingTags] = useState(false)
   const [selectedSources, setSelectedSources] = useState<DataSourceOption[]>([])
@@ -92,7 +123,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
   const [errorCursor, setErrorCursor] = useState(0)
 
   // Agent state
-  const [classification, setClassification] = useState<TargetClassification | undefined>()
+  const [classification, setClassification] = useState<string | undefined>()
   const [origin, setOrigin] = useState<string | undefined>()
   const [toolCalls, setToolCalls] = useState<ToolCallDisplay[]>([])
   const [protocolPhase, setProtocolPhase] = useState<AgentPhase>('initiating')
@@ -495,8 +526,43 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
       const aLog = agentLogRef.current
       const result = await distillSoul(name, chunks, soulDir, config, parsedTags, handleDistillAgentProgress, aLog)
 
-      // Generate manifest (agent writes soul files, we write manifest)
-      generateManifest(soulDir, name, name, description, chunks.length, ['zh'], soulType, parsedTags)
+      if (supplementSoul) {
+        // Supplement mode: merge new distill results with existing soul files
+        const client = getLLMClient()
+        const model = config.llm.distill_model ?? config.llm.default_model
+        const existingSoul = loadSoulFiles(supplementSoul.dir)
+
+        if (existingSoul) {
+          // Create snapshot before merge
+          try { createSnapshot(supplementSoul.dir, 'pre-evolve', chunks.length) } catch { /* first evolve may have no files */ }
+
+          // Extract features from new chunks
+          const sampled = sampleChunks(chunks)
+          const deltaFeatures = await extractFeatures(client, model, sampled, name)
+
+          // Merge with existing
+          const mergeInput: MergeInput = {
+            existingIdentity: existingSoul.identity,
+            existingStyle: existingSoul.style,
+            existingBehaviors: existingSoul.behaviors,
+          }
+          const merged = await mergeSoulFiles(client, model, mergeInput, deltaFeatures, name)
+          generateSoulFiles(supplementSoul.dir, merged, ['identity', 'style', 'behaviors'])
+        }
+
+        // Record evolve history
+        appendEvolveEntry(supplementSoul.dir, {
+          timestamp: new Date().toISOString(),
+          sources: [{ type: 'supplement', chunk_count: chunks.length }],
+          dimensions_updated: ['identity', 'style', 'behaviors'],
+          mode: 'delta',
+          snapshot_id: new Date().toISOString().replace(/[:.]/g, '-'),
+          total_chunks_after: chunks.length,
+        })
+      } else {
+        // Normal create: generate manifest
+        generateManifest(soulDir, name, name, description, chunks.length, ['zh'], soulType, parsedTags)
+      }
 
       result.agentLog?.close()
       agentLogRef.current = undefined
@@ -677,6 +743,7 @@ export function CreateCommand({ onComplete, onCancel }: CreateCommandProps) {
 
       {step === 'capturing' && (
         <SoulkillerProtocolPanel
+          mode="soul"
           targetName={soulName}
           classification={classification}
           origin={origin}

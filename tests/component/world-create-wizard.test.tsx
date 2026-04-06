@@ -23,14 +23,15 @@ afterEach(() => {
 })
 
 describe('WorldCreateWizard', () => {
-  it('renders initial name step with title and hint', () => {
+  it('renders initial type-select step with title and world types', () => {
     const { lastFrame } = render(
       <WorldCreateWizard onComplete={() => {}} onCancel={() => {}} />,
     )
     const frame = lastFrame()!
     expect(frame).toContain('创建新世界')
     expect(frame).toContain('ESC')
-    expect(frame).toContain('世界名称')
-    expect(frame).toContain('kebab-case')
+    expect(frame).toContain('已有作品')
+    expect(frame).toContain('原创世界')
+    expect(frame).toContain('真实世界')
   })
 })

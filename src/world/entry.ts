@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorldDir } from './manifest.js'
+import type { WorldDimension } from '../agent/world-dimensions.js'
 
 export type EntryMode = 'always' | 'keyword' | 'semantic'
 export type EntryScope = 'background' | 'rule' | 'lore' | 'atmosphere'
@@ -11,6 +12,7 @@ export interface EntryMeta {
   priority: number
   mode: EntryMode
   scope: EntryScope
+  dimension?: WorldDimension
 }
 
 export interface WorldEntry {
@@ -71,25 +73,34 @@ export function serializeFrontmatter(meta: EntryMeta, content: string): string {
     ? `[${meta.keywords.map((k) => `"${k}"`).join(', ')}]`
     : '[]'
 
+  const dimensionLine = meta.dimension ? `\ndimension: ${meta.dimension}` : ''
+
   return `---
 name: ${meta.name}
 keywords: ${keywordsStr}
 priority: ${meta.priority}
 mode: ${meta.mode}
-scope: ${meta.scope}
+scope: ${meta.scope}${dimensionLine}
 ---
 
 ${content}
 `
 }
 
+const VALID_DIMENSIONS = ['geography', 'history', 'factions', 'systems', 'society', 'culture', 'species', 'figures', 'atmosphere']
+
 function parseEntryMeta(raw: Record<string, unknown>): EntryMeta {
+  const dimension = typeof raw.dimension === 'string' && VALID_DIMENSIONS.includes(raw.dimension)
+    ? raw.dimension as WorldDimension
+    : undefined
+
   return {
     name: String(raw.name ?? ''),
     keywords: Array.isArray(raw.keywords) ? raw.keywords.map(String) : [],
     priority: typeof raw.priority === 'number' ? raw.priority : 100,
     mode: (['always', 'keyword', 'semantic'].includes(String(raw.mode)) ? String(raw.mode) : 'keyword') as EntryMode,
     scope: (['background', 'rule', 'lore', 'atmosphere'].includes(String(raw.scope)) ? String(raw.scope) : 'lore') as EntryScope,
+    ...(dimension ? { dimension } : {}),
   }
 }
 

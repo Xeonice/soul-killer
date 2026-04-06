@@ -1,8 +1,12 @@
-import type { TargetClassification } from './soul-capture-agent.js'
+export type TargetClassification =
+  | 'DIGITAL_CONSTRUCT'
+  | 'PUBLIC_ENTITY'
+  | 'HISTORICAL_RECORD'
+  | 'UNKNOWN_ENTITY'
 
 // ========== Dimension Model ==========
 
-export type SoulDimension = 'identity' | 'quotes' | 'expression' | 'thoughts' | 'behavior' | 'relations'
+export type SoulDimension = 'identity' | 'quotes' | 'expression' | 'thoughts' | 'behavior' | 'relations' | 'capabilities' | 'milestones'
 
 export type DimensionPriority = 'required' | 'important' | 'supplementary'
 
@@ -18,10 +22,12 @@ export const DIMENSIONS: Record<SoulDimension, DimensionDef> = {
   expression: { priority: 'required',      description: '说话风格、语气、用词偏好、修辞习惯', distillTarget: 'style.md' },
   thoughts:   { priority: 'important',     description: '价值观、信念、立场、人生哲学', distillTarget: 'behaviors/' },
   behavior:   { priority: 'important',     description: '决策模式、面对冲突的反应、习惯性行为', distillTarget: 'behaviors/' },
-  relations:  { priority: 'supplementary', description: '重要关系、对不同人的态度、社交风格', distillTarget: 'behaviors/' },
+  relations:     { priority: 'supplementary', description: '重要关系、对不同人的态度、社交风格', distillTarget: 'behaviors/' },
+  capabilities:  { priority: 'important',     description: '能力、技能、属性数值、装备、专业知识', distillTarget: 'capabilities.md' },
+  milestones:    { priority: 'important',     description: '关键事件时间线、转折点、成长阶段、标志性成就', distillTarget: 'milestones.md' },
 }
 
-export const ALL_DIMENSIONS: SoulDimension[] = ['identity', 'quotes', 'expression', 'thoughts', 'behavior', 'relations']
+export const ALL_DIMENSIONS: SoulDimension[] = ['identity', 'quotes', 'expression', 'thoughts', 'behavior', 'relations', 'capabilities', 'milestones']
 export const REQUIRED_DIMENSIONS: SoulDimension[] = ALL_DIMENSIONS.filter((d) => DIMENSIONS[d].priority === 'required')
 
 // ========== Dimension Signals (for coverage analysis) ==========
@@ -53,6 +59,16 @@ export const DIMENSION_SIGNALS: Record<SoulDimension, RegExp[]> = {
   relations: [
     /relationship|friend|rival|ally|partner|mentor|enemy/i,
     /关系|朋友|对手|伙伴|师徒|敌人|恋人|同伴|交往/,
+  ],
+  capabilities: [
+    /abilities|powers|skills|stats|weapons|equipment|noble\s*phantasm|magic|spell|technique/i,
+    /\bclass\s+skill|personal\s+skill|combat\s+style|fighting\s+style/i,
+    /能力|技能|属性|宝具|武器|装备|法术|专精|方法论|战斗风格|义体|黑客/,
+  ],
+  milestones: [
+    /timeline|key\s+events?|turning\s+point|milestone|major\s+battle|story\s+arc/i,
+    /\bchronolog|biography.*event|career\s+highlight/i,
+    /时间线|关键事件|转折点|里程碑|重大战役|经历|编年|大事记/,
   ],
 }
 
@@ -86,6 +102,16 @@ const DIGITAL_CONSTRUCT_TEMPLATES: DimensionTemplates = {
     '{name} {origin} relationships characters',
     '{localName} 人物关系',
   ],
+  capabilities: [
+    '{name} abilities powers skills stats',
+    '{name} weapons equipment noble phantasm',
+    '{localName} 能力 技能 属性 宝具 武器',
+  ],
+  milestones: [
+    '{name} timeline key events story arc',
+    '{name} {origin} major battles turning points',
+    '{localName} 时间线 关键事件 经历',
+  ],
 }
 
 const PUBLIC_ENTITY_TEMPLATES: DimensionTemplates = {
@@ -112,6 +138,16 @@ const PUBLIC_ENTITY_TEMPLATES: DimensionTemplates = {
   relations: [
     '{name} key relationships collaborations',
     '{localName} 重要关系 合作',
+  ],
+  capabilities: [
+    '{name} expertise methodology core skills',
+    '{name} professional achievements key decisions',
+    '{localName} 专业能力 方法论 核心技能',
+  ],
+  milestones: [
+    '{name} career timeline key decisions milestones',
+    '{name} major events turning points',
+    '{localName} 生涯 时间线 关键决策',
   ],
 }
 
@@ -140,6 +176,14 @@ const HISTORICAL_RECORD_TEMPLATES: DimensionTemplates = {
     '{name} contemporaries influence circle',
     '{localName} 交往 影响 人际',
   ],
+  capabilities: [
+    '{name} skills achievements expertise legacy',
+    '{localName} 才能 成就 专长',
+  ],
+  milestones: [
+    '{name} chronology major events legacy timeline',
+    '{localName} 编年 大事记 历史事件',
+  ],
 }
 
 const TEMPLATES_BY_CLASSIFICATION: Record<Exclude<TargetClassification, 'UNKNOWN_ENTITY'>, DimensionTemplates> = {
@@ -162,11 +206,15 @@ export interface SearchPlan {
   dimensions: DimensionPlan[]
 }
 
+// Dimensions where domain tags are appended to search queries
+const TAG_ENHANCED_DIMENSIONS: Set<SoulDimension> = new Set(['capabilities', 'milestones', 'thoughts', 'behavior'])
+
 export function generateSearchPlan(
   classification: TargetClassification,
   englishName: string,
   localName: string,
   origin: string,
+  tags?: { domain?: string[] },
 ): SearchPlan {
   if (classification === 'UNKNOWN_ENTITY') {
     return { classification, englishName, dimensions: [] }
@@ -174,16 +222,31 @@ export function generateSearchPlan(
 
   const templates = TEMPLATES_BY_CLASSIFICATION[classification]
   const effectiveLocalName = localName && localName !== englishName ? localName : englishName
+  const tagHint = tags?.domain?.length ? tags.domain.join(' ') : ''
 
-  const dimensions: DimensionPlan[] = ALL_DIMENSIONS.map((dim) => ({
-    dimension: dim,
-    priority: DIMENSIONS[dim].priority,
-    queries: templates[dim].map((t) =>
+  const dimensions: DimensionPlan[] = ALL_DIMENSIONS.map((dim) => {
+    const baseQueries = templates[dim].map((t) =>
       t.replace(/\{name\}/g, englishName)
        .replace(/\{localName\}/g, effectiveLocalName)
        .replace(/\{origin\}/g, origin),
-    ),
-  }))
+    )
+
+    // Append tag hint to queries for tag-enhanced dimensions
+    if (tagHint && TAG_ENHANCED_DIMENSIONS.has(dim)) {
+      const tagQueries = baseQueries.map((q) => `${q} ${tagHint}`)
+      return {
+        dimension: dim,
+        priority: DIMENSIONS[dim].priority,
+        queries: [...baseQueries, ...tagQueries],
+      }
+    }
+
+    return {
+      dimension: dim,
+      priority: DIMENSIONS[dim].priority,
+      queries: baseQueries,
+    }
+  })
 
   return { classification, englishName, dimensions }
 }
@@ -203,7 +266,7 @@ export interface CoverageReport {
   suggestion: string
 }
 
-const MIN_TOTAL_COVERED = 3
+const MIN_TOTAL_COVERED = 4
 const MIN_REQUIRED_COVERED = 2
 
 export function analyzeCoverage(extractions: { content: string }[]): CoverageReport {

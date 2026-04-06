@@ -28,6 +28,9 @@ const COMMAND_TEMPLATES: CommandTemplate[] = [
   // 世界
   { name: 'world', descriptionKey: 'cmd.world', groupKey: 'cmd.group.world' },
 
+  // 导出
+  { name: 'export', descriptionKey: 'cmd.export', groupKey: 'cmd.group.export' },
+
   // 设置
   { name: 'config', descriptionKey: 'cmd.config', groupKey: 'cmd.group.settings' },
 

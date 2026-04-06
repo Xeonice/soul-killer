@@ -3,12 +3,12 @@ import { Text, Box } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
-import type { TargetClassification } from '../../agent/soul-capture-agent.js'
 import { t } from '../../i18n/index.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
-const CLASSIFICATION_LABELS: Record<TargetClassification, string> = {
+// Default Soul classification labels (backward compat)
+const SOUL_CLASSIFICATION_LABELS: Record<string, string> = {
   DIGITAL_CONSTRUCT: 'DIGITAL CONSTRUCT',
   PUBLIC_ENTITY: 'PUBLIC ENTITY',
   HISTORICAL_RECORD: 'HISTORICAL RECORD',
@@ -33,7 +33,7 @@ export interface SearchPlanDimDisplay {
 
 interface SoulkillerProtocolPanelProps {
   targetName: string
-  classification?: TargetClassification
+  classification?: string
   origin?: string
   toolCalls: ToolCallDisplay[]
   totalFragments?: number
@@ -41,6 +41,10 @@ interface SoulkillerProtocolPanelProps {
   filterProgress?: { kept: number; total: number }
   phase: AgentPhase
   searchPlan?: SearchPlanDimDisplay[]
+  /** 'soul' (default) or 'world' */
+  mode?: 'soul' | 'world'
+  /** Classification display labels. Defaults to Soul labels if not provided. */
+  classificationLabels?: Record<string, string>
 }
 
 const TOOL_ICON: Record<string, string> = {
@@ -89,10 +93,18 @@ export function SoulkillerProtocolPanel({
   filterProgress,
   phase,
   searchPlan,
+  mode = 'soul',
+  classificationLabels,
 }: SoulkillerProtocolPanelProps) {
   const animationEnabled = isAnimationEnabled()
   const [frame, setFrame] = useState(0)
   const engine = getGlitchEngine()
+
+  const labels = classificationLabels ?? SOUL_CLASSIFICATION_LABELS
+  const isWorld = mode === 'world'
+  const titleKey = isWorld ? 'worldforge.title' : 'protocol.title'
+  const initiatingKey = isWorld ? 'worldforge.initiating' : 'protocol.initiating'
+  const initiatingDoneKey = isWorld ? 'worldforge.initiating_done' : 'protocol.initiating_done'
 
   useEffect(() => {
     if (phase === 'complete' || !animationEnabled) return
@@ -102,13 +114,13 @@ export function SoulkillerProtocolPanel({
 
   const spinnerChar = SPINNER_CHARS[frame % SPINNER_CHARS.length]
 
-  // UNKNOWN_ENTITY — malfunction panel
+  // UNKNOWN — malfunction panel
   if (phase === 'unknown') {
     return (
       <Box flexDirection="column" borderStyle="single" borderColor={DARK} paddingX={1} width={56}>
-        <Text color={ACCENT} bold> {t('protocol.title')} </Text>
+        <Text color={ACCENT} bold> {t(titleKey)} </Text>
         <Text> </Text>
-        <Text color={PRIMARY}>  ▓ {t('protocol.initiating_done')}</Text>
+        <Text color={PRIMARY}>  ▓ {t(initiatingDoneKey)}</Text>
         <Text> </Text>
         <Text color={DARK}>  ▓ {t('protocol.unknown_scan', { name: targetName })}</Text>
         <Text color={DARK}>    {t('protocol.unknown_classification')}</Text>
@@ -127,20 +139,20 @@ export function SoulkillerProtocolPanel({
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor={PRIMARY} paddingX={1} width={56}>
-      <Text color={ACCENT} bold> {t('protocol.title')} </Text>
+      <Text color={ACCENT} bold> {t(titleKey)} </Text>
       <Text> </Text>
 
       {/* Phase 0: Initiating */}
       {phase === 'initiating' && (
         <Text color={ACCENT}>
-          {'  ▓'}{engine.glitchText(t('protocol.initiating'), Math.max(0.1, 0.5 - frame * 0.01))}
+          {'  ▓'}{engine.glitchText(t(initiatingKey), Math.max(0.1, 0.5 - frame * 0.01))}
         </Text>
       )}
 
       {/* Active phases: show progress grouped by phase */}
       {phase !== 'initiating' && (
         <>
-          <Text color={PRIMARY}>  ▓ {t('protocol.initiating_done')}</Text>
+          <Text color={PRIMARY}>  ▓ {t(initiatingDoneKey)}</Text>
 
           {groups.map((group, gi) => {
             const done = isPhaseComplete(group.phase, phase)
@@ -171,7 +183,7 @@ export function SoulkillerProtocolPanel({
             <>
               <Text> </Text>
               <Text color={PRIMARY}>  ▓ {t('protocol.target_acquired')} <Text color={ACCENT}>{targetName}</Text></Text>
-              <Text color={PRIMARY}>    {t('protocol.classification')} <Text bold>{CLASSIFICATION_LABELS[classification]}</Text></Text>
+              <Text color={PRIMARY}>    {t('protocol.classification')} <Text bold>{labels[classification] ?? classification}</Text></Text>
               {origin && <Text color={DIM}>    {t('protocol.origin')} {origin}</Text>}
             </>
           )}

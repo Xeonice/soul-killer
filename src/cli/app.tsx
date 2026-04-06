@@ -38,6 +38,7 @@ import { assembleContext } from '../world/context-assembler.js'
 import { loadBindings } from '../world/binding.js'
 import { emptyTagSet } from '../tags/taxonomy.js'
 import { WorldCommand } from './commands/world.js'
+import { ExportCommand } from './commands/export.js'
 import { listWorlds } from '../world/manifest.js'
 
 type AppPhase = 'boot' | 'setup' | 'idle' | 'command' | 'exit'
@@ -282,7 +283,27 @@ export function App() {
           return
         }
         case 'list':
-          setState((s) => ({ ...s, commandOutput: <ListCommand /> }))
+          setState((s) => ({
+            ...s,
+            interactiveMode: true,
+            commandOutput: (
+              <ListCommand
+                onUse={(name, dir) => {
+                  conversationRef.current = []
+                  setState((s) => ({
+                    ...s,
+                    soulName: name,
+                    soulDir: dir,
+                    promptMode: 'loaded',
+                    interactiveMode: false,
+                    commandOutput: null,
+                    conversationMessages: [],
+                  }))
+                }}
+                onClose={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+              />
+            ),
+          }))
           return
         case 'evolve': {
           // Parse subcommand: /evolve status, /evolve rollback, /evolve [name]
@@ -381,23 +402,20 @@ export function App() {
             }))
           }
 
-          const handleEvolveComplete = () => {
+          const handleEvolveComplete = (name: string, dir: string) => {
             setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))
           }
-          const handleEvolveExit = () => {
+          const handleEvolveCancel = () => {
             setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))
           }
           setState((s) => ({
             ...s,
             interactiveMode: true,
             commandOutput: (
-              <EvolveCommand
-                soulName={targetSoul.name}
-                soulDir={evolveSoulDir}
-                engine={engineRef.current}
-                chunks={s.chunks}
+              <CreateCommand
+                supplementSoul={{ name: targetSoul.name, dir: evolveSoulDir }}
                 onComplete={handleEvolveComplete}
-                onExit={handleEvolveExit}
+                onCancel={handleEvolveCancel}
               />
             ),
           }))
@@ -494,6 +512,18 @@ export function App() {
               <WorldCommand
                 soulDir={state.soulDir}
                 onClose={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+              />
+            ),
+          }))
+          return
+        case 'export':
+          setState((s) => ({
+            ...s,
+            interactiveMode: true,
+            commandOutput: (
+              <ExportCommand
+                onComplete={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+                onCancel={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
               />
             ),
           }))

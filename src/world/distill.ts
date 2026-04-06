@@ -5,24 +5,39 @@ import { IngestPipeline, type AdapterType } from '../ingest/pipeline.js'
 import { addEntry, type EntryMeta, type EntryScope, type EntryMode } from './entry.js'
 import { loadWorld, saveWorld, bumpPatchVersion } from './manifest.js'
 import { loadAllEntries } from './entry.js'
+import type { WorldClassification, WorldDimension } from '../agent/world-dimensions.js'
+import { WORLD_DIMENSIONS, ALL_WORLD_DIMENSIONS } from '../agent/world-dimensions.js'
 
 export type DistillPhase = 'ingest' | 'classify' | 'cluster' | 'extract' | 'review'
+
+export interface DimensionStats {
+  [dimension: string]: number
+}
 
 export interface WorldDistillProgress {
   phase: DistillPhase
   current: number
   total: number
   message: string
+  /** Dimension distribution after classify phase */
+  dimensionStats?: DimensionStats
+  /** Current entry being generated in extract phase */
+  entryName?: string
+  entryDimension?: string
+  /** Generated entries so far in extract phase */
+  generatedEntries?: { name: string; dimension?: string; scope: string }[]
 }
 
 interface ClassifiedChunk {
   chunk: SoulChunk
   scope: EntryScope | 'irrelevant'
+  dimension?: WorldDimension
 }
 
 interface ChunkCluster {
   chunks: SoulChunk[]
   scope: EntryScope
+  dimension?: WorldDimension
 }
 
 export interface GeneratedEntry {
@@ -46,6 +61,7 @@ export class WorldDistiller extends EventEmitter {
     worldName: string,
     sourcePath: string,
     adapterType: AdapterType,
+    classification?: WorldClassification,
   ): Promise<GeneratedEntry[]> {
     // Phase 1: Ingest
     this.emit('progress', { phase: 'ingest', current: 0, total: 1, message: 'Ingesting data source...' } as WorldDistillProgress)
@@ -56,15 +72,29 @@ export class WorldDistiller extends EventEmitter {
     if (chunks.length === 0) return []
 
     // Phase 2: Classify
-    const classified = await this.classifyChunks(chunks)
+    const classified = await this.classifyChunks(chunks, classification)
     const relevant = classified.filter((c): c is ClassifiedChunk & { scope: EntryScope } => c.scope !== 'irrelevant')
-    this.emit('progress', { phase: 'classify', current: classified.length, total: classified.length, message: `${relevant.length}/${classified.length} chunks relevant` } as WorldDistillProgress)
+
+    // Build dimension stats
+    const dimStats: DimensionStats = {}
+    for (const c of relevant) {
+      const dim = c.dimension ?? 'unknown'
+      dimStats[dim] = (dimStats[dim] ?? 0) + 1
+    }
+
+    this.emit('progress', {
+      phase: 'classify',
+      current: classified.length,
+      total: classified.length,
+      message: `${relevant.length}/${classified.length} chunks relevant`,
+      dimensionStats: dimStats,
+    } as WorldDistillProgress)
 
     if (relevant.length === 0) return []
 
     // Phase 3: Cluster
     const clusters = this.clusterChunks(relevant)
-    this.emit('progress', { phase: 'cluster', current: clusters.length, total: clusters.length, message: `${clusters.length} clusters formed` } as WorldDistillProgress)
+    this.emit('progress', { phase: 'cluster', current: clusters.length, total: clusters.length, message: `${clusters.length} clusters formed`, dimensionStats: dimStats } as WorldDistillProgress)
 
     // Phase 4: Extract
     const entries = await this.extractEntries(clusters)
@@ -124,8 +154,15 @@ export class WorldDistiller extends EventEmitter {
     }
   }
 
-  private async classifyChunks(chunks: SoulChunk[]): Promise<ClassifiedChunk[]> {
+  private async classifyChunks(chunks: SoulChunk[], classification?: WorldClassification): Promise<ClassifiedChunk[]> {
     const results: ClassifiedChunk[] = []
+
+    const dimensionList = ALL_WORLD_DIMENSIONS.map((d) => `${d}: ${WORLD_DIMENSIONS[d].description}`).join('\n')
+    const classificationHint = classification === 'FICTIONAL_UNIVERSE'
+      ? 'This is a fictional world setting. Focus on fictional world-building elements.'
+      : classification === 'REAL_SETTING'
+        ? 'This is a real-world setting. Focus on real-world information.'
+        : ''
 
     for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
       const batch = chunks.slice(i, i + BATCH_SIZE)
@@ -145,15 +182,24 @@ export class WorldDistiller extends EventEmitter {
         messages: [
           {
             role: 'system',
-            content: `You are a world-building classifier. For each text chunk, classify it into one of these categories:
-- background: General world setting/history
-- rule: World rules, constraints, laws
-- lore: Specific knowledge, characters, factions, locations
-- atmosphere: Mood, tone, cultural details
-- irrelevant: Not related to world-building (plot summary, author notes, etc.)
+            content: `You are a world-building classifier. For each text chunk, you MUST assign TWO labels:
 
-Respond with a JSON array of objects: [{"index": 0, "scope": "lore"}, ...]
-Respond ONLY with the JSON array, no other text.`,
+1. **scope** — how it will be injected into context:
+   - background: Core world setting, always visible
+   - rule: World rules and constraints, always visible
+   - lore: Specific knowledge, triggered on demand
+   - atmosphere: Mood and tone, injected at end
+   - irrelevant: Not world-building content, discard
+
+2. **dimension** — what aspect of the world it describes (REQUIRED, pick exactly one):
+${dimensionList}
+   - irrelevant: Not world-building content
+${classificationHint}
+
+IMPORTANT: Every item MUST have both "scope" and "dimension" fields. Do not omit "dimension".
+
+Output format — JSON array only, no other text:
+[{"index": 0, "scope": "lore", "dimension": "geography"}, {"index": 1, "scope": "rule", "dimension": "systems"}, ...]`,
           },
           { role: 'user', content: batchContent },
         ],
@@ -161,26 +207,31 @@ Respond ONLY with the JSON array, no other text.`,
 
       const text = response.choices[0]?.message?.content ?? '[]'
       try {
-        const parsed = JSON.parse(text) as { index: number; scope: string }[]
+        const parsed = JSON.parse(text) as { index: number; scope: string; dimension?: string }[]
         for (const item of parsed) {
           const chunk = batch[item.index]
           if (chunk) {
             const scope = ['background', 'rule', 'lore', 'atmosphere', 'irrelevant'].includes(item.scope)
               ? (item.scope as EntryScope | 'irrelevant')
               : 'irrelevant'
-            results.push({ chunk, scope })
+            const parsedDim = item.dimension && ALL_WORLD_DIMENSIONS.includes(item.dimension as WorldDimension)
+              ? item.dimension as WorldDimension
+              : undefined
+            // Fallback: infer dimension from scope if LLM didn't provide one
+            const dimension = parsedDim ?? inferDimensionFromScope(scope === 'irrelevant' ? 'lore' : scope)
+            results.push({ chunk, scope, dimension })
           }
         }
         // Handle any chunks not in response
         for (let j = 0; j < batch.length; j++) {
           if (!parsed.some((p) => p.index === j)) {
-            results.push({ chunk: batch[j], scope: 'irrelevant' })
+            results.push({ chunk: batch[j], scope: 'irrelevant', dimension: undefined })
           }
         }
       } catch {
-        // If JSON parsing fails, treat all as lore
+        // If JSON parsing fails, treat all as lore with fallback dimension
         for (const chunk of batch) {
-          results.push({ chunk, scope: 'lore' })
+          results.push({ chunk, scope: 'lore', dimension: inferDimensionFromScope('lore') })
         }
       }
     }
@@ -189,41 +240,42 @@ Respond ONLY with the JSON array, no other text.`,
   }
 
   private clusterChunks(classified: (ClassifiedChunk & { scope: EntryScope })[]): ChunkCluster[] {
-    // Group by scope first
-    const byScope = new Map<EntryScope, SoulChunk[]>()
-    for (const { chunk, scope } of classified) {
-      if (!byScope.has(scope)) byScope.set(scope, [])
-      byScope.get(scope)!.push(chunk)
+    // Group by scope+dimension for better clustering
+    const groupKey = (c: ClassifiedChunk & { scope: EntryScope }) => `${c.scope}:${c.dimension ?? 'unknown'}`
+    const byGroup = new Map<string, { chunks: SoulChunk[]; scope: EntryScope; dimension?: WorldDimension }>()
+    for (const item of classified) {
+      const key = groupKey(item)
+      if (!byGroup.has(key)) byGroup.set(key, { chunks: [], scope: item.scope, dimension: item.dimension })
+      byGroup.get(key)!.chunks.push(item.chunk)
     }
 
     const clusters: ChunkCluster[] = []
 
-    for (const [scope, chunks] of byScope) {
-      if (chunks.length <= 3) {
-        // Small group → single cluster
-        clusters.push({ chunks, scope })
+    for (const [, group] of byGroup) {
+      if (group.chunks.length <= 3) {
+        clusters.push({ chunks: group.chunks, scope: group.scope, dimension: group.dimension })
         continue
       }
 
       // TF-IDF similarity clustering
-      const tokenized = chunks.map((c) => tokenize(c.content))
+      const tokenized = group.chunks.map((c) => tokenize(c.content))
       const assigned = new Set<number>()
 
-      for (let i = 0; i < chunks.length; i++) {
+      for (let i = 0; i < group.chunks.length; i++) {
         if (assigned.has(i)) continue
-        const cluster: SoulChunk[] = [chunks[i]]
+        const cluster: SoulChunk[] = [group.chunks[i]]
         assigned.add(i)
 
-        for (let j = i + 1; j < chunks.length; j++) {
+        for (let j = i + 1; j < group.chunks.length; j++) {
           if (assigned.has(j)) continue
           const sim = cosineSimilarity(tokenized[i], tokenized[j])
           if (sim > 0.3) {
-            cluster.push(chunks[j])
+            cluster.push(group.chunks[j])
             assigned.add(j)
           }
         }
 
-        clusters.push({ chunks: cluster, scope })
+        clusters.push({ chunks: cluster, scope: group.scope, dimension: group.dimension })
       }
     }
 
@@ -239,6 +291,8 @@ Respond ONLY with the JSON array, no other text.`,
         current: i,
         total: clusters.length,
         message: `Extracting entry ${i + 1}/${clusters.length}`,
+        entryDimension: clusters[i].dimension,
+        generatedEntries: entries.map((e) => ({ name: e.meta.name, dimension: e.meta.dimension, scope: e.meta.scope })),
       } as WorldDistillProgress)
 
       const cluster = clusters[i]
@@ -286,6 +340,7 @@ Respond ONLY with the JSON object, no other text.`,
             priority: typeof parsed.priority === 'number' ? parsed.priority : 100,
             mode,
             scope: cluster.scope,
+            ...(cluster.dimension ? { dimension: cluster.dimension } : {}),
           },
           content: parsed.content || combinedContent.slice(0, 1000),
         })
@@ -298,6 +353,7 @@ Respond ONLY with the JSON object, no other text.`,
             priority: 100,
             mode: 'semantic',
             scope: cluster.scope,
+            ...(cluster.dimension ? { dimension: cluster.dimension } : {}),
           },
           content: combinedContent.slice(0, 1000),
         })
@@ -305,6 +361,16 @@ Respond ONLY with the JSON object, no other text.`,
     }
 
     return entries
+  }
+}
+
+// Fallback: infer a default dimension from scope when LLM doesn't provide one
+function inferDimensionFromScope(scope: EntryScope): WorldDimension {
+  switch (scope) {
+    case 'background': return 'history'
+    case 'rule': return 'systems'
+    case 'atmosphere': return 'atmosphere'
+    case 'lore': return 'factions'
   }
 }
 

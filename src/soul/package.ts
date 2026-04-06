@@ -117,6 +117,33 @@ export function copyWorldToPackage(worldName: string, packageWorldsDir: string):
 }
 
 /**
+ * Read all soul personality files from a soul directory.
+ * Returns identity.md, style.md, and all behavior files as text.
+ */
+export function readSoulFiles(soulDir: string): { identity: string; style: string; behaviors: string[]; capabilities: string; milestones: string } {
+  const identityPath = path.join(soulDir, 'soul', 'identity.md')
+  const stylePath = path.join(soulDir, 'soul', 'style.md')
+  const capabilitiesPath = path.join(soulDir, 'soul', 'capabilities.md')
+  const milestonesPath = path.join(soulDir, 'soul', 'milestones.md')
+  const behaviorsDir = path.join(soulDir, 'soul', 'behaviors')
+
+  const identity = fs.existsSync(identityPath) ? fs.readFileSync(identityPath, 'utf-8') : ''
+  const style = fs.existsSync(stylePath) ? fs.readFileSync(stylePath, 'utf-8') : ''
+  const capabilities = fs.existsSync(capabilitiesPath) ? fs.readFileSync(capabilitiesPath, 'utf-8') : ''
+  const milestones = fs.existsSync(milestonesPath) ? fs.readFileSync(milestonesPath, 'utf-8') : ''
+
+  let behaviors: string[] = []
+  if (fs.existsSync(behaviorsDir)) {
+    behaviors = fs.readdirSync(behaviorsDir)
+      .filter((f) => f.endsWith('.md'))
+      .sort()
+      .map((f) => fs.readFileSync(path.join(behaviorsDir, f), 'utf-8'))
+  }
+
+  return { identity, style, behaviors, capabilities, milestones }
+}
+
+/**
  * Install a world from a package into the local worlds directory.
  * Returns 'installed' | 'exists' based on whether the world already existed.
  */

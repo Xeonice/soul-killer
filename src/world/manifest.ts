@@ -1,10 +1,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import type { WorldType, WorldClassification, WorldDimension } from '../agent/world-dimensions.js'
+import type { WorldTagSet } from '../tags/world-taxonomy.js'
+import { emptyWorldTagSet } from '../tags/world-taxonomy.js'
 
 export interface WorldDefaults {
   context_budget: number
   injection_position: 'before_soul' | 'after_soul' | 'interleaved'
+}
+
+export interface WorldEvolveHistoryEntry {
+  timestamp: string
+  sources: { type: string; path_or_url?: string; entry_count: number }[]
+  dimensions_updated: WorldDimension[]
+  total_entries_after: number
 }
 
 export interface WorldManifest {
@@ -15,6 +25,14 @@ export interface WorldManifest {
   description: string
   entry_count: number
   defaults: WorldDefaults
+
+  // New fields
+  worldType: WorldType
+  classification?: WorldClassification
+  tags: WorldTagSet
+  sources?: { type: string; path_or_url?: string }[]
+  origin?: string
+  evolve_history?: WorldEvolveHistoryEntry[]
 }
 
 export function getWorldsDir(): string {
@@ -29,6 +47,8 @@ export function createWorldManifest(
   name: string,
   displayName: string,
   description: string,
+  worldType: WorldType = 'fictional-existing',
+  tags: WorldTagSet = emptyWorldTagSet(),
 ): WorldManifest {
   return {
     name,
@@ -41,6 +61,9 @@ export function createWorldManifest(
       context_budget: 2000,
       injection_position: 'after_soul',
     },
+    worldType,
+    tags,
+    evolve_history: [],
   }
 }
 
@@ -48,6 +71,8 @@ export function createWorld(
   name: string,
   displayName: string,
   description: string,
+  worldType: WorldType = 'fictional-existing',
+  tags: WorldTagSet = emptyWorldTagSet(),
 ): WorldManifest {
   const worldDir = getWorldDir(name)
   if (fs.existsSync(worldDir)) {
@@ -57,7 +82,7 @@ export function createWorld(
   const entriesDir = path.join(worldDir, 'entries')
   fs.mkdirSync(entriesDir, { recursive: true })
 
-  const manifest = createWorldManifest(name, displayName, description)
+  const manifest = createWorldManifest(name, displayName, description, worldType, tags)
   fs.writeFileSync(
     path.join(worldDir, 'world.json'),
     JSON.stringify(manifest, null, 2),
@@ -69,7 +94,27 @@ export function createWorld(
 export function loadWorld(name: string): WorldManifest | null {
   const manifestPath = path.join(getWorldDir(name), 'world.json')
   if (!fs.existsSync(manifestPath)) return null
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as WorldManifest
+  try {
+    const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as Record<string, unknown>
+    // Backward compatibility: fill in missing new fields
+    return {
+      name: String(raw.name ?? ''),
+      display_name: String(raw.display_name ?? ''),
+      version: String(raw.version ?? '0.1.0'),
+      created_at: String(raw.created_at ?? ''),
+      description: String(raw.description ?? ''),
+      entry_count: typeof raw.entry_count === 'number' ? raw.entry_count : 0,
+      defaults: (raw.defaults as WorldDefaults) ?? { context_budget: 2000, injection_position: 'after_soul' },
+      worldType: (raw.worldType as WorldType) ?? 'fictional-existing',
+      classification: raw.classification as WorldClassification | undefined,
+      tags: (raw.tags as WorldTagSet) ?? emptyWorldTagSet(),
+      sources: raw.sources as { type: string; path_or_url?: string }[] | undefined,
+      origin: raw.origin as string | undefined,
+      evolve_history: (raw.evolve_history as WorldEvolveHistoryEntry[]) ?? [],
+    }
+  } catch {
+    return null
+  }
 }
 
 export function saveWorld(manifest: WorldManifest): void {

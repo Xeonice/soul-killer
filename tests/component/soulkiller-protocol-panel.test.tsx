@@ -123,4 +123,65 @@ describe('SoulkillerProtocolPanel', () => {
     )
     expect(lastFrame()).toMatchSnapshot()
   })
+
+  it('renders world mode with WORLDFORGE PROTOCOL title', () => {
+    const { lastFrame } = render(
+      <SoulkillerProtocolPanel
+        mode="world"
+        targetName="Night City"
+        toolCalls={[]}
+        phase="initiating"
+        classificationLabels={{
+          FICTIONAL_UNIVERSE: 'FICTIONAL UNIVERSE',
+          REAL_SETTING: 'REAL SETTING',
+          UNKNOWN_SETTING: 'UNKNOWN SETTING',
+        }}
+      />
+    )
+    const frame = lastFrame()!
+    expect(frame).toContain('WORLDFORGE PROTOCOL')
+    expect(frame).not.toContain('SOULKILLER PROTOCOL')
+  })
+
+  it('snapshot: world mode complete', () => {
+    const { lastFrame } = render(
+      <SoulkillerProtocolPanel
+        mode="world"
+        targetName="Night City"
+        classification="FICTIONAL_UNIVERSE"
+        classificationLabels={{
+          FICTIONAL_UNIVERSE: 'FICTIONAL UNIVERSE',
+          REAL_SETTING: 'REAL SETTING',
+          UNKNOWN_SETTING: 'UNKNOWN SETTING',
+        }}
+        origin="Cyberpunk 2077"
+        toolCalls={[
+          { tool: 'search', query: 'Night City wiki', status: 'done', resultCount: 8 },
+          { tool: 'search', query: 'Night City districts', status: 'done', resultCount: 5 },
+        ]}
+        totalFragments={24}
+        elapsedTime={12000}
+        phase="complete"
+      />
+    )
+    expect(lastFrame()).toMatchSnapshot()
+  })
+
+  it('snapshot: world mode unknown setting', () => {
+    const { lastFrame } = render(
+      <SoulkillerProtocolPanel
+        mode="world"
+        targetName="MyOriginalWorld"
+        classification="UNKNOWN_SETTING"
+        classificationLabels={{
+          FICTIONAL_UNIVERSE: 'FICTIONAL UNIVERSE',
+          REAL_SETTING: 'REAL SETTING',
+          UNKNOWN_SETTING: 'UNKNOWN SETTING',
+        }}
+        toolCalls={[]}
+        phase="unknown"
+      />
+    )
+    expect(lastFrame()).toMatchSnapshot()
+  })
 })

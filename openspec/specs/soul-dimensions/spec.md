@@ -1,17 +1,18 @@
 ## ADDED Requirements
 
-### Requirement: 灵魂信息维度模型
-系统 SHALL 定义 6 个灵魂信息维度：identity（身份背景）、quotes（语料台词）、expression（表达风格）、thoughts（思想观点）、behavior（行为模式）、relations（人际关系）。每个维度 SHALL 有优先级分类：required（必需）、important（重要）、supplementary（补充）。
+### Requirement: 维度模型
 
-#### Scenario: 维度定义完整性
-- **WHEN** 系统加载维度模型
-- **THEN** 模型 SHALL 包含 6 个维度，每个带有 priority、description、distillTarget 属性
+Soul 维度模型 SHALL 定义 8 个搜索维度：identity、quotes、expression、thoughts、behavior、relations、capabilities、milestones。ALL_DIMENSIONS 数组 SHALL 包含全部 8 个维度。
 
-#### Scenario: 必需维度标识
-- **WHEN** 检查维度优先级
-- **THEN** identity、quotes、expression 为 required
-- **AND** thoughts、behavior 为 important
-- **AND** relations 为 supplementary
+#### Scenario: ALL_DIMENSIONS 长度
+
+- **WHEN** ALL_DIMENSIONS 被访问
+- **THEN** SHALL 包含 8 个元素
+
+#### Scenario: REQUIRED_DIMENSIONS
+
+- **WHEN** REQUIRED_DIMENSIONS 被计算
+- **THEN** SHALL 包含 identity、quotes、expression、capabilities（priority 为 required 的维度）
 
 ### Requirement: 分类×维度的信息源映射
 系统 SHALL 为每种 TargetClassification（DIGITAL_CONSTRUCT、PUBLIC_ENTITY、HISTORICAL_RECORD）维护一张维度→推荐查询模板的映射表。模板中 SHALL 使用 `{name}`、`{localName}`、`{origin}` 占位符。
@@ -27,6 +28,36 @@
 #### Scenario: UNKNOWN_ENTITY 无映射
 - **WHEN** 分类为 UNKNOWN_ENTITY
 - **THEN** 不生成搜索计划，直接返回空计划
+
+### Requirement: Tag 感知搜索计划
+
+generateSearchPlan SHALL 接受可选的 `tags: TagSet` 参数。当 tags 存在且 domain 不为空时，capabilities 和 milestones 维度的搜索模板 SHALL 追加 domain tags 作为搜索关键词。thoughts 和 behavior 维度 SHALL 可选追加。identity / quotes / expression / relations 不受 tags 影响。
+
+#### Scenario: domain tags 扩展 capabilities 搜索
+
+- **WHEN** generateSearchPlan 传入 tags，domain 为 ["骑士", "剑术"]
+- **AND** classification 为 DIGITAL_CONSTRUCT
+- **THEN** capabilities 维度的查询 SHALL 包含 "骑士" 和 "剑术" 关键词
+
+#### Scenario: domain tags 扩展 milestones 搜索
+
+- **WHEN** generateSearchPlan 传入 tags，domain 为 ["企业家"]
+- **AND** classification 为 PUBLIC_ENTITY
+- **THEN** milestones 维度的查询 SHALL 包含 "企业家" 相关关键词
+
+#### Scenario: 无 tags 时退回默认模板
+
+- **WHEN** generateSearchPlan 未传入 tags 或 domain 为空
+- **THEN** 所有维度 SHALL 使用纯 classification 模板（与之前行为一致）
+
+### Requirement: 覆盖度分析阈值
+
+analyzeCoverage SHALL 使用更新后的阈值：MIN_TOTAL_COVERED = 4，MIN_REQUIRED_COVERED = 2。
+
+#### Scenario: 覆盖度判定
+
+- **WHEN** 8 个维度中有 4 个被覆盖，required 中有 2 个被覆盖
+- **THEN** canReport SHALL 为 true
 
 ### Requirement: 维度覆盖度分析
 系统 SHALL 提供覆盖度分析函数，输入为 extractions 数组，输出为各维度的命中数和覆盖判定。覆盖判定 SHALL 基于关键词模式匹配，每条 extraction 可命中多个维度。

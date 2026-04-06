@@ -41,3 +41,41 @@ exports[`SoulkillerProtocolPanel > snapshot: unknown entity 1`] = `
 │                                                      │
 └──────────────────────────────────────────────────────┘"
 `;
+
+exports[`SoulkillerProtocolPanel > snapshot: world mode complete 1`] = `
+"┌──────────────────────────────────────────────────────┐
+│  WORLDFORGE PROTOCOL                                 │
+│                                                      │
+│   ▓ Initializing world scan...         ✓             │
+│                                                      │
+│   ▓Phase 1: Reconnaissance ✓                         │
+│     ▸ 🔍 Night City wiki → 8 results ✓               │
+│     ▸ 🔍 Night City districts → 5 results ✓          │
+│                                                      │
+│   ▓ target acquired: Night City                      │
+│     classification: FICTIONAL UNIVERSE               │
+│     origin: Cyberpunk 2077                           │
+│                                                      │
+│   ▓soul fragments captured: 24                       │
+│     extraction time: 12.0s                           │
+│                                                      │
+└──────────────────────────────────────────────────────┘"
+`;
+
+exports[`SoulkillerProtocolPanel > snapshot: world mode unknown setting 1`] = `
+"┌──────────────────────────────────────────────────────┐
+│  WORLDFORGE PROTOCOL                                 │
+│                                                      │
+│   ▓ Initializing world scan...         ✓             │
+│                                                      │
+│   ▓ target scan: MyOriginalWorld                     │
+│     classification: UNKNOWN ENTITY                   │
+│     cyberspace footprint: INSUFFICIENT               │
+│                                                      │
+│   ██ MANUAL EXTRACTION REQUIRED ██                   │
+│                                                      │
+│   target not found in cyberspace.                    │
+│   provide raw neural data to proceed.                │
+│                                                      │
+└──────────────────────────────────────────────────────┘"
+`;

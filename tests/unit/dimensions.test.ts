@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/agent/dimensions.js'
+import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/agent/soul-dimensions.js'
 
 describe('analyzeCoverage', () => {
   it('returns all uncovered for empty input', () => {
@@ -73,13 +73,42 @@ describe('analyzeCoverage', () => {
     expect(report.coverage.quotes.covered).toBe(true)
   })
 
-  it('canReport=true when 3+ dimensions with 2+ required', () => {
+  it('detects capabilities dimension', () => {
+    const report = analyzeCoverage([
+      { content: 'Her Noble Phantasm is Excalibur, with power stats of A++.' },
+    ])
+    expect(report.coverage.capabilities.covered).toBe(true)
+  })
+
+  it('detects capabilities dimension from Chinese keywords', () => {
+    const report = analyzeCoverage([
+      { content: '阿尔托莉雅的宝具是Excalibur，属性为A++' },
+    ])
+    expect(report.coverage.capabilities.covered).toBe(true)
+  })
+
+  it('detects milestones dimension', () => {
+    const report = analyzeCoverage([
+      { content: 'The key events in her timeline include drawing the sword and the fall of Camelot.' },
+    ])
+    expect(report.coverage.milestones.covered).toBe(true)
+  })
+
+  it('detects milestones dimension from Chinese keywords', () => {
+    const report = analyzeCoverage([
+      { content: '阿尔托莉雅的关键事件包括拔出石中剑和卡美洛的陨落' },
+    ])
+    expect(report.coverage.milestones.covered).toBe(true)
+  })
+
+  it('canReport=true when 4+ dimensions with 2+ required', () => {
     const report = analyzeCoverage([
       { content: 'Character background and origin story.' },
       { content: 'She said "I am the king of knights."' },
       { content: 'Her personality is determined and stoic.' },
+      { content: 'Her abilities include swordsmanship and magic resistance.' },
     ])
-    expect(report.totalCovered).toBeGreaterThanOrEqual(3)
+    expect(report.totalCovered).toBeGreaterThanOrEqual(4)
     expect(report.requiredCovered).toBeGreaterThanOrEqual(2)
     expect(report.canReport).toBe(true)
   })
@@ -109,7 +138,7 @@ describe('generateSearchPlan', () => {
     const plan = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria Pendragon', '阿尔托莉雅', 'Fate/Stay Night')
     expect(plan.classification).toBe('DIGITAL_CONSTRUCT')
     expect(plan.englishName).toBe('Artoria Pendragon')
-    expect(plan.dimensions).toHaveLength(6)
+    expect(plan.dimensions).toHaveLength(8)
 
     const identityPlan = plan.dimensions.find((d) => d.dimension === 'identity')!
     expect(identityPlan.priority).toBe('required')
@@ -121,9 +150,55 @@ describe('generateSearchPlan', () => {
     expect(quotesPlan.queries.some((q) => q.includes('台词'))).toBe(true)
   })
 
+  it('includes capabilities and milestones dimensions', () => {
+    const plan = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria Pendragon', '阿尔托莉雅', 'Fate/Stay Night')
+    const capPlan = plan.dimensions.find((d) => d.dimension === 'capabilities')!
+    expect(capPlan.priority).toBe('important')
+    expect(capPlan.queries.some((q) => q.includes('abilities') || q.includes('能力'))).toBe(true)
+
+    const milPlan = plan.dimensions.find((d) => d.dimension === 'milestones')!
+    expect(milPlan.priority).toBe('important')
+    expect(milPlan.queries.some((q) => q.includes('timeline') || q.includes('时间线'))).toBe(true)
+  })
+
+  it('appends domain tags to capabilities/milestones queries', () => {
+    const plan = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria', '阿尔托莉雅', 'Fate', { domain: ['骑士', '剑术'] })
+    const capPlan = plan.dimensions.find((d) => d.dimension === 'capabilities')!
+    // Should have both base queries and tag-enhanced queries
+    expect(capPlan.queries.some((q) => q.includes('骑士'))).toBe(true)
+    expect(capPlan.queries.some((q) => q.includes('剑术'))).toBe(true)
+
+    const milPlan = plan.dimensions.find((d) => d.dimension === 'milestones')!
+    expect(milPlan.queries.some((q) => q.includes('骑士'))).toBe(true)
+  })
+
+  it('appends domain tags to thoughts/behavior queries', () => {
+    const plan = generateSearchPlan('PUBLIC_ENTITY', 'Zhang Yiming', '张一鸣', 'ByteDance', { domain: ['企业家'] })
+    const thoughtsPlan = plan.dimensions.find((d) => d.dimension === 'thoughts')!
+    expect(thoughtsPlan.queries.some((q) => q.includes('企业家'))).toBe(true)
+  })
+
+  it('does not append tags to identity/quotes/expression/relations', () => {
+    const plan = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria', '阿尔托莉雅', 'Fate', { domain: ['骑士'] })
+    const identityPlan = plan.dimensions.find((d) => d.dimension === 'identity')!
+    expect(identityPlan.queries.every((q) => !q.includes('骑士'))).toBe(true)
+
+    const quotesPlan = plan.dimensions.find((d) => d.dimension === 'quotes')!
+    expect(quotesPlan.queries.every((q) => !q.includes('骑士'))).toBe(true)
+  })
+
+  it('falls back to base templates when no tags provided', () => {
+    const planNoTags = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria', '阿尔托莉雅', 'Fate')
+    const planEmptyTags = generateSearchPlan('DIGITAL_CONSTRUCT', 'Artoria', '阿尔托莉雅', 'Fate', { domain: [] })
+
+    const capNoTags = planNoTags.dimensions.find((d) => d.dimension === 'capabilities')!
+    const capEmpty = planEmptyTags.dimensions.find((d) => d.dimension === 'capabilities')!
+    expect(capNoTags.queries.length).toBe(capEmpty.queries.length)
+  })
+
   it('generates plan for PUBLIC_ENTITY', () => {
     const plan = generateSearchPlan('PUBLIC_ENTITY', 'Elon Musk', 'Elon Musk', 'Tesla/SpaceX')
-    expect(plan.dimensions).toHaveLength(6)
+    expect(plan.dimensions).toHaveLength(8)
 
     const quotesPlan = plan.dimensions.find((d) => d.dimension === 'quotes')!
     expect(quotesPlan.queries.some((q) => q.includes('interviews'))).toBe(true)
@@ -131,7 +206,7 @@ describe('generateSearchPlan', () => {
 
   it('generates plan for HISTORICAL_RECORD', () => {
     const plan = generateSearchPlan('HISTORICAL_RECORD', 'Confucius', '孔子', 'Ancient China')
-    expect(plan.dimensions).toHaveLength(6)
+    expect(plan.dimensions).toHaveLength(8)
 
     const quotesPlan = plan.dimensions.find((d) => d.dimension === 'quotes')!
     expect(quotesPlan.queries.some((q) => q.includes('语录'))).toBe(true)

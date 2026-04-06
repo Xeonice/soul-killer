@@ -1,16 +1,15 @@
 # Evolve Command
 
-### Requirement: Evolve command merges feed and distill
-The system SHALL provide an `/evolve` command with subcommands: default (data supplementation), `status` (data audit), and `rollback` (snapshot restore). The default flow supports multi-source data input followed by delta or full distillation.
+### Requirement: /evolve 命令路由
+`/evolve` 不带子命令时 SHALL 渲染 `CreateCommand(supplementSoul={name, dir})`，进入 Soul 补充模式。`/evolve status` 和 `/evolve rollback` 子命令 SHALL 保持不变。
 
-#### Scenario: User runs evolve with valid soul (new flow)
-- **WHEN** user submits `/evolve` while a soul is loaded
-- **THEN** the system enters interactive mode with the following steps:
-  1. Source type selection menu (markdown / url / text / feedback)
-  2. Source-specific data input
-  3. Dimension selection (identity / style / behaviors / all)
-  4. Distillation mode confirmation (增量 delta / 全量 full)
-  5. Auto-snapshot → ingest → distill → merge → done
+#### Scenario: /evolve 进入补充模式
+- **WHEN** 用户执行 `/evolve`（已加载 Soul）
+- **THEN** 渲染 CreateCommand 补充模式，显示数据源选择
+
+#### Scenario: /evolve status 保持不变
+- **WHEN** 用户执行 `/evolve status`
+- **THEN** 渲染 EvolveStatusCommand（行为不变）
 
 #### Scenario: User runs evolve with soul name argument
 - **WHEN** user submits `/evolve mysoul` where "mysoul" exists but is not currently loaded

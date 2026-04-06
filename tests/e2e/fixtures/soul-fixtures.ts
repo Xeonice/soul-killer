@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { packageSoul, generateManifest, appendEvolveEntry } from '../../../src/soul/package.js'
 import { generateSoulFiles } from '../../../src/distill/generator.js'
+import type { WorldBinding } from '../../../src/world/binding.js'
 import type { SoulType } from '../../../src/soul/manifest.js'
 import type { SoulChunk } from '../../../src/ingest/types.js'
 
@@ -113,4 +114,56 @@ export function createEvolvedSoul(
   }
 
   return { soulDir, name, chunkCount: chunks.length }
+}
+
+export interface TestWorld {
+  worldDir: string
+  name: string
+}
+
+export function createTestWorld(
+  homeDir: string,
+  name: string,
+  opts?: { displayName?: string; description?: string; entries?: Array<{ name: string; content: string }> },
+): TestWorld {
+  const worldDir = path.join(homeDir, '.soulkiller', 'worlds', name)
+  const entriesDir = path.join(worldDir, 'entries')
+  fs.mkdirSync(entriesDir, { recursive: true })
+
+  const manifest = {
+    name,
+    display_name: opts?.displayName ?? name,
+    version: '0.1.0',
+    created_at: new Date().toISOString(),
+    description: opts?.description ?? `Test world: ${name}`,
+    entry_count: opts?.entries?.length ?? 1,
+    defaults: { context_budget: 2000, injection_position: 'after_soul' },
+    worldType: 'fictional-existing',
+    tags: {},
+    evolve_history: [],
+  }
+  fs.writeFileSync(path.join(worldDir, 'world.json'), JSON.stringify(manifest, null, 2))
+
+  const entries = opts?.entries ?? [
+    { name: 'geography', content: 'Night City is a sprawling megalopolis on the coast of California.' },
+  ]
+  for (const entry of entries) {
+    fs.writeFileSync(
+      path.join(entriesDir, `${entry.name}.md`),
+      `---\nname: ${entry.name}\nkeywords: []\npriority: 100\nmode: always\nscope: lore\n---\n\n${entry.content}`,
+    )
+  }
+
+  return { worldDir, name }
+}
+
+export function bindWorldToSoul(soulDir: string, worldName: string): void {
+  const bindingsDir = path.join(soulDir, 'bindings')
+  fs.mkdirSync(bindingsDir, { recursive: true })
+  const binding: WorldBinding = {
+    world: worldName,
+    enabled: true,
+    order: 0,
+  }
+  fs.writeFileSync(path.join(bindingsDir, `${worldName}.json`), JSON.stringify(binding, null, 2))
 }

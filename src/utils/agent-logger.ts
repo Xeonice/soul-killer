@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { createHash } from 'node:crypto'
 import { logger } from './logger.js'
-import type { CaptureResult, TargetClassification } from '../agent/soul-capture-agent.js'
+import type { CaptureResult } from '../agent/soul-capture-agent.js'
 
 const LOG_DIR = path.join(os.homedir(), '.soulkiller', 'logs', 'agent')
 

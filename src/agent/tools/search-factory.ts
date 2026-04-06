@@ -1,8 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { SoulkillerConfig } from '../../config/schema.js'
-import type { TargetClassification } from '../soul-capture-agent.js'
-import { generateSearchPlan, analyzeCoverage } from '../dimensions.js'
+import type { CaptureStrategy } from '../capture-strategy.js'
 import { executeTavilySearch } from './tavily-search.js'
 import type { SearchResult } from './tavily-search.js'
 import { extractPagesParallel, extractPageContent } from './page-extractor.js'
@@ -14,9 +13,15 @@ import type { AgentLogger } from '../../utils/agent-logger.js'
 /**
  * Creates AI SDK tool() definitions for ToolLoopAgent.
  * Tools have execute functions — the LLM calls them autonomously.
+ * The strategy parameter determines the classification/dimension enums.
  */
-export function createAgentTools(config: SoulkillerConfig, options?: { searxngAvailable?: boolean; agentLog?: AgentLogger }) {
+export function createAgentTools(
+  config: SoulkillerConfig,
+  options?: { searxngAvailable?: boolean; agentLog?: AgentLogger; strategy?: CaptureStrategy; tags?: { domain?: string[] } },
+) {
   const agentLog = options?.agentLog
+  const strategy = options?.strategy
+  const tags = options?.tags
   const tavilyKey = config.search?.tavily_api_key
   const exaKey = config.search?.exa_api_key
   const configProvider = config.search?.provider
@@ -111,8 +116,12 @@ export function createAgentTools(config: SoulkillerConfig, options?: { searxngAv
       const planStart = Date.now()
       agentLog?.toolInternal(`Summary length: ${summary.length} chars`)
 
-      const classMatch = summary.match(/DIGITAL_CONSTRUCT|PUBLIC_ENTITY|HISTORICAL_RECORD|UNKNOWN_ENTITY/i)
-      const classification = (classMatch?.[0]?.toUpperCase() ?? 'UNKNOWN_ENTITY') as TargetClassification
+      // Build classification regex from strategy values
+      const classValues = strategy?.getClassificationValues() ?? ['DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD', 'UNKNOWN_ENTITY']
+      const classRegex = new RegExp(classValues.join('|'), 'i')
+      const classMatch = summary.match(classRegex)
+      const unknownClass = classValues.find((c) => c.includes('UNKNOWN')) ?? classValues[classValues.length - 1]!
+      const classification = classMatch?.[0]?.toUpperCase() ?? unknownClass
 
       const enNameMatch = summary.match(/(?:english\s*name|英文名)[:\s]*["']?([A-Za-z][\w\s.-]+)/i)
         ?? summary.match(/(?:known\s+as|called)\s+["']?([A-Za-z][\w\s.-]+)/i)
@@ -126,8 +135,11 @@ export function createAgentTools(config: SoulkillerConfig, options?: { searxngAv
 
       agentLog?.toolInternal(`Parsed: classification=${classification}, en=${englishName}, local=${localName}, origin=${origin}`)
 
-      const plan = generateSearchPlan(classification, englishName || localName, localName || englishName, origin)
-      agentLog?.toolInternal(`Plan: ${plan.dimensions.length} dimensions`, { durationMs: Date.now() - planStart })
+      const plan = strategy
+        ? strategy.generateSearchPlan(classification, englishName || localName, localName || englishName, origin, tags)
+        : { classification, englishName, dimensions: [] }
+      const dimCount = (plan as any).dimensions?.length ?? 0
+      agentLog?.toolInternal(`Plan: ${dimCount} dimensions`, { durationMs: Date.now() - planStart })
       return plan
     },
   })
@@ -142,16 +154,24 @@ export function createAgentTools(config: SoulkillerConfig, options?: { searxngAv
     execute: async ({ extractions }) => {
       const coverageStart = Date.now()
       agentLog?.toolInternal(`Extractions to analyze: ${extractions.length}`)
-      const report = analyzeCoverage(extractions)
-      agentLog?.toolInternal(`Coverage: ${report.totalCovered}/6 dims, canReport=${report.canReport}`, { durationMs: Date.now() - coverageStart })
+      const report = strategy
+        ? strategy.analyzeCoverage(extractions)
+        : { totalCovered: 0, canReport: false, suggestion: 'No strategy' }
+      const totalCovered = (report as any).totalCovered ?? 0
+      const canReport = (report as any).canReport ?? false
+      agentLog?.toolInternal(`Coverage: ${totalCovered} dims, canReport=${canReport}`, { durationMs: Date.now() - coverageStart })
       return report
     },
   })
 
+  // Build dynamic enums from strategy
+  const classificationValues = strategy?.getClassificationValues() ?? ['DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD', 'UNKNOWN_ENTITY']
+  const dimensionValues = strategy?.getDimensionValues() ?? ['identity', 'quotes', 'expression', 'thoughts', 'behavior', 'relations']
+
   const reportFindings = tool({
     description: 'Report your findings when you have gathered enough information about the target. Calling this tool ends the search. Only call after checkCoverage shows canReport=true, or after exhausting search options. Submit 20-40 extractions total, with 3-8 per dimension.',
     inputSchema: z.object({
-      classification: z.enum(['DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD', 'UNKNOWN_ENTITY'])
+      classification: z.enum(classificationValues as [string, ...string[]])
         .describe('The target type classification'),
       origin: z.string().optional().describe('Source work, organization, or era'),
       summary: z.string().describe('One paragraph summary of who/what the target is'),
@@ -159,7 +179,7 @@ export function createAgentTools(config: SoulkillerConfig, options?: { searxngAv
         content: z.string().describe('A single piece of extracted information — one fact, one quote, or one observation. Do NOT merge multiple findings into one extraction. Copy raw content from search results rather than summarizing.'),
         url: z.string().optional().describe('Source URL'),
         searchQuery: z.string().describe('The search query that found this'),
-        dimension: z.enum(['identity', 'quotes', 'expression', 'thoughts', 'behavior', 'relations'])
+        dimension: z.enum(dimensionValues as [string, ...string[]])
           .describe('Which profile dimension this extraction belongs to'),
       })),
     }),

@@ -1,109 +1,153 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useRef } from 'react'
 import { Text, Box, useInput } from 'ink'
-import { TextInput } from '../components/text-input.js'
+import { TextInput, CheckboxSelect } from '../components/text-input.js'
+import { SoulkillerProtocolPanel } from '../animation/soulkiller-protocol-panel.js'
+import { WorldDistillPanel } from '../components/world-distill-panel.js'
 import { WorldDistillReview } from './world-distill-review.js'
-import { createWorld, worldExists, deleteWorld } from '../../world/manifest.js'
-import { addEntry, loadAllEntries, type EntryMeta } from '../../world/entry.js'
+import { createWorld, worldExists, deleteWorld, saveWorld, loadWorld } from '../../world/manifest.js'
+import { addEntry, loadAllEntries } from '../../world/entry.js'
 import { WorldDistiller, type WorldDistillProgress, type GeneratedEntry } from '../../world/distill.js'
+import { captureWorld } from '../../agent/world-capture-agent.js'
+import { WorldCaptureStrategy } from '../../agent/world-capture-strategy.js'
 import { extractPageContent } from '../../agent/tools/page-extractor.js'
 import { getLLMClient } from '../../llm/client.js'
 import { loadConfig } from '../../config/loader.js'
+import { parseWorldTags, emptyWorldTagSet, type WorldTagSet } from '../../tags/world-taxonomy.js'
+import { bindWorld } from '../../world/binding.js'
+import { ALL_WORLD_DIMENSIONS, WORLD_DIMENSIONS } from '../../agent/world-dimensions.js'
+import type { WorldType, WorldClassification, WorldDimension } from '../../agent/world-dimensions.js'
 import type { SoulChunk } from '../../ingest/types.js'
-import { PRIMARY, ACCENT, DIM, WARNING } from '../animation/colors.js'
+import type { CaptureProgress } from '../../agent/capture-strategy.js'
+import type { ToolCallDisplay, AgentPhase, SearchPlanDimDisplay } from '../animation/soulkiller-protocol-panel.js'
+import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
 import crypto from 'node:crypto'
 
-type WizardStep =
+/**
+ * Flow:
+ *   type-select → name → name-conflict? → display-name → description → tags → confirm
+ *   → data-sources
+ *   → [if web-search] capturing → search-confirm
+ *   → [if markdown/url] source-path
+ *   → distilling → review → creating → bind-prompt? → done
+ */
+type WorldCreateStep =
+  | 'type-select'
   | 'name'
   | 'name-conflict'
   | 'display-name'
   | 'description'
-  | 'method-select'
-  // manual
-  | 'manual-background'
-  | 'manual-rules'
-  | 'manual-atmosphere'
-  | 'manual-more'
-  | 'manual-entry-name'
-  | 'manual-entry-kw'
-  | 'manual-entry-content'
-  // distill
-  | 'distill-path'
-  | 'distilling'
-  | 'distill-review'
-  // url
-  | 'url-input'
-  | 'url-fetching'
-  | 'url-review'
-  // common
+  | 'tags'
   | 'confirm'
+  | 'data-sources'
+  | 'capturing'
+  | 'search-confirm'
+  | 'source-path'
+  | 'distilling'
+  | 'review'
   | 'creating'
+  | 'bind-prompt'
   | 'done'
   | 'error'
 
-type CreateMethod = 'manual' | 'distill' | 'url' | 'blank'
-type ConflictChoice = 'overwrite' | 'rename'
+type DataSourceOption = 'web-search' | 'markdown' | 'url-list'
+
+const TYPE_OPTIONS: { value: WorldType; labelKey: string; descKey: string }[] = [
+  { value: 'fictional-existing', labelKey: 'world.type.fictional_existing', descKey: 'world.type.fictional_existing_desc' },
+  { value: 'fictional-original', labelKey: 'world.type.fictional_original', descKey: 'world.type.fictional_original_desc' },
+  { value: 'real', labelKey: 'world.type.real', descKey: 'world.type.real_desc' },
+]
 
 interface WorldCreateWizardProps {
+  soulDir?: string
+  /** When provided, enter supplement mode directly (skip to data-sources) */
+  supplementWorld?: string
   onComplete: () => void
   onCancel: () => void
 }
 
-const METHODS: { value: CreateMethod; labelKey: string; descKey: string }[] = [
-  { value: 'manual', labelKey: 'wizard.method.manual', descKey: 'wizard.method.manual_desc' },
-  { value: 'distill', labelKey: 'wizard.method.distill', descKey: 'wizard.method.distill_desc' },
-  { value: 'url', labelKey: 'wizard.method.url', descKey: 'wizard.method.url_desc' },
-  { value: 'blank', labelKey: 'wizard.method.blank', descKey: 'wizard.method.blank_desc' },
-]
+export function WorldCreateWizard({ soulDir, supplementWorld, onComplete, onCancel }: WorldCreateWizardProps) {
+  // If supplementWorld provided, load manifest and start at data-sources
+  const initState = (() => {
+    if (supplementWorld) {
+      const existing = loadWorld(supplementWorld)
+      if (existing) {
+        return {
+          step: 'data-sources' as WorldCreateStep,
+          worldName: existing.name,
+          displayName: existing.display_name,
+          description: existing.description,
+          worldType: existing.worldType,
+          tags: existing.tags,
+          supplementMode: true,
+        }
+      }
+    }
+    return {
+      step: 'type-select' as WorldCreateStep,
+      worldName: '',
+      displayName: '',
+      description: '',
+      worldType: 'fictional-existing' as WorldType,
+      tags: emptyWorldTagSet(),
+      supplementMode: false,
+    }
+  })()
 
-export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardProps) {
-  const [step, setStep] = useState<WizardStep>('name')
-  const [worldName, setWorldName] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [description, setDescription] = useState('')
-  const [method, setMethod] = useState<CreateMethod>('manual')
+  const [step, setStep] = useState<WorldCreateStep>(initState.step)
+  const [worldType, setWorldType] = useState<WorldType>(initState.worldType)
+  const [worldName, setWorldName] = useState(initState.worldName)
+  const [displayName, setDisplayName] = useState(initState.displayName)
+  const [description, setDescription] = useState(initState.description)
+  const [tags, setTags] = useState<WorldTagSet>(initState.tags)
+  const [parsingTags, setParsingTags] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [supplementMode, setSupplementMode] = useState(initState.supplementMode)
 
   // Cursor states
-  const [methodCursor, setMethodCursor] = useState(0)
+  const [typeCursor, setTypeCursor] = useState(0)
   const [conflictCursor, setConflictCursor] = useState(0)
   const [confirmCursor, setConfirmCursor] = useState(0)
-  const [moreCursor, setMoreCursor] = useState(0)
+  const [searchConfirmCursor, setSearchConfirmCursor] = useState(0)
+  const [bindCursor, setBindCursor] = useState(0)
 
-  // Collected entries (from all branches)
-  const [entries, setEntries] = useState<GeneratedEntry[]>([])
+  // Data source state
+  const [selectedSources, setSelectedSources] = useState<DataSourceOption[]>([])
+  const [currentSourceIndex, setCurrentSourceIndex] = useState(0)
+  const [sourcePaths, setSourcePaths] = useState<Map<DataSourceOption, string>>(new Map())
 
-  // Manual entry temp state
-  const [tempEntryName, setTempEntryName] = useState('')
-  const [tempEntryKw, setTempEntryKw] = useState('')
+  // Agent state
+  const [classification, setClassification] = useState<string | undefined>()
+  const [origin, setOrigin] = useState<string | undefined>()
+  const [toolCalls, setToolCalls] = useState<ToolCallDisplay[]>([])
+  const [protocolPhase, setProtocolPhase] = useState<AgentPhase>('initiating')
+  const currentPhaseRef = useRef<AgentPhase>('initiating')
+  const [agentChunks, setAgentChunks] = useState<SoulChunk[]>([])
+  const [agentElapsed, setAgentElapsed] = useState(0)
+  const [searchPlan, setSearchPlan] = useState<SearchPlanDimDisplay[]>([])
+  const [chunkCount, setChunkCount] = useState(0)
+  const [filterProgress, setFilterProgress] = useState<{ kept: number; total: number } | undefined>()
+  // Per-dimension chunk breakdown from agent extractions
+  const [dimBreakdown, setDimBreakdown] = useState<Record<string, number>>({})
 
   // Distill state
-  const [distillProgress, setDistillProgress] = useState<WorldDistillProgress | null>(null)
   const [distillEntries, setDistillEntries] = useState<GeneratedEntry[]>([])
+  const [entries, setEntries] = useState<GeneratedEntry[]>([])
+  const [distillProgress, setDistillProgress] = useState<WorldDistillProgress | null>(null)
 
-  // URL state
-  const [urls, setUrls] = useState<string[]>([])
-  const [urlFetchStatus, setUrlFetchStatus] = useState('')
+  const worldStrategy = new WorldCaptureStrategy()
+  const classificationLabels = worldStrategy.getClassificationLabels()
 
   // --- Input handling ---
   useInput((_input, key) => {
-    if (key.escape) {
-      onCancel()
-      return
-    }
+    if (key.escape) { onCancel(); return }
 
-    if (step === 'method-select') {
-      if (key.upArrow) setMethodCursor((c) => (c - 1 + METHODS.length) % METHODS.length)
-      if (key.downArrow) setMethodCursor((c) => (c + 1) % METHODS.length)
+    if (step === 'type-select') {
+      if (key.upArrow) setTypeCursor((c) => (c - 1 + TYPE_OPTIONS.length) % TYPE_OPTIONS.length)
+      if (key.downArrow) setTypeCursor((c) => (c + 1) % TYPE_OPTIONS.length)
       if (key.return) {
-        const selected = METHODS[methodCursor]!
-        setMethod(selected.value)
-        switch (selected.value) {
-          case 'manual': setStep('manual-background'); break
-          case 'distill': setStep('distill-path'); break
-          case 'url': setStep('url-input'); break
-          case 'blank': setStep('confirm'); break
-        }
+        setWorldType(TYPE_OPTIONS[typeCursor]!.value)
+        setStep('name')
       }
       return
     }
@@ -112,13 +156,24 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
       if (key.upArrow || key.downArrow) setConflictCursor((c) => (c + 1) % 2)
       if (key.return) {
         if (conflictCursor === 0) {
-          // overwrite
+          // Overwrite: delete existing and start fresh
           deleteWorld(worldName)
+          setSupplementMode(false)
           setStep('display-name')
         } else {
-          // rename
-          setWorldName('')
-          setStep('name')
+          // Supplement: load existing world data, skip to data-sources
+          const existing = loadWorld(worldName)
+          if (existing) {
+            setDisplayName(existing.display_name)
+            setDescription(existing.description)
+            setWorldType(existing.worldType)
+            setTags(existing.tags)
+            setSupplementMode(true)
+            setStep('data-sources')
+          } else {
+            setErrorMsg(`Failed to load world "${worldName}"`)
+            setStep('error')
+          }
         }
       }
       return
@@ -127,42 +182,66 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
     if (step === 'confirm') {
       if (key.upArrow || key.downArrow) setConfirmCursor((c) => (c + 1) % 2)
       if (key.return) {
-        if (confirmCursor === 0) {
-          doCreate()
+        if (confirmCursor === 0) setStep('data-sources')
+        else setStep('type-select')
+      }
+      return
+    }
+
+    if (step === 'search-confirm') {
+      const optionCount = classification === 'UNKNOWN_SETTING' ? 2 : 2
+      if (key.upArrow || key.downArrow) setSearchConfirmCursor((c) => (c + 1) % optionCount)
+      if (key.return) {
+        if (classification === 'UNKNOWN_SETTING') {
+          if (searchConfirmCursor === 0) { setWorldName(''); setStep('name') }
+          else proceedAfterSearch()
         } else {
-          // back to method select, keep name/display/desc
-          setEntries([])
-          setStep('method-select')
+          if (searchConfirmCursor === 0) proceedAfterSearch()
+          else { resetSearchState(); setWorldName(''); setStep('name') }
         }
       }
       return
     }
 
-    if (step === 'manual-more') {
-      if (key.upArrow || key.downArrow) setMoreCursor((c) => (c + 1) % 2)
+    if (step === 'bind-prompt') {
+      if (key.upArrow || key.downArrow) setBindCursor((c) => (c + 1) % 2)
       if (key.return) {
-        if (moreCursor === 0) {
-          setTempEntryName('')
-          setTempEntryKw('')
-          setStep('manual-entry-name')
-        } else {
-          setStep('confirm')
-        }
+        if (bindCursor === 0 && soulDir) bindWorld(soulDir, worldName)
+        setStep('done')
+        setTimeout(onComplete, 100)
       }
       return
     }
   })
 
-  // --- Actions ---
+  function resetSearchState() {
+    setClassification(undefined)
+    setOrigin(undefined)
+    setToolCalls([])
+    setSearchPlan([])
+    setAgentChunks([])
+    setDimBreakdown({})
+    setChunkCount(0)
+  }
+
+  // After search confirm, proceed to collect other source paths or start distill
+  function proceedAfterSearch() {
+    const needsPath = selectedSources.filter((s) => s !== 'web-search')
+    if (needsPath.length > 0) {
+      setCurrentSourceIndex(0)
+      setStep('source-path')
+    } else {
+      startDistill()
+    }
+  }
+
+  // --- Input handlers ---
   function handleName(value: string) {
     const name = value.trim()
     if (!name) return
     setWorldName(name)
-    if (worldExists(name)) {
-      setStep('name-conflict')
-    } else {
-      setStep('display-name')
-    }
+    if (worldExists(name)) setStep('name-conflict')
+    else setStep('display-name')
   }
 
   function handleDisplayName(value: string) {
@@ -172,186 +251,223 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
 
   function handleDescription(value: string) {
     setDescription(value.trim())
-    setStep('method-select')
+    setStep('tags')
   }
 
-  function handleManualBackground(value: string) {
-    if (value.trim()) {
-      setEntries((prev) => [...prev, {
-        meta: { name: 'core-background', keywords: [], priority: 900, mode: 'always', scope: 'background' },
-        content: value.trim(),
-      }])
-    }
-    setStep('manual-rules')
-  }
-
-  function handleManualRules(value: string) {
-    if (value.trim()) {
-      setEntries((prev) => [...prev, {
-        meta: { name: 'core-rules', keywords: [], priority: 800, mode: 'always', scope: 'rule' },
-        content: value.trim(),
-      }])
-    }
-    setStep('manual-atmosphere')
-  }
-
-  function handleManualAtmosphere(value: string) {
-    if (value.trim()) {
-      setEntries((prev) => [...prev, {
-        meta: { name: 'core-atmosphere', keywords: [], priority: 700, mode: 'always', scope: 'atmosphere' },
-        content: value.trim(),
-      }])
-    }
-    setStep('manual-more')
-  }
-
-  function handleManualEntryName(value: string) {
-    if (!value.trim()) { setStep('manual-more'); return }
-    setTempEntryName(value.trim())
-    setStep('manual-entry-kw')
-  }
-
-  function handleManualEntryKw(value: string) {
-    setTempEntryKw(value.trim())
-    setStep('manual-entry-content')
-  }
-
-  function handleManualEntryContent(value: string) {
-    if (value.trim()) {
-      setEntries((prev) => [...prev, {
-        meta: {
-          name: tempEntryName,
-          keywords: tempEntryKw.split(',').map((k) => k.trim()).filter(Boolean),
-          priority: 100,
-          mode: 'keyword',
-          scope: 'lore',
-        },
-        content: value.trim(),
-      }])
-    }
-    setMoreCursor(0)
-    setStep('manual-more')
-  }
-
-  // --- Distill ---
-  function handleDistillPath(sourcePath: string) {
-    if (!sourcePath.trim()) return
-    setStep('distilling')
-
-    const config = loadConfig()
-    if (!config) { setErrorMsg('Config not loaded'); setStep('error'); return }
-
-    const client = getLLMClient()
-    const model = config.llm.distill_model ?? config.llm.default_model
-    const distiller = new WorldDistiller(client, model)
-    distiller.on('progress', (p: WorldDistillProgress) => setDistillProgress(p))
-
-    distiller.distill(worldName, sourcePath.trim(), 'markdown')
-      .then((generated) => {
-        setDistillEntries(generated)
-        if (generated.length === 0) {
-          setStep('confirm')
-        } else {
-          setStep('distill-review')
-        }
-      })
-      .catch((err) => { setErrorMsg(String(err)); setStep('error') })
-  }
-
-  function handleDistillReviewComplete(accepted: GeneratedEntry[]) {
-    setEntries((prev) => [...prev, ...accepted])
+  async function handleTags(value: string) {
+    if (!value.trim()) { setTags(emptyWorldTagSet()); setStep('confirm'); return }
+    setParsingTags(true)
+    try {
+      const client = getLLMClient()
+      const config = loadConfig()
+      const model = config?.llm.distill_model ?? config?.llm.default_model ?? ''
+      setTags(await parseWorldTags(value, client, model))
+    } catch { setTags(emptyWorldTagSet()) }
+    setParsingTags(false)
     setStep('confirm')
   }
 
-  // --- URL ---
-  function handleUrlInput(value: string) {
-    if (value.trim()) {
-      setUrls((prev) => [...prev, value.trim()])
-    } else if (urls.length > 0) {
-      // empty line = done entering URLs
-      setStep('url-fetching')
-      fetchUrls()
+  function handleDataSourcesSubmit(sources: DataSourceOption[]) {
+    if (sources.length === 0) {
+      // No sources at all → create empty world
+      doCreate([])
+      return
+    }
+    setSelectedSources(sources)
+
+    if (sources.includes('web-search')) {
+      startCapture()
+    } else {
+      // No AI search, go straight to path collection or distill
+      const needsPath = sources.filter((s) => s !== 'web-search')
+      if (needsPath.length > 0) {
+        setCurrentSourceIndex(0)
+        setStep('source-path')
+      } else {
+        startDistill()
+      }
     }
   }
 
-  async function fetchUrls() {
-    const chunks: SoulChunk[] = []
-    for (let i = 0; i < urls.length; i++) {
-      setUrlFetchStatus(`${t('wizard.url.fetching')} [${i + 1}/${urls.length}]: ${urls[i]}`)
-      try {
-        const content = await extractPageContent(urls[i])
-        if (content) {
-          chunks.push({
-            id: crypto.randomUUID(),
-            source: 'web',
-            content,
-            timestamp: new Date().toISOString(),
-            context: 'public',
-            type: 'knowledge',
-            metadata: { url: urls[i] },
-          })
-        }
-      } catch {
-        // Skip failed URLs
-      }
+  function handleSourcePath(path: string) {
+    if (!path.trim()) return
+    const nonWebSources = selectedSources.filter((s) => s !== 'web-search')
+    const current = nonWebSources[currentSourceIndex]!
+    const newPaths = new Map(sourcePaths)
+    newPaths.set(current, path.trim())
+    setSourcePaths(newPaths)
+
+    if (currentSourceIndex < nonWebSources.length - 1) {
+      setCurrentSourceIndex(currentSourceIndex + 1)
+    } else {
+      startDistill()
     }
+  }
 
-    if (chunks.length === 0) {
-      setUrlFetchStatus(t('wizard.url.no_content'))
-      setStep('confirm')
-      return
-    }
-
-    setUrlFetchStatus(t('wizard.url.distilling'))
-    const config = loadConfig()
-    if (!config) { setErrorMsg('Config not loaded'); setStep('error'); return }
-
-    const client = getLLMClient()
-    const model = config.llm.distill_model ?? config.llm.default_model
-    const distiller = new WorldDistiller(client, model)
-    distiller.on('progress', (p: WorldDistillProgress) => setDistillProgress(p))
-
-    // Use the distiller's classify → cluster → extract on the fetched chunks
-    // We call distill with a temp dir approach — but since we already have chunks,
-    // we use the internal flow. For simplicity, write chunks to temp markdown and distill.
-    const fs = await import('node:fs')
-    const path = await import('node:path')
-    const os = await import('node:os')
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulkiller-url-'))
-    for (let i = 0; i < chunks.length; i++) {
-      fs.writeFileSync(path.join(tmpDir, `url-${i}.md`), `# ${urls[i]}\n\n${chunks[i].content}`)
-    }
+  // --- AI Search ---
+  async function startCapture() {
+    setStep('capturing')
+    setProtocolPhase('initiating')
+    currentPhaseRef.current = 'initiating'
+    setToolCalls([])
+    setClassification(undefined)
+    setOrigin(undefined)
+    setSearchPlan([])
 
     try {
-      const generated = await distiller.distill(worldName, tmpDir, 'markdown')
-      fs.rmSync(tmpDir, { recursive: true })
-      setDistillEntries(generated)
-      if (generated.length === 0) {
-        setStep('confirm')
+      const config = loadConfig()
+      if (!config) { setErrorMsg('Config not loaded'); setStep('error'); return }
+
+      const result = await captureWorld(worldName, config, (progress: CaptureProgress) => {
+        if (progress.type === 'phase') {
+          setProtocolPhase(progress.phase)
+          currentPhaseRef.current = progress.phase
+        } else if (progress.type === 'tool_call') {
+          setToolCalls((prev) => [...prev, { tool: progress.tool, query: progress.query, status: 'running', phase: currentPhaseRef.current }])
+        } else if (progress.type === 'tool_result') {
+          setToolCalls((prev) => {
+            const updated = [...prev]
+            const last = updated.findLastIndex((tc) => tc.tool === progress.tool && tc.status === 'running')
+            if (last !== -1) updated[last] = { ...updated[last]!, status: 'done', resultCount: progress.resultCount }
+            return updated
+          })
+        } else if (progress.type === 'classification') {
+          setClassification(progress.classification)
+          setOrigin(progress.origin)
+        } else if (progress.type === 'search_plan') {
+          setSearchPlan(progress.dimensions)
+        } else if (progress.type === 'filter_progress') {
+          setFilterProgress({ kept: progress.kept, total: progress.total })
+        } else if (progress.type === 'chunks_extracted') {
+          setChunkCount(progress.count)
+        }
+      }, description || undefined)
+
+      setClassification(result.classification)
+      setOrigin(result.origin)
+      setAgentElapsed(result.elapsedMs)
+      setAgentChunks(result.chunks)
+
+      // Build per-dimension breakdown from chunks metadata
+      const breakdown: Record<string, number> = {}
+      for (const chunk of result.chunks) {
+        const dim = (chunk.metadata?.extraction_step as string) ?? 'unknown'
+        breakdown[dim] = (breakdown[dim] ?? 0) + 1
+      }
+      setDimBreakdown(breakdown)
+
+      if (result.classification === 'UNKNOWN_SETTING' || result.chunks.length === 0) {
+        setProtocolPhase('unknown')
+        setTimeout(() => setStep('search-confirm'), 1500)
       } else {
-        setStep('url-review')
+        setStep('search-confirm')
       }
     } catch (err) {
-      fs.rmSync(tmpDir, { recursive: true })
       setErrorMsg(String(err))
       setStep('error')
     }
   }
 
-  function handleUrlReviewComplete(accepted: GeneratedEntry[]) {
-    setEntries((prev) => [...prev, ...accepted])
-    setStep('confirm')
+  // --- Distill ---
+  async function startDistill() {
+    setStep('distilling')
+    setDistillProgress(null)
+    const config = loadConfig()
+    if (!config) { setErrorMsg('Config not loaded'); setStep('error'); return }
+
+    const client = getLLMClient()
+    const model = config.llm.distill_model ?? config.llm.default_model
+    const collectedEntries: GeneratedEntry[] = []
+
+    try {
+      let allChunks: SoulChunk[] = []
+
+      if (selectedSources.includes('web-search') && agentChunks.length > 0) {
+        allChunks = [...allChunks, ...agentChunks]
+      }
+
+      if (selectedSources.includes('url-list') && sourcePaths.has('url-list')) {
+        const urlsText = sourcePaths.get('url-list')!
+        const urls = urlsText.split(/[\n,]/).map((u) => u.trim()).filter(Boolean)
+        for (const url of urls) {
+          try {
+            const content = await extractPageContent(url)
+            if (content) {
+              allChunks.push({
+                id: crypto.randomUUID(), source: 'web', content,
+                timestamp: new Date().toISOString(), context: 'public',
+                type: 'knowledge', metadata: { url },
+              })
+            }
+          } catch { /* skip */ }
+        }
+      }
+
+      if (selectedSources.includes('markdown') && sourcePaths.has('markdown')) {
+        const distiller = new WorldDistiller(client, model)
+        distiller.on('progress', (p: WorldDistillProgress) => setDistillProgress(p))
+        const mdEntries = await distiller.distill(worldName, sourcePaths.get('markdown')!, 'markdown', classification as WorldClassification | undefined)
+        collectedEntries.push(...mdEntries)
+      }
+
+      if (allChunks.length > 0) {
+        const fs = await import('node:fs')
+        const nodePath = await import('node:path')
+        const os = await import('node:os')
+        const tmpDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'soulkiller-world-'))
+        for (let i = 0; i < allChunks.length; i++) {
+          fs.writeFileSync(nodePath.join(tmpDir, `chunk-${i}.md`), allChunks[i].content)
+        }
+        const distiller = new WorldDistiller(client, model)
+        distiller.on('progress', (p: WorldDistillProgress) => setDistillProgress(p))
+        const chunkEntries = await distiller.distill(worldName, tmpDir, 'markdown', classification as WorldClassification | undefined)
+        fs.rmSync(tmpDir, { recursive: true })
+        collectedEntries.push(...chunkEntries)
+      }
+
+      if (collectedEntries.length === 0) {
+        doCreate([])
+      } else {
+        setDistillEntries(collectedEntries)
+        setStep('review')
+      }
+    } catch (err) {
+      setErrorMsg(String(err))
+      setStep('error')
+    }
   }
 
-  // --- Create ---
-  function doCreate() {
+  function handleReviewComplete(accepted: GeneratedEntry[]) {
+    setEntries(accepted)
+    doCreate(accepted)
+  }
+
+  function doCreate(finalEntries: GeneratedEntry[]) {
     setStep('creating')
     try {
-      createWorld(worldName, displayName || worldName, description)
-      for (const entry of entries) {
+      let manifest
+      if (supplementMode) {
+        // Supplement: add entries to existing world
+        manifest = loadWorld(worldName)
+        if (!manifest) { setErrorMsg(`World "${worldName}" not found`); setStep('error'); return }
+      } else {
+        // Create new world
+        manifest = createWorld(worldName, displayName || worldName, description, worldType, tags)
+      }
+
+      for (const entry of finalEntries) {
         addEntry(worldName, entry.meta, entry.content)
       }
-      setStep('done')
+
+      // Update manifest
+      const allEntries = loadAllEntries(worldName)
+      manifest.entry_count = allEntries.length
+      if (classification) manifest.classification = classification as WorldClassification
+      if (origin) manifest.origin = origin
+      saveWorld(manifest)
+
+      if (soulDir) setStep('bind-prompt')
+      else { setStep('done'); setTimeout(onComplete, 100) }
     } catch (err) {
       setErrorMsg(String(err))
       setStep('error')
@@ -359,20 +475,17 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
   }
 
   // --- Render ---
-
   if (step === 'error') {
     setTimeout(onCancel, 100)
     return <Text color="red">ERROR: {errorMsg}</Text>
   }
 
   if (step === 'done') {
-    setTimeout(onComplete, 100)
-    const entryCount = entries.length
     return (
       <Box flexDirection="column">
-        <Text color={PRIMARY} bold>✓ {t('wizard.done', { name: worldName })}</Text>
+        <Text color={PRIMARY} bold>✓ {supplementMode ? t('wizard.done_supplement', { name: worldName }) : t('wizard.done', { name: worldName })}</Text>
         <Text color={DIM}>  {displayName} — {description}</Text>
-        <Text color={DIM}>  {t('wizard.done_entries', { count: String(entryCount) })}</Text>
+        <Text color={DIM}>  {t('wizard.done_entries', { count: String(entries.length) })}</Text>
       </Box>
     )
   }
@@ -383,19 +496,29 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
       <Text color={DIM}>  {t('wizard.esc_hint')}</Text>
       <Text> </Text>
 
-      {/* Step: name */}
-      {step === 'name' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.step.name')}: </Text>
-          <TextInput onSubmit={handleName} />
+      {step === 'type-select' && (
+        <Box flexDirection="column">
+          <Text color={DIM}>{t('world.type.select')}</Text>
+          {TYPE_OPTIONS.map((opt, i) => (
+            <Text key={opt.value}>
+              <Text color={i === typeCursor ? ACCENT : DIM}>{i === typeCursor ? '  ❯ ' : '    '}</Text>
+              <Text color={i === typeCursor ? PRIMARY : DIM} bold={i === typeCursor}>
+                {t(opt.labelKey).padEnd(14)}
+              </Text>
+              <Text color={DIM}>{t(opt.descKey)}</Text>
+            </Text>
+          ))}
         </Box>
       )}
 
-      {/* Step: name conflict */}
+      {step === 'name' && (
+        <Box><Text color={DIM}>{t('wizard.step.name')}: </Text><TextInput onSubmit={handleName} /></Box>
+      )}
+
       {step === 'name-conflict' && (
         <Box flexDirection="column">
           <Text color={WARNING}>⚠ {t('wizard.conflict.title', { name: worldName })}</Text>
-          {[t('wizard.conflict.overwrite'), t('wizard.conflict.rename')].map((label, i) => (
+          {[t('wizard.conflict.overwrite'), t('wizard.conflict.supplement')].map((label, i) => (
             <Text key={i}>
               <Text color={i === conflictCursor ? ACCENT : DIM}>{i === conflictCursor ? '  ❯ ' : '    '}</Text>
               <Text color={i === conflictCursor ? PRIMARY : DIM}>{label}</Text>
@@ -404,165 +527,36 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
         </Box>
       )}
 
-      {/* Step: display name */}
       {step === 'display-name' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.step.display_name', { name: worldName })}: </Text>
-          <TextInput onSubmit={handleDisplayName} />
-        </Box>
+        <Box><Text color={DIM}>{t('wizard.step.display_name', { name: worldName })}: </Text><TextInput onSubmit={handleDisplayName} /></Box>
       )}
 
-      {/* Step: description */}
       {step === 'description' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.step.description')}: </Text>
-          <TextInput onSubmit={handleDescription} />
-        </Box>
+        <Box><Text color={DIM}>{t('wizard.step.description')}: </Text><TextInput onSubmit={handleDescription} /></Box>
       )}
 
-      {/* Step: method select */}
-      {step === 'method-select' && (
+      {step === 'tags' && (
         <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.step.method')}</Text>
-          {METHODS.map((m, i) => (
-            <Text key={m.value}>
-              <Text color={i === methodCursor ? ACCENT : DIM}>{i === methodCursor ? '  ❯ ' : '    '}</Text>
-              <Text color={i === methodCursor ? PRIMARY : DIM} bold={i === methodCursor}>
-                {t(m.labelKey).padEnd(14)}
-              </Text>
-              <Text color={DIM}>{t(m.descKey)}</Text>
-            </Text>
-          ))}
-        </Box>
-      )}
-
-      {/* Manual branch */}
-      {step === 'manual-background' && (
-        <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.manual.background_hint')}</Text>
-          <Box>
-            <Text color={ACCENT}>❯ </Text>
-            <TextInput onSubmit={handleManualBackground} />
-          </Box>
-        </Box>
-      )}
-
-      {step === 'manual-rules' && (
-        <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.manual.rules_hint')}</Text>
-          <Box>
-            <Text color={ACCENT}>❯ </Text>
-            <TextInput onSubmit={handleManualRules} />
-          </Box>
-        </Box>
-      )}
-
-      {step === 'manual-atmosphere' && (
-        <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.manual.atmosphere_hint')}</Text>
-          <Box>
-            <Text color={ACCENT}>❯ </Text>
-            <TextInput onSubmit={handleManualAtmosphere} />
-          </Box>
-        </Box>
-      )}
-
-      {step === 'manual-more' && (
-        <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.manual.more_hint')}</Text>
-          {[t('wizard.manual.add_entry'), t('wizard.manual.finish')].map((label, i) => (
-            <Text key={i}>
-              <Text color={i === moreCursor ? ACCENT : DIM}>{i === moreCursor ? '  ❯ ' : '    '}</Text>
-              <Text color={i === moreCursor ? PRIMARY : DIM}>{label}</Text>
-            </Text>
-          ))}
-          {entries.length > 0 && (
-            <Text color={DIM}>  ({t('wizard.manual.current_count', { count: String(entries.length) })})</Text>
+          {parsingTags ? (
+            <Text color={ACCENT}>{t('world.tags.parsing')}</Text>
+          ) : (
+            <>
+              <Text color={DIM}>{t('world.tags.prompt')}</Text>
+              <Text color={DIM}>  {t('world.tags.skip_hint')}</Text>
+              <Box><Text color={ACCENT}>❯ </Text><TextInput onSubmit={handleTags} /></Box>
+            </>
           )}
         </Box>
       )}
 
-      {step === 'manual-entry-name' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.manual.entry_name')}: </Text>
-          <TextInput onSubmit={handleManualEntryName} />
-        </Box>
-      )}
-
-      {step === 'manual-entry-kw' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.manual.entry_kw')}: </Text>
-          <TextInput onSubmit={handleManualEntryKw} />
-        </Box>
-      )}
-
-      {step === 'manual-entry-content' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.manual.entry_content')}: </Text>
-          <TextInput onSubmit={handleManualEntryContent} />
-        </Box>
-      )}
-
-      {/* Distill branch */}
-      {step === 'distill-path' && (
-        <Box>
-          <Text color={DIM}>{t('wizard.distill.path_hint')}: </Text>
-          <TextInput pathCompletion onSubmit={handleDistillPath} />
-        </Box>
-      )}
-
-      {step === 'distilling' && (
-        <Box flexDirection="column">
-          <Text color={ACCENT}>{t('wizard.distill.running')}</Text>
-          {distillProgress && (
-            <Text color={DIM}>  [{distillProgress.phase}] {distillProgress.current}/{distillProgress.total} — {distillProgress.message}</Text>
-          )}
-        </Box>
-      )}
-
-      {step === 'distill-review' && (
-        <WorldDistillReview entries={distillEntries} onComplete={handleDistillReviewComplete} />
-      )}
-
-      {/* URL branch */}
-      {step === 'url-input' && (
-        <Box flexDirection="column">
-          <Text color={DIM}>{t('wizard.url.input_hint')}</Text>
-          {urls.map((u, i) => (
-            <Text key={i} color={DIM}>  {i + 1}. {u}</Text>
-          ))}
-          <Box>
-            <Text color={ACCENT}>❯ </Text>
-            <TextInput onSubmit={handleUrlInput} />
-          </Box>
-        </Box>
-      )}
-
-      {step === 'url-fetching' && (
-        <Box flexDirection="column">
-          <Text color={ACCENT}>{urlFetchStatus}</Text>
-          {distillProgress && (
-            <Text color={DIM}>  [{distillProgress.phase}] {distillProgress.current}/{distillProgress.total}</Text>
-          )}
-        </Box>
-      )}
-
-      {step === 'url-review' && (
-        <WorldDistillReview entries={distillEntries} onComplete={handleUrlReviewComplete} />
-      )}
-
-      {/* Confirm */}
       {step === 'confirm' && (
         <Box flexDirection="column">
           <Text color={ACCENT} bold>{t('wizard.confirm.title')}</Text>
+          <Text color={DIM}>  {t('world.confirm.worldType')}: <Text color={PRIMARY}>{t(`world.type.${worldType.replace(/-/g, '_')}` as any)}</Text></Text>
           <Text color={DIM}>  {t('wizard.confirm.name')}: <Text color={PRIMARY}>{worldName}</Text></Text>
           <Text color={DIM}>  {t('wizard.confirm.display_name')}: <Text color={PRIMARY}>{displayName || worldName}</Text></Text>
           <Text color={DIM}>  {t('wizard.confirm.description')}: <Text color={PRIMARY}>{description || '—'}</Text></Text>
-          <Text color={DIM}>  {t('wizard.confirm.method')}: <Text color={PRIMARY}>{t(`wizard.method.${method}`)}</Text></Text>
-          <Text color={DIM}>  {t('wizard.confirm.entries')}: <Text color={PRIMARY}>{entries.length}</Text></Text>
-          {entries.length > 0 && (
-            <Text color={DIM}>    {summarizeEntries(entries)}</Text>
-          )}
+          {hasAnyTag(tags) && <Text color={DIM}>  {t('world.confirm.tags')}: <Text color={PRIMARY}>{formatTags(tags)}</Text></Text>}
           <Text> </Text>
           {[t('wizard.confirm.confirm'), t('wizard.confirm.modify')].map((label, i) => (
             <Text key={i}>
@@ -573,15 +567,132 @@ export function WorldCreateWizard({ onComplete, onCancel }: WorldCreateWizardPro
         </Box>
       )}
 
+      {/* Data sources — BEFORE AI search */}
+      {step === 'data-sources' && (
+        <Box flexDirection="column">
+          <Text color={DIM}>{t('world.datasource.title')}</Text>
+          <CheckboxSelect
+            items={[
+              ...(worldType !== 'fictional-original' ? [{ value: 'web-search' as DataSourceOption, label: t('world.datasource.web_search'), checked: true }] : []),
+              { value: 'markdown' as DataSourceOption, label: t('world.datasource.markdown') },
+              { value: 'url-list' as DataSourceOption, label: t('world.datasource.url_list') },
+            ]}
+            onSubmit={handleDataSourcesSubmit}
+            onEscape={onCancel}
+          />
+        </Box>
+      )}
+
+      {/* AI search */}
+      {step === 'capturing' && (
+        <SoulkillerProtocolPanel
+          mode="world"
+          targetName={worldName}
+          classification={classification}
+          classificationLabels={classificationLabels}
+          origin={origin}
+          toolCalls={toolCalls}
+          totalFragments={chunkCount}
+          elapsedTime={agentElapsed}
+          filterProgress={filterProgress}
+          phase={protocolPhase}
+          searchPlan={searchPlan}
+        />
+      )}
+
+      {/* Search confirm — with dimension breakdown */}
+      {step === 'search-confirm' && (
+        <Box flexDirection="column">
+          <Text color={ACCENT} bold>── {t('protocol.target_acquired')} ──</Text>
+          <Text> </Text>
+          <Text>  <Text color={PRIMARY}>{t('protocol.classification')}:</Text> {classification ? (classificationLabels[classification] ?? classification) : '—'}</Text>
+          {origin && <Text>  <Text color={PRIMARY}>{t('protocol.origin')}:</Text> {origin}</Text>}
+          <Text>  <Text color={PRIMARY}>Chunks:</Text> {agentChunks.length}</Text>
+
+          {/* Dimension breakdown */}
+          {Object.keys(dimBreakdown).length > 0 && (
+            <>
+              <Text> </Text>
+              <Text color={PRIMARY}>  {t('protocol.dimensions')}:</Text>
+              {ALL_WORLD_DIMENSIONS.map((dim) => {
+                const count = dimBreakdown[dim] ?? 0
+                if (count === 0) return null
+                const bar = '█'.repeat(Math.min(count, 10))
+                const priority = WORLD_DIMENSIONS[dim].priority
+                const pLabel = priority === 'required' ? t('protocol.priority.required')
+                  : priority === 'important' ? t('protocol.priority.important')
+                  : t('protocol.priority.supplementary')
+                return (
+                  <Text key={dim} color={DIM}>
+                    {'    '}{dim.padEnd(12)} <Text color={count > 0 ? PRIMARY : DARK}>{bar}</Text> {count} <Text color={DARK}>({pLabel})</Text>
+                  </Text>
+                )
+              })}
+            </>
+          )}
+
+          <Text> </Text>
+          {classification === 'UNKNOWN_SETTING' ? (
+            [t('world.search.retry'), t('world.search.manual_source')].map((label, i) => (
+              <Text key={i}>
+                <Text color={i === searchConfirmCursor ? ACCENT : DIM}>{i === searchConfirmCursor ? '  ❯ ' : '    '}</Text>
+                <Text color={i === searchConfirmCursor ? PRIMARY : DIM}>{label}</Text>
+              </Text>
+            ))
+          ) : (
+            [t('wizard.confirm.confirm'), t('world.search.retry')].map((label, i) => (
+              <Text key={i}>
+                <Text color={i === searchConfirmCursor ? ACCENT : DIM}>{i === searchConfirmCursor ? '  ❯ ' : '    '}</Text>
+                <Text color={i === searchConfirmCursor ? PRIMARY : DIM}>{label}</Text>
+              </Text>
+            ))
+          )}
+        </Box>
+      )}
+
+      {/* Source path collection */}
+      {step === 'source-path' && (() => {
+        const nonWebSources = selectedSources.filter((s) => s !== 'web-search')
+        const current = nonWebSources[currentSourceIndex]
+        const label = current === 'markdown' ? 'Markdown path' : 'URLs (comma separated)'
+        return (
+          <Box><Text color={DIM}>{label}: </Text><TextInput pathCompletion={current === 'markdown'} onSubmit={handleSourcePath} /></Box>
+        )
+      })()}
+
+      {/* Distilling — with visual panel */}
+      {step === 'distilling' && (
+        <WorldDistillPanel progress={distillProgress} worldName={worldName} />
+      )}
+
+      {step === 'review' && <WorldDistillReview entries={distillEntries} onComplete={handleReviewComplete} />}
+
       {step === 'creating' && <Text color={DIM}>{t('wizard.creating')}</Text>}
+
+      {step === 'bind-prompt' && (
+        <Box flexDirection="column">
+          <Text color={PRIMARY} bold>✓ {t('wizard.done', { name: worldName })}</Text>
+          <Text> </Text>
+          <Text color={DIM}>{t('world.bind.prompt')}</Text>
+          {[t('world.bind.yes'), t('world.bind.no')].map((label, i) => (
+            <Text key={i}>
+              <Text color={i === bindCursor ? ACCENT : DIM}>{i === bindCursor ? '  ❯ ' : '    '}</Text>
+              <Text color={i === bindCursor ? PRIMARY : DIM}>{label}</Text>
+            </Text>
+          ))}
+        </Box>
+      )}
     </Box>
   )
 }
 
-function summarizeEntries(entries: GeneratedEntry[]): string {
-  const byScope = new Map<string, number>()
-  for (const e of entries) {
-    byScope.set(e.meta.scope, (byScope.get(e.meta.scope) ?? 0) + 1)
-  }
-  return [...byScope.entries()].map(([scope, count]) => `${scope}: ${count}`).join(', ')
+function hasAnyTag(tags: WorldTagSet): boolean {
+  return Object.values(tags).some((arr) => arr.length > 0)
+}
+
+function formatTags(tags: WorldTagSet): string {
+  return Object.entries(tags)
+    .filter(([, arr]) => arr.length > 0)
+    .map(([, arr]) => arr.join(', '))
+    .join(' | ')
 }

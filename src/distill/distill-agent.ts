@@ -48,19 +48,27 @@ Your job is to create soul profile files from this raw data.${tagHints}
 
 - **identity.md** — Who they are: background, origin, role, history, key facts, timeline
 - **style.md** — How they communicate: tone, vocabulary, rhetoric patterns, speech habits, formality level, humor style, characteristic expressions
+- **capabilities.md** — What they can do: abilities, skills, stats, equipment, expertise.
+  For fictional characters: power systems, attribute values, weapons, combat techniques, special abilities.
+  For real people: professional skills, methodologies, key competencies, decision frameworks.
+- **milestones.md** — What happened to them: structured timeline of key events.
+  Each entry: [time marker] event description → impact on character state/growth.
+  Events should be in chronological order with causal relationships noted.
 - **behaviors/*.md** — How they think and act: each distinct behavior pattern gets its own file (e.g., honor-code.md, combat-style.md, leadership.md)
 
 ## Recommended Workflow
 
 1. Call sampleChunks() to get an overview of all available data
-2. Call sampleChunks with specific dimensions (identity, quotes, expression, thoughts, behavior, relations) to deep-dive
+2. Call sampleChunks with specific dimensions (identity, quotes, expression, thoughts, behavior, relations, capabilities, milestones) to deep-dive
 3. writeIdentity based on identity/background data
 4. writeStyle referencing the identity you just wrote — MUST include a "Characteristic Expressions" section with preserved original quotes
-5. writeBehavior for each distinct behavior pattern (typically 3-6 files). Always create a "relationships" behavior if relation data exists.
-6. writeExample to create conversation examples (at least 3: greeting, deep topic, conflict/sensitive topic)
-7. reviewSoul to read back all files and check cross-file consistency
-8. Rewrite any files if you find inconsistencies or gaps
-9. finalize when satisfied with quality
+5. writeCapabilities based on abilities/skills/equipment/expertise data
+6. writeMilestones based on timeline/events data — use structured format with [time marker] entries
+7. writeBehavior for each distinct behavior pattern (typically 3-6 files). Always create a "relationships" behavior if relation data exists.
+8. writeExample to create conversation examples (at least 3: greeting, deep topic, conflict/sensitive topic)
+9. reviewSoul to read back all files and check cross-file consistency
+10. Rewrite any files if you find inconsistencies or gaps
+11. finalize when satisfied with quality
 
 You may adjust this order based on data availability. The key constraint:
 **style must be consistent with identity, behaviors must be consistent with both.**
@@ -130,7 +138,7 @@ export async function distillSoul(
   const provider = createOpenAICompatible({
     name: 'openrouter',
     apiKey: config.llm.api_key,
-    baseURL: 'https://openrouter.ai/api/v1',
+    baseURL: process.env.SOULKILLER_API_URL ?? 'https://openrouter.ai/api/v1',
   })
   const model = provider(distillModel)
 
@@ -147,7 +155,7 @@ export async function distillSoul(
   // ========== Tool Definitions ==========
 
   const sampleChunksTool = tool({
-    description: 'Read a sample of data fragments. Optionally filter by dimension (identity, quotes, expression, thoughts, behavior, relations). Returns content, source, and dimension for each chunk.',
+    description: 'Read a sample of data fragments. Optionally filter by dimension (identity, quotes, expression, thoughts, behavior, relations, capabilities, milestones). Returns content, source, and dimension for each chunk.',
     inputSchema: z.object({
       dimension: z.string().optional().describe('Filter by dimension (extraction_step). Leave empty for all.'),
       limit: z.number().optional().describe('Max chunks to return (default 50, max 100)'),
@@ -219,6 +227,28 @@ export async function distillSoul(
     },
   })
 
+  const writeCapabilitiesTool = tool({
+    description: 'Write the capabilities.md file. Contains what they can do: abilities, skills, stats, equipment, expertise.',
+    inputSchema: z.object({
+      content: z.string().describe('The capabilities profile content in markdown'),
+    }),
+    execute: async ({ content }) => {
+      fs.writeFileSync(path.join(soulPath, 'capabilities.md'), `# Capabilities\n\n${content}\n`)
+      return { chars: content.length }
+    },
+  })
+
+  const writeMilestonesTool = tool({
+    description: 'Write the milestones.md file. Contains structured timeline of key events. Use format: ## [time marker] event title, then description and → impact.',
+    inputSchema: z.object({
+      content: z.string().describe('The milestones timeline content in markdown'),
+    }),
+    execute: async ({ content }) => {
+      fs.writeFileSync(path.join(soulPath, 'milestones.md'), `# Milestones\n\n${content}\n`)
+      return { chars: content.length }
+    },
+  })
+
   const writeExampleTool = tool({
     description: 'Write a conversation example file. Creates a sample dialogue showing how the character would respond. Generate at least 3 examples covering: greeting, deep topic, and conflict/sensitive topic.',
     inputSchema: z.object({
@@ -274,11 +304,20 @@ export async function distillSoul(
         }
       }
 
-      const fileCount = (identity ? 1 : 0) + (style ? 1 : 0) + behaviors.length + examples.length
+      const capabilities = fs.existsSync(path.join(soulPath, 'capabilities.md'))
+        ? fs.readFileSync(path.join(soulPath, 'capabilities.md'), 'utf-8')
+        : ''
+      const milestones = fs.existsSync(path.join(soulPath, 'milestones.md'))
+        ? fs.readFileSync(path.join(soulPath, 'milestones.md'), 'utf-8')
+        : ''
+
+      const fileCount = (identity ? 1 : 0) + (style ? 1 : 0) + (capabilities ? 1 : 0) + (milestones ? 1 : 0) + behaviors.length + examples.length
 
       return {
         identity: identity.slice(0, 2000),
         style: style.slice(0, 2000),
+        capabilities: capabilities.slice(0, 2000),
+        milestones: milestones.slice(0, 2000),
         behaviors: behaviors.map((b) => ({ name: b.name, content: b.content.slice(0, 1000) })),
         examples,
         fileCount,
@@ -298,6 +337,8 @@ export async function distillSoul(
     sampleChunks: sampleChunksTool,
     writeIdentity: writeIdentityTool,
     writeStyle: writeStyleTool,
+    writeCapabilities: writeCapabilitiesTool,
+    writeMilestones: writeMilestonesTool,
     writeBehavior: writeBehaviorTool,
     writeExample: writeExampleTool,
     reviewSoul: reviewSoulTool,
@@ -442,7 +483,7 @@ function summarizeToolResult(toolName: string, output: unknown): string {
     const { returned, total } = output as { returned?: number; total?: number }
     return `${returned ?? 0}/${total ?? 0} chunks`
   }
-  if (toolName === 'writeIdentity' || toolName === 'writeStyle') {
+  if (toolName === 'writeIdentity' || toolName === 'writeStyle' || toolName === 'writeCapabilities' || toolName === 'writeMilestones') {
     const { chars } = output as { chars?: number }
     return `${chars ?? 0} chars`
   }

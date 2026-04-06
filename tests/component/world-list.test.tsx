@@ -26,32 +26,26 @@ afterEach(() => {
 })
 
 describe('WorldCommand (interactive menu)', () => {
-  it('renders menu with all options', () => {
+  it('renders top-level menu with create and manage', () => {
     const { lastFrame } = render(<WorldCommand onClose={() => {}} />)
     const frame = lastFrame()!
     expect(frame).toContain('世界管理')
     expect(frame).toContain('创建')
-    expect(frame).toContain('列表')
-    expect(frame).toContain('详情')
-    expect(frame).toContain('条目')
-    expect(frame).toContain('绑定')
-    expect(frame).toContain('解绑')
-    expect(frame).toContain('蒸馏')
-    expect(frame).toContain('进化')
+    expect(frame).toContain('管理')
   })
 
-  it('shows disabled hint for bind/unbind when no soul loaded', () => {
+  it('shows manage as disabled when no worlds exist', () => {
     const { lastFrame } = render(<WorldCommand onClose={() => {}} />)
     const frame = lastFrame()!
-    expect(frame).toContain('需先 /use 加载分身')
+    expect(frame).toContain('暂无世界')
   })
 
-  it('does not show disabled hint when soul is loaded', () => {
-    const soulDir = path.join(tmpDir, '.soulkiller', 'souls', 'test')
-    fs.mkdirSync(soulDir, { recursive: true })
-    const { lastFrame } = render(<WorldCommand soulDir={soulDir} onClose={() => {}} />)
+  it('manage is enabled when worlds exist', () => {
+    createWorld('test-world', 'Test World', 'A test')
+    const { lastFrame } = render(<WorldCommand onClose={() => {}} />)
     const frame = lastFrame()!
-    expect(frame).not.toContain('需先 /use 加载分身')
+    expect(frame).toContain('管理')
+    expect(frame).not.toContain('暂无世界')
   })
 })
 
