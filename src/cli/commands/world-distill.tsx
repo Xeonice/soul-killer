@@ -8,6 +8,7 @@ import { worldExists } from '../../world/manifest.js'
 import { getLLMClient } from '../../llm/client.js'
 import { loadConfig } from '../../config/loader.js'
 import type { AdapterType } from '../../ingest/pipeline.js'
+import { AgentLogger } from '../../utils/agent-logger.js'
 import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
 
@@ -52,13 +53,14 @@ export function WorldDistillCommand({
     if (!config) { setError('Config not loaded'); setStep('error'); return }
 
     const client = getLLMClient()
-    const model = config.llm.distill_model ?? config.llm.default_model
-    const distiller = new WorldDistiller(client, model)
+    const distiller = new WorldDistiller(client)
+    const agentLog = new AgentLogger(`World Distill: ${worldName}`, { model: 'world-distill', provider: 'openrouter' })
 
     distiller.on('progress', (p: WorldDistillProgress) => setProgress(p))
 
-    distiller.distill(worldName, sourcePath, adapterType)
+    distiller.distill(worldName, sourcePath, adapterType, undefined, undefined, agentLog)
       .then((generated) => {
+        agentLog.close()
         setEntries(generated)
         if (noReview || generated.length === 0) {
           return distiller.writeEntries(worldName, generated).then(() => setStep('done'))
@@ -66,7 +68,7 @@ export function WorldDistillCommand({
           setStep('review')
         }
       })
-      .catch((err) => { setError(String(err)); setStep('error') })
+      .catch((err) => { agentLog.close(); setError(String(err)); setStep('error') })
   }, [step, sourcePath])
 
   function handleReviewComplete(accepted: GeneratedEntry[]) {
@@ -75,8 +77,7 @@ export function WorldDistillCommand({
     if (!config) return
 
     const client = getLLMClient()
-    const model = config.llm.distill_model ?? config.llm.default_model
-    const distiller = new WorldDistiller(client, model)
+    const distiller = new WorldDistiller(client)
 
     distiller.writeEntries(worldName, accepted)
       .then(() => { setEntries(accepted); setStep('done') })
@@ -148,17 +149,18 @@ export function WorldEvolveCommand({
     if (!config) { setError('Config not loaded'); setStep('error'); return }
 
     const client = getLLMClient()
-    const model = config.llm.distill_model ?? config.llm.default_model
-    const distiller = new WorldDistiller(client, model)
+    const distiller = new WorldDistiller(client)
+    const agentLog = new AgentLogger(`World Evolve: ${worldName}`, { model: 'world-distill', provider: 'openrouter' })
 
     distiller.on('progress', (p: WorldDistillProgress) => setProgress(p))
 
-    distiller.evolve(worldName, sourcePath, adapterType)
+    distiller.evolve(worldName, sourcePath, adapterType, agentLog)
       .then(({ newEntries }) => {
+        agentLog.close()
         return distiller.finalizeEvolve(worldName, newEntries)
       })
       .then(() => setStep('done'))
-      .catch((err) => { setError(String(err)); setStep('error') })
+      .catch((err) => { agentLog.close(); setError(String(err)); setStep('error') })
   }, [step, sourcePath])
 
   if (step === 'error') {

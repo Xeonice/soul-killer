@@ -8,6 +8,7 @@ import {
   loadBindings,
   loadBinding,
   updateBinding,
+  findSoulsBoundToWorld,
 } from '../../src/world/binding.js'
 import { createWorld } from '../../src/world/manifest.js'
 
@@ -128,5 +129,34 @@ describe('updateBinding', () => {
 
     const binding = loadBinding(soulDir, 'night-city')
     expect(binding!.order).toBe(5)
+  })
+})
+
+describe('findSoulsBoundToWorld', () => {
+  it('finds souls bound to a world', () => {
+    createWorld('night-city', '夜之城', 'desc')
+
+    // Create a second soul
+    const soul2Dir = path.join(tmpDir, '.soulkiller', 'souls', 'v')
+    fs.mkdirSync(soul2Dir, { recursive: true })
+
+    bindWorld(soulDir, 'night-city')
+    bindWorld(soul2Dir, 'night-city')
+
+    const result = findSoulsBoundToWorld('night-city')
+    expect(result.sort()).toEqual(['johnny', 'v'])
+  })
+
+  it('returns empty array when no souls are bound', () => {
+    const result = findSoulsBoundToWorld('empty-world')
+    expect(result).toEqual([])
+  })
+
+  it('includes disabled bindings', () => {
+    createWorld('night-city', '夜之城', 'desc')
+    bindWorld(soulDir, 'night-city', { enabled: false })
+
+    const result = findSoulsBoundToWorld('night-city')
+    expect(result).toContain('johnny')
   })
 })

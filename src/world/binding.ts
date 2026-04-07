@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 import { worldExists } from './manifest.js'
 
 export interface EntryFilter {
@@ -84,4 +85,23 @@ export function updateBinding(soulDir: string, binding: WorldBinding): void {
   const dir = bindingsDir(soulDir)
   fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(bindingPath(soulDir, binding.world), JSON.stringify(binding, null, 2))
+}
+
+/**
+ * Find all souls that have a binding file for the given world (including disabled).
+ */
+export function findSoulsBoundToWorld(worldName: string): string[] {
+  const soulsDir = path.join(os.homedir(), '.soulkiller', 'souls')
+  if (!fs.existsSync(soulsDir)) return []
+
+  const results: string[] = []
+  const entries = fs.readdirSync(soulsDir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const bPath = path.join(soulsDir, entry.name, 'bindings', `${worldName}.json`)
+    if (fs.existsSync(bPath)) {
+      results.push(entry.name)
+    }
+  }
+  return results
 }

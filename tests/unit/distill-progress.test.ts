@@ -1,17 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
+import { generateText } from 'ai'
 import { extractFeatures, type DistillProgress } from '../../src/distill/extractor.js'
 
-function mockClient(response = 'test content') {
-  return {
-    chat: {
-      completions: {
-        create: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: response } }],
-        }),
-      },
-    },
-  } as any
-}
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>()
+  return { ...actual, generateText: vi.fn() }
+})
 
 const singleChunk = [{
   id: '1', source: 'web' as const, content: 'test content about someone',
@@ -20,10 +14,10 @@ const singleChunk = [{
 
 describe('extractFeatures onProgress', () => {
   it('emits progress events for all phases', async () => {
-    const client = mockClient()
+    vi.mocked(generateText).mockResolvedValue({ text: 'test content' } as any)
     const events: DistillProgress[] = []
 
-    await extractFeatures(client, 'test-model', singleChunk, 'Test', undefined, (p) => {
+    await extractFeatures({} as any, singleChunk, 'Test', undefined, (p) => {
       events.push(p)
     })
 
@@ -40,10 +34,10 @@ describe('extractFeatures onProgress', () => {
   })
 
   it('emits events in correct order', async () => {
-    const client = mockClient()
+    vi.mocked(generateText).mockResolvedValue({ text: 'test content' } as any)
     const phases: string[] = []
 
-    await extractFeatures(client, 'test-model', singleChunk, 'Test', undefined, (p) => {
+    await extractFeatures({} as any, singleChunk, 'Test', undefined, (p) => {
       if (p.status === 'started') phases.push(p.phase)
     })
 
@@ -51,7 +45,7 @@ describe('extractFeatures onProgress', () => {
   })
 
   it('emits batch progress for multi-batch extraction', async () => {
-    const client = mockClient()
+    vi.mocked(generateText).mockResolvedValue({ text: 'test content' } as any)
     // Create 35 chunks to trigger 2 batches (BATCH_SIZE = 30)
     const chunks = Array.from({ length: 35 }, (_, i) => ({
       id: String(i), source: 'web' as const, content: `content ${i}`,
@@ -60,7 +54,7 @@ describe('extractFeatures onProgress', () => {
 
     const batchEvents: DistillProgress[] = []
 
-    await extractFeatures(client, 'test-model', chunks, 'Test', undefined, (p) => {
+    await extractFeatures({} as any, chunks, 'Test', undefined, (p) => {
       if (p.status === 'in_progress') batchEvents.push(p)
     })
 
@@ -73,9 +67,9 @@ describe('extractFeatures onProgress', () => {
   })
 
   it('works without onProgress callback', async () => {
-    const client = mockClient()
+    vi.mocked(generateText).mockResolvedValue({ text: 'test content' } as any)
     // Should not throw
-    const result = await extractFeatures(client, 'test-model', singleChunk, 'Test')
+    const result = await extractFeatures({} as any, singleChunk, 'Test')
     expect(result.identity).toBe('test content')
   })
 })

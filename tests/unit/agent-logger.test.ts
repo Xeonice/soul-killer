@@ -159,7 +159,7 @@ describe('AgentLogger', () => {
     const result: CaptureResult = {
       classification: 'PUBLIC_ENTITY',
       origin: 'Game Designer',
-      chunks: [{ id: '1', source: 'web', content: 'test', timestamp: '', context: 'public', type: 'knowledge', metadata: {} }] as CaptureResult['chunks'],
+      sessionDir: '/tmp/test-session',
       elapsedMs: 45678,
     }
 
@@ -170,7 +170,7 @@ describe('AgentLogger', () => {
     expect(content).toContain('RESULT')
     expect(content).toContain('Classification : PUBLIC_ENTITY')
     expect(content).toContain('Origin         : Game Designer')
-    expect(content).toContain('Chunks         : 1')
+    expect(content).toContain('Session Dir    : /tmp/test-session')
     expect(content).toContain('Total Steps    : 12')
     expect(content).toContain('Total Duration : 45678ms')
   })

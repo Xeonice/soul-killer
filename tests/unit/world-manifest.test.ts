@@ -45,7 +45,8 @@ describe('createWorld', () => {
     const worldDir = path.join(tmpDir, '.soulkiller', 'worlds', 'night-city')
     expect(fs.existsSync(worldDir)).toBe(true)
     expect(fs.existsSync(path.join(worldDir, 'world.json'))).toBe(true)
-    expect(fs.existsSync(path.join(worldDir, 'entries'))).toBe(true)
+    // Dimension subdirectories are created lazily by addEntry(), not eagerly
+    // at world creation time — the world dir starts clean except for world.json.
     expect(m.name).toBe('night-city')
   })
 

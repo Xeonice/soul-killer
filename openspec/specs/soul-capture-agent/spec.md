@@ -1,5 +1,8 @@
-# Soul Capture Agent
+# soul-capture-agent Specification
 
+## Purpose
+定义 Soul Capture Agent 的行为规范，包括搜索策略、目标分类和信息提取逻辑。
+## Requirements
 ### Requirement: UNKNOWN_ENTITY fallback behavior
 WHEN 搜索结果不足以进行有意义的提取时，agent SHALL 通过 reportFindings 返回空 extractions 和 UNKNOWN_ENTITY 分类。
 
@@ -169,3 +172,35 @@ The `captureSoul` function SHALL emit a `search_plan` progress event when the `p
 #### Scenario: 重构后 captureSoul 行为不变
 - **WHEN** 使用重构后的 captureSoul 搜索 "Johnny Silverhand"
 - **THEN** 返回结果与重构前行为一致（相同的 classification、chunk 格式、progress 事件）
+
+### Requirement: Soul system prompt 改为质量筛选模式
+SOUL_SYSTEM_PROMPT SHALL 指导 Agent 逐维度评估文章质量，对照 qualityCriteria 判断，不做深度阅读和提取。
+
+#### Scenario: prompt 工作流
+- **WHEN** 构建 system prompt
+- **THEN** SHALL 指示 Agent 逐维度 evaluateDimension → 对照 qualityCriteria 判断 → 不足则 supplementSearch → reportFindings
+- **AND** SHALL 注入每个维度的 qualityCriteria 和 minArticles
+- **AND** SHALL 不包含深度阅读或提取指令
+
+### Requirement: Soul system prompt 重写为质量评估模式
+SOUL_SYSTEM_PROMPT SHALL 从搜索指令改为质量评估指令。
+
+#### Scenario: prompt 内容
+- **WHEN** 构建 soul capture agent 的 system prompt
+- **THEN** SHALL 指示 Agent 逐维度调用 evaluateDimension 审查搜索结果
+- **AND** SHALL 指示 Agent 在数据不足时用 supplementSearch 补充
+- **AND** SHALL 指示 Agent 审查完所有维度后调用 reportFindings
+- **AND** SHALL 不包含任何搜索策略指令（搜索由代码层完成）
+
+### Requirement: Soul system prompt 增加深度阅读工作流
+SOUL_SYSTEM_PROMPT SHALL 指导 Agent 按维度执行 evaluate → read → extract → 下一维度 的完整循环。
+
+#### Scenario: prompt 工作流指令
+- **WHEN** 构建 system prompt
+- **THEN** SHALL 指示 Agent 对每个维度依次：
+  1. evaluateDimension 查看预览
+  2. readFullResult 读取 top 3 条全文
+  3. extractDimension 提交 3-5 条 extractions
+  4. (可选) supplementSearch 补充
+- **AND** SHALL 指示 Agent 最后调 reportFindings 汇总
+

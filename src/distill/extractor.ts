@@ -1,4 +1,4 @@
-import type OpenAI from 'openai'
+import { generateText, type LanguageModel } from 'ai'
 import type { SoulChunk } from '../ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
 import type { AgentLogger } from '../utils/agent-logger.js'
@@ -50,8 +50,7 @@ export interface ExtractedFeatures {
 }
 
 export async function extractFeatures(
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
   chunks: SoulChunk[],
   targetName = '',
   tags?: TagSet,
@@ -84,20 +83,19 @@ export async function extractFeatures(
       }
       const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
-      const res = await client.chat.completions.create({
+      const { text: output } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeIdentityPrompt(name, tags) },
           { role: 'user', content },
         ],
       })
-      const output = res.choices[0]?.message?.content ?? ''
       identityResults.push(output)
       agentLog?.distillBatch('identity', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
     onProgress?.({ phase: 'identity', status: 'done' })
     const mergeStart = Date.now()
-    identity = await mergeResults(client, model, identityResults, 'identity')
+    identity = await mergeResults(model, identityResults, 'identity')
     if (identityResults.length > 1) {
       agentLog?.distillMerge('identity', identityResults.length, Date.now() - mergeStart, identity.length)
     }
@@ -115,20 +113,19 @@ export async function extractFeatures(
       }
       const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
-      const res = await client.chat.completions.create({
+      const { text: output } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeStylePrompt(name, tags) },
           { role: 'user', content },
         ],
       })
-      const output = res.choices[0]?.message?.content ?? ''
       styleResults.push(output)
       agentLog?.distillBatch('style', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
     onProgress?.({ phase: 'style', status: 'done' })
     const mergeStart = Date.now()
-    style = await mergeResults(client, model, styleResults, 'style')
+    style = await mergeResults(model, styleResults, 'style')
     if (styleResults.length > 1) {
       agentLog?.distillMerge('style', styleResults.length, Date.now() - mergeStart, style.length)
     }
@@ -146,14 +143,13 @@ export async function extractFeatures(
       }
       const batchStart = Date.now()
       const content = batches[bi]!.map((c) => `[${c.source}] ${c.content}`).join('\n\n---\n\n')
-      const res = await client.chat.completions.create({
+      const { text: output } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeBehaviorPrompt(name) },
           { role: 'user', content },
         ],
       })
-      const output = res.choices[0]?.message?.content ?? ''
       behaviorResults.push(output)
       agentLog?.distillBatch('behavior', bi + 1, totalBatches, Date.now() - batchStart, output.length)
     }
@@ -170,8 +166,7 @@ export async function extractFeatures(
 }
 
 async function mergeResults(
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
   results: string[],
   type: string,
 ): Promise<string> {
@@ -179,7 +174,7 @@ async function mergeResults(
 
   const mergePrompt = t(type === 'identity' ? 'extractor.merge_identity_prompt' : 'extractor.merge_style_prompt')
 
-  const res = await client.chat.completions.create({
+  const { text } = await generateText({
     model,
     messages: [
       { role: 'system', content: mergePrompt },
@@ -187,7 +182,7 @@ async function mergeResults(
     ],
   })
 
-  return res.choices[0]?.message?.content ?? results[0]!
+  return text || results[0]!
 }
 
 function parseBehaviors(raw: string): { name: string; content: string }[] {

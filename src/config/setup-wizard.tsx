@@ -6,7 +6,7 @@ import { RECOMMENDED_MODELS, type SoulkillerConfig, type SupportedLanguage, type
 import { saveConfig } from './loader.js'
 import { PRIMARY, ACCENT, WARNING, DIM } from '../cli/animation/colors.js'
 import { t, setLocale } from '../i18n/index.js'
-import { isDockerAvailable } from '../agent/tools/searxng-search.js'
+import { isDockerAvailable } from '../agent/search/searxng-search.js'
 
 type Step = 'language' | 'intro' | 'api_key' | 'validating' | 'model_select' | 'search_engine' | 'exa_key' | 'tavily_key' | 'done'
 

@@ -159,7 +159,7 @@ describe('CreateCommand', () => {
     expect(frame).toContain('test')
   })
 
-  it('proceeds through description → tags', async () => {
+  it('proceeds through description → soul-list → tags', async () => {
     const { lastFrame, stdin } = render(
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
@@ -176,7 +176,18 @@ describe('CreateCommand', () => {
     stdin.write('\r')
     await new Promise((r) => setTimeout(r, DELAY))
 
-    const frame = lastFrame()!
+    // Now at soul-list — verify it shows
+    let frame = lastFrame()!
+    expect(frame).toContain('test')
+    expect(frame).toContain('my friend')
+
+    // Select "continue" (down arrow to index 1, then Enter)
+    stdin.write('\u001B[B') // down
+    await new Promise((r) => setTimeout(r, DELAY))
+    stdin.write('\r')
+    await new Promise((r) => setTimeout(r, DELAY))
+
+    frame = lastFrame()!
     expect(frame).toContain('Q3')
     expect(frame).toContain('性格/印象')
   })
@@ -186,7 +197,7 @@ describe('CreateCommand', () => {
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
 
-    // Select type → name → description → skip tags
+    // Select type → name → description → soul-list → continue → skip tags
     stdin.write('\r')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('test')
@@ -194,6 +205,11 @@ describe('CreateCommand', () => {
     stdin.write('\r')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('my friend')
+    await new Promise((r) => setTimeout(r, DELAY))
+    stdin.write('\r')
+    await new Promise((r) => setTimeout(r, DELAY))
+    // soul-list: select "continue" (index 1)
+    stdin.write('\u001B[B') // down
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('\r')
     await new Promise((r) => setTimeout(r, DELAY))
@@ -227,7 +243,7 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Select type → name → description → skip tags → confirm
+      // Select type → name → description → soul-list → continue → skip tags → confirm
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('test')
@@ -235,6 +251,11 @@ describe('CreateCommand', () => {
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r') // skip description
+      await new Promise((r) => setTimeout(r, DELAY))
+      // soul-list: select "continue"
+      stdin.write('\u001B[B')
+      await new Promise((r) => setTimeout(r, DELAY))
+      stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r') // skip tags
       await new Promise((r) => setTimeout(r, 150))
@@ -255,18 +276,23 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Navigate to conflict step
+      // Navigate to conflict step: type → name → desc → soul-list → continue → skip tags → confirm
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('test')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
-      stdin.write('\r')
+      stdin.write('\r') // skip description
+      await new Promise((r) => setTimeout(r, DELAY))
+      // soul-list: select "continue"
+      stdin.write('\u001B[B')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
+      await new Promise((r) => setTimeout(r, DELAY))
+      stdin.write('\r') // skip tags
       await new Promise((r) => setTimeout(r, 150))
-      stdin.write('\r')
+      stdin.write('\r') // confirm
       await new Promise((r) => setTimeout(r, DELAY))
 
       const frame = lastFrame()!
@@ -284,16 +310,21 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Navigate: type(personal) → name → skip desc → skip tags → confirm
+      // Navigate: type(personal) → name → skip desc → soul-list → continue → skip tags → confirm
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('newsoul')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
-      stdin.write('\r')
+      stdin.write('\r') // skip description
+      await new Promise((r) => setTimeout(r, DELAY))
+      // soul-list: select "continue"
+      stdin.write('\u001B[B')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
+      await new Promise((r) => setTimeout(r, DELAY))
+      stdin.write('\r') // skip tags
       await new Promise((r) => setTimeout(r, 150))
       stdin.write('\r') // confirm
       await new Promise((r) => setTimeout(r, DELAY))

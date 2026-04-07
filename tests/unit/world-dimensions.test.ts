@@ -7,7 +7,7 @@ import {
   generateWorldSearchPlan,
   analyzeWorldCoverage,
   type WorldDimension,
-} from '../../src/agent/world-dimensions.js'
+} from '../../src/agent/strategy/world-dimensions.js'
 
 describe('WORLD_DIMENSIONS', () => {
   it('defines 9 dimensions', () => {
@@ -96,6 +96,35 @@ describe('generateWorldSearchPlan', () => {
     const plan = generateWorldSearchPlan('FICTIONAL_UNIVERSE', 'Middle Earth', '中土世界', 'Lord of the Rings')
     const historyDim = plan.dimensions.find((d) => d.dimension === 'history')
     expect(historyDim!.queries.some((q) => q.includes('中土世界'))).toBe(true)
+  })
+
+  it('each dimension has 3-7 queries (history dimension carries 7 — 5 base + 2 timeline-bias)', () => {
+    const classifications = ['FICTIONAL_UNIVERSE', 'REAL_SETTING'] as const
+    for (const cls of classifications) {
+      const plan = generateWorldSearchPlan(cls, 'TestWorld', '测试世界', 'TestOrigin')
+      for (const dim of plan.dimensions) {
+        expect(dim.queries.length, `${cls}/${dim.dimension} should have 3-7 queries`).toBeGreaterThanOrEqual(3)
+        expect(dim.queries.length, `${cls}/${dim.dimension} should have 3-7 queries`).toBeLessThanOrEqual(7)
+      }
+    }
+  })
+
+  it('no template query has more than 3 effective keywords (excluding name placeholders)', () => {
+    const classifications = ['FICTIONAL_UNIVERSE', 'REAL_SETTING'] as const
+    for (const cls of classifications) {
+      const plan = generateWorldSearchPlan(cls, '__NAME__', '__LOCAL__', '__ORIGIN__')
+      for (const dim of plan.dimensions) {
+        for (const query of dim.queries) {
+          const stripped = query
+            .replace(/__NAME__/g, '')
+            .replace(/__LOCAL__/g, '')
+            .replace(/__ORIGIN__/g, '')
+            .trim()
+          const words = stripped.split(/\s+/).filter(Boolean)
+          expect(words.length, `${cls}/${dim.dimension} query "${query}" has ${words.length} keywords (max 3)`).toBeLessThanOrEqual(3)
+        }
+      }
+    }
   })
 })
 

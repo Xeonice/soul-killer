@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { executeTavilySearch } from '../../src/agent/tools/tavily-search.js'
+import { executeTavilySearch } from '../../src/agent/search/tavily-search.js'
 
 describe('executeTavilySearch', () => {
   const originalFetch = globalThis.fetch

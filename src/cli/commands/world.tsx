@@ -29,8 +29,7 @@ const ACTION_ITEMS: ActionItem[] = [
   { action: 'show', labelKey: 'world.menu.show', descKey: 'world.menu.show_desc' },
   { action: 'entry', labelKey: 'world.menu.entry', descKey: 'world.menu.entry_desc' },
   { action: 'distill', labelKey: 'world.menu.distill', descKey: 'world.menu.distill_merged_desc' },
-  { action: 'bind', labelKey: 'world.menu.bind', descKey: 'world.menu.bind_desc', needsSoul: true },
-  { action: 'unbind', labelKey: 'world.menu.unbind', descKey: 'world.menu.unbind_desc', needsSoul: true },
+  { action: 'bind', labelKey: 'world.menu.bind', descKey: 'world.menu.bind_desc' },
   { action: 'delete', labelKey: 'world.menu.delete', descKey: 'world.menu.delete_desc' },
 ]
 
@@ -128,6 +127,7 @@ export function WorldCommand({ soulDir, onClose }: WorldCommandProps) {
   })
 
   function backToTopMenu() {
+    setWorlds(listWorlds())
     setPhase('top-menu')
     setSelectedWorld(null)
     setCurrentAction(null)
@@ -164,8 +164,8 @@ export function WorldCommand({ soulDir, onClose }: WorldCommandProps) {
       return <WorldCreateWizard supplementWorld={wn} soulDir={soulDir} onComplete={backToActionMenu} onCancel={backToActionMenu} />
     }
 
-    if ((currentAction === 'bind' || currentAction === 'unbind') && soulDir) {
-      return <WorldBindCommand worldName={wn} soulDir={soulDir} action={currentAction} onComplete={backToActionMenu} />
+    if (currentAction === 'bind') {
+      return <WorldBindCommand worldName={wn} onComplete={backToActionMenu} />
     }
   }
 

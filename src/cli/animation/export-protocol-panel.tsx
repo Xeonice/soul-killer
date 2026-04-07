@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Text, Box, useInput } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
@@ -28,10 +28,10 @@ interface TrailStep {
 type ActiveZoneState =
   | { type: 'idle' }
   | { type: 'tool'; tool: string; args?: Record<string, unknown> }
-  | { type: 'select'; question: string; options: AskUserOption[]; cursor: number }
+  | { type: 'select'; question: string; options: AskUserOption[]; cursor: number; multi?: boolean; selected?: number[] }
   | { type: 'text_input'; question: string; value: string; items: string[] }
   | { type: 'packaging'; steps: { name: string; status: 'pending' | 'running' | 'done' }[] }
-  | { type: 'complete'; output_dir: string; files: string[]; skill_name?: string }
+  | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name?: string }
   | { type: 'error'; error: string }
 
 // --- Props ---
@@ -65,6 +65,17 @@ export function ExportProtocolPanel({
 
   const spinnerChar = SPINNER_CHARS[frame % SPINNER_CHARS.length]
 
+  // Track idle duration for "thinking Ns" display
+  const idleStartRef = useRef<number>(Date.now())
+  useEffect(() => {
+    if (activeZone.type === 'idle') {
+      idleStartRef.current = Date.now()
+    }
+  }, [activeZone.type])
+  const idleElapsedSec = activeZone.type === 'idle'
+    ? Math.floor((Date.now() - idleStartRef.current) / 1000)
+    : 0
+
   // Handle keyboard input for select and text_input modes
   useInput((input, key) => {
     if (key.escape) {
@@ -77,6 +88,8 @@ export function ExportProtocolPanel({
         onSelectConfirm?.(-1) // signal: move up
       } else if (key.downArrow) {
         onSelectConfirm?.(-2) // signal: move down
+      } else if (activeZone.multi && input === ' ') {
+        onSelectConfirm?.(-3) // signal: toggle current item (multi-select only)
       } else if (key.return) {
         onSelectConfirm?.(activeZone.cursor)
       }
@@ -128,11 +141,22 @@ export function ExportProtocolPanel({
   const renderActiveZone = () => {
     switch (activeZone.type) {
       case 'idle':
-        return phase === 'initiating' ? (
-          <Text color={ACCENT}>
-            {'  ▓'}{engine.glitchText(t('export.initiating'), Math.max(0.1, 0.5 - frame * 0.01))}
-          </Text>
-        ) : null
+        if (phase === 'initiating') {
+          return (
+            <Text color={ACCENT}>
+              {'  ▓'}{engine.glitchText(t('export.initiating'), Math.max(0.1, 0.5 - frame * 0.01))}
+            </Text>
+          )
+        }
+        if (phase === 'analyzing' || phase === 'selecting' || phase === 'configuring') {
+          // Show thinking indicator with elapsed time between tool calls so UI doesn't look stuck
+          return (
+            <Text color={ACCENT}>
+              {'  ▓ '}{t('export.thinking')} {spinnerChar} <Text color={DIM}>{idleElapsedSec}s</Text>
+            </Text>
+          )
+        }
+        return null
 
       case 'tool': {
         const icon = TOOL_ICON[activeZone.tool] ?? '🔧'
@@ -146,18 +170,22 @@ export function ExportProtocolPanel({
         )
       }
 
-      case 'select':
+      case 'select': {
+        const isMulti = !!activeZone.multi
+        const selectedSet = new Set(activeZone.selected ?? [])
         return (
           <Box flexDirection="column" marginLeft={2}>
             <Text color={ACCENT}>  ▓ {activeZone.question}</Text>
             <Text> </Text>
             <Box flexDirection="column" borderStyle="single" borderColor={DARK} paddingX={1}>
               {activeZone.options.map((opt, i) => {
-                const selected = i === activeZone.cursor
+                const focused = i === activeZone.cursor
+                const checked = selectedSet.has(i)
+                const checkbox = isMulti ? (checked ? '[✓] ' : '[ ] ') : ''
                 return (
                   <Box key={i} flexDirection="column">
-                    <Text color={selected ? ACCENT : PRIMARY}>
-                      {selected ? '  ❯ ' : '    '}{opt.label}
+                    <Text color={focused ? ACCENT : (checked ? PRIMARY : DIM)}>
+                      {focused ? '  ❯ ' : '    '}{checkbox}{opt.label}
                     </Text>
                     {opt.description && (
                       <Text color={DIM}>{'      '}{opt.description}</Text>
@@ -166,8 +194,12 @@ export function ExportProtocolPanel({
                 )
               })}
             </Box>
+            {isMulti && (
+              <Text color={DIM}>  {t('export.multi_select_hint')}</Text>
+            )}
           </Box>
         )
+      }
 
       case 'text_input':
         return (
@@ -208,16 +240,14 @@ export function ExportProtocolPanel({
         const hint = activeZone.skill_name
           ? t('export.done_hint', { name: activeZone.skill_name })
           : t('export.step.complete')
+        const sizeKB = Math.round(activeZone.size_bytes / 1024)
         return (
           <Box flexDirection="column" marginLeft={2}>
             <Text color={PRIMARY}>  ▓ {t('export.step.complete')} ✓</Text>
             <Text> </Text>
             <Box flexDirection="column" borderStyle="single" borderColor={PRIMARY} paddingX={1}>
-              <Text color={ACCENT}>  {activeZone.output_dir}</Text>
-              <Text> </Text>
-              {activeZone.files.map((f, i) => (
-                <Text key={i} color={DIM}>  {'├── '}{f}</Text>
-              ))}
+              <Text color={ACCENT}>  📦 {activeZone.output_file}</Text>
+              <Text color={DIM}>     {activeZone.file_count} files · {sizeKB} KB</Text>
               <Text> </Text>
               <Text color={PRIMARY}>  {hint}</Text>
             </Box>
@@ -235,8 +265,11 @@ export function ExportProtocolPanel({
   // --- Status bar ---
   const renderStatusBar = () => {
     let hint = t('export.status.esc')
-    if (activeZone.type === 'select') hint = t('export.status.select')
-    else if (activeZone.type === 'text_input') hint = t('export.status.input')
+    if (activeZone.type === 'select') {
+      hint = activeZone.multi ? t('export.status.multi_select') : t('export.status.select')
+    } else if (activeZone.type === 'text_input') {
+      hint = t('export.status.input')
+    }
 
     return <Text color={DIM}>  {hint}</Text>
   }
@@ -309,7 +342,14 @@ export function reducePanelEvent(
       if (event.options && event.options.length > 0) {
         return {
           ...state,
-          activeZone: { type: 'select', question: event.question, options: event.options, cursor: 0 },
+          activeZone: {
+            type: 'select',
+            question: event.question,
+            options: event.options,
+            cursor: 0,
+            multi: event.multi_select,
+            selected: event.multi_select ? [] : undefined,
+          },
         }
       }
       return {
@@ -358,7 +398,7 @@ export function reducePanelEvent(
       return {
         ...state,
         phase: 'complete',
-        activeZone: { type: 'complete', output_dir: event.output_dir, files: event.files, skill_name: event.skill_name },
+        activeZone: { type: 'complete', output_file: event.output_file, file_count: event.file_count, size_bytes: event.size_bytes, skill_name: event.skill_name },
       }
 
     case 'error':

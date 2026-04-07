@@ -1,5 +1,8 @@
-## ADDED Requirements
+# world-commands Specification
 
+## Purpose
+定义 World 系统的 CLI 命令集，包括世界的创建、管理、绑定和蒸馏操作的交互式界面。
+## Requirements
 ### Requirement: /world 交互式子菜单
 系统 SHALL 提供 `/world` 命令，进入两层交互式菜单。顶层菜单 SHALL 显示两个选项：「创建」和「管理」。用户通过方向键选择、Enter 进入、ESC 退出。当没有已安装世界时，「管理」选项 SHALL 显示为禁用状态。
 
@@ -84,3 +87,15 @@
 #### Scenario: 取消删除
 - **WHEN** 用户在确认提示选择「取消」
 - **THEN** 返回子操作菜单
+
+### Requirement: World action menu bind/unbind entries
+The world action menu SHALL replace the separate "bind" and "unbind" entries with a single "绑定管理" entry that does not require a loaded soul.
+
+#### Scenario: Action menu shows bind management
+- **WHEN** the action menu is displayed for a selected world
+- **THEN** a single "绑定管理" action is shown (not separate bind/unbind), and it is always enabled regardless of whether a soul is loaded
+
+#### Scenario: Bind management launches checkbox UI
+- **WHEN** the user selects "绑定管理" from the action menu
+- **THEN** the WorldBindCommand is rendered with only the worldName prop (no soulDir or action)
+

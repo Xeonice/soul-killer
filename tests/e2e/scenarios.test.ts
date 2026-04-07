@@ -11,6 +11,14 @@ const PROMPT_RE = /soul:\/\/\S+.*>/
 // Set E2E_DEBUG=1 to see detailed timeline for each test
 const DEBUG = !!process.env.E2E_DEBUG
 
+// CI-friendly timeout constants
+// In CI, PTY I/O and ink rendering can be 3-5x slower than local due to
+// resource contention, virtualized I/O, and lack of GPU-accelerated TTY.
+// These values are deliberately generous — a slow pass beats a flaky fail.
+const SOUL_LOAD_TIMEOUT = 20000
+const WIZARD_STEP_TIMEOUT = 10000
+const INSTANT_TIMEOUT = 8000
+
 // ─── Group 1: Lifecycle ─────────────────────────────────────────
 
 describe('E2E: Lifecycle', () => {
@@ -60,27 +68,33 @@ describe('E2E: /create flow', () => {
     // Start /create
     term.send('/create')
     // Step 1: type selection — press Enter to accept default (public)
-    await term.waitFor(/type|类型|SOULKILLER PROTOCOL/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/type|类型|SOULKILLER PROTOCOL/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.sendKey('enter')
 
     // Step 2: name — enter soul name
-    await term.waitFor(/name|名称|Q1/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/name|名称|Q1/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.send('test-soul-e2e')
 
     // Step 3: description — enter or skip
-    await term.waitFor(/description|描述|Q2/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/description|描述|Q2/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.send('A test soul')
 
+    // Step 3.5: soul-list — select "continue" (down arrow + enter)
+    await term.waitFor(/Added Souls|已添加/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
+    term.sendKey('down')
+    await new Promise((r) => setTimeout(r, 100))
+    term.sendKey('enter')
+
     // Step 4: tags — skip
-    await term.waitFor(/tag|标签|Q3/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/tag|标签|Q3/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.sendKey('enter')
 
     // Step 5: confirm
-    await term.waitFor(/Confirm|确认/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/Confirm|确认/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.sendKey('enter')
 
     // Step 6: data sources — skip (Enter)
-    await term.waitFor(/data source|Supplement|数据源/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/data source|Supplement|数据源/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.sendKey('enter')
 
     // Wait for completion — either prompt returns or error
@@ -113,7 +127,7 @@ describe('E2E: Soul management', () => {
 
     // /list should show both souls in the interactive list
     term.send('/list')
-    await term.waitFor(/alice/, { since: 'last', timeout: 5000 })
+    await term.waitFor(/alice/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     // Both souls render in the same frame, so check buffer directly
     const listBuffer = term.getBuffer()
     expect(listBuffer).toContain('bob')
@@ -121,15 +135,15 @@ describe('E2E: Soul management', () => {
     // Exit the interactive list with Esc
     await new Promise((r) => setTimeout(r, 200))
     term.sendKey('escape')
-    await term.waitFor(PROMPT_RE, { since: 'last', timeout: 10000 })
+    await term.waitFor(PROMPT_RE, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // /use alice — wait for prompt to change to soul://alice
     term.send('/use alice')
-    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // /use bob — switch
     term.send('/use bob')
-    await term.waitFor(/soul:\/\/bob/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/bob/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
   })
 })
 
@@ -163,7 +177,7 @@ describe('E2E: Evolve and Recall', () => {
 
     // Load soul
     term.send('/use alice')
-    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // Use the integration test fixtures as markdown source (relative to project root / PTY cwd)
     const fixturesDir = 'tests/integration/fixtures'
@@ -171,7 +185,7 @@ describe('E2E: Evolve and Recall', () => {
     term.send('/evolve')
     // Wait for the data-sources checkbox to appear (not the autocomplete menu)
     // The checkbox renders ◉ (selected) or ◯ (unselected) markers
-    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
     // Data sources checkbox: Web Search is pre-selected (◉), Markdown is not (◯)
     // Space (deselect Web Search) → Down → Space (select Markdown) → Enter
     // Add delays for ink to process each keypress
@@ -184,7 +198,7 @@ describe('E2E: Evolve and Recall', () => {
     term.sendKey('enter')
 
     // Enter path for markdown source
-    await term.waitFor(/path/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/path/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.send(fixturesDir)
 
     // Wait for evolve to complete and prompt to return
@@ -192,7 +206,7 @@ describe('E2E: Evolve and Recall', () => {
 
     // Recall
     term.send('/recall cyberpunk')
-    await term.waitFor(/recall|result|chunk/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/recall|result|chunk/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
   })
 })
 
@@ -226,7 +240,7 @@ describe('E2E: Conversation', () => {
 
     // Load soul
     term.send('/use alice')
-    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // First message
     term.send('hello')
@@ -273,19 +287,19 @@ describe('E2E: Error paths', () => {
 
     // /use nonexistent → SOUL NOT FOUND
     term.send('/use nonexistent')
-    await term.waitForError('SOUL NOT FOUND', { timeout: 5000 })
+    await term.waitForError('SOUL NOT FOUND', { timeout: INSTANT_TIMEOUT })
 
     // /recall without args → MISSING ARGUMENT
     term.send('/recall')
-    await term.waitForError('MISSING ARGUMENT', { timeout: 5000 })
+    await term.waitForError('MISSING ARGUMENT', { timeout: INSTANT_TIMEOUT })
 
     // /xyzzy → UNKNOWN COMMAND
     term.send('/xyzzy')
-    await term.waitForError('UNKNOWN COMMAND', { timeout: 5000 })
+    await term.waitForError('UNKNOWN COMMAND', { timeout: INSTANT_TIMEOUT })
 
     // Natural language without soul → NO SOUL LOADED
     term.send('hello there')
-    await term.waitForError('NO SOUL', { timeout: 5000 })
+    await term.waitForError('NO SOUL', { timeout: INSTANT_TIMEOUT })
   })
 })
 
@@ -316,7 +330,7 @@ describe('E2E: Tab completion', () => {
     // Small delay to let completion render
     await new Promise((r) => setTimeout(r, 200))
     term.sendKey('enter')
-    await term.waitFor(/type|类型|SOULKILLER PROTOCOL/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/type|类型|SOULKILLER PROTOCOL/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     // If we reach the create wizard, tab completion worked
   })
 })
@@ -340,10 +354,10 @@ describe('E2E: Evolve subcommands', () => {
     await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     term.send('/use alice')
-    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     term.send('/evolve status')
-    await term.waitFor(/history|evolve|chunk|markdown/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/history|evolve|chunk|markdown/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
   })
 
   it('Scenario 9b: /evolve rollback', async () => {
@@ -353,11 +367,11 @@ describe('E2E: Evolve subcommands', () => {
     await term.waitFor(PROMPT_RE, { timeout: 30000 })
 
     term.send('/use alice')
-    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/alice/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     term.send('/evolve rollback')
     // Should show confirmation or "no snapshots" message
-    await term.waitFor(/rollback|confirm|Y\/n|snapshot/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/rollback|confirm|Y\/n|snapshot/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
   })
 })
 
@@ -460,7 +474,7 @@ describe('E2E: /export flow', () => {
     term.send('/export')
 
     // Should see the Export Protocol panel
-    await term.waitFor(/EXPORT PROTOCOL/i, { since: 'last', timeout: 15000 })
+    await term.waitFor(/EXPORT PROTOCOL/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // Agent will call list_souls, list_worlds, read_soul, read_world
     // Then present tone selection — wait for the select UI
@@ -470,7 +484,7 @@ describe('E2E: /export flow', () => {
     term.sendKey('enter')
 
     // Wait for structure confirmation — use specific text to avoid matching status bar "confirm"
-    await term.waitFor(/Confirm structure|Use recommended/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/Confirm structure|Use recommended/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // Confirm with Enter
     term.sendKey('enter')
@@ -521,7 +535,7 @@ describe('E2E: Distill with new dimensions', () => {
 
     // Load soul
     term.send('/use dim-test')
-    await term.waitFor(/soul:\/\/dim-test/, { since: 'last', timeout: 10000 })
+    await term.waitFor(/soul:\/\/dim-test/, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
 
     // Queue distill agent tool calling responses:
     // The evolve flow: ingest markdown → distill agent runs
@@ -556,7 +570,7 @@ describe('E2E: Distill with new dimensions', () => {
     // Start evolve with markdown fixture
     const fixturesDir = 'tests/integration/fixtures'
     term.send('/evolve')
-    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: 10000 })
+    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
     term.sendKey(' ')
     await new Promise((r) => setTimeout(r, 100))
     term.sendKey('down')
@@ -565,7 +579,7 @@ describe('E2E: Distill with new dimensions', () => {
     await new Promise((r) => setTimeout(r, 100))
     term.sendKey('enter')
 
-    await term.waitFor(/path/i, { since: 'last', timeout: 5000 })
+    await term.waitFor(/path/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     term.send(fixturesDir)
 
     // Wait for distill to complete

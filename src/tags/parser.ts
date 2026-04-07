@@ -1,4 +1,4 @@
-import type OpenAI from 'openai'
+import { generateText, type LanguageModel } from 'ai'
 import { type TagSet, type TagCategory, getTagAnchors, emptyTagSet } from './taxonomy.js'
 import { t } from '../i18n/index.js'
 
@@ -15,13 +15,12 @@ function buildParsePrompt(): string {
 
 export async function parseTags(
   input: string,
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
 ): Promise<TagSet> {
   if (!input.trim()) return emptyTagSet()
 
   try {
-    const res = await client.chat.completions.create({
+    const { text: content } = await generateText({
       model,
       messages: [
         { role: 'system', content: buildParsePrompt() },
@@ -29,8 +28,6 @@ export async function parseTags(
       ],
       temperature: 0,
     })
-
-    const content = res.choices[0]?.message?.content ?? ''
     // Extract JSON from potential markdown code blocks
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return emptyTagSet()

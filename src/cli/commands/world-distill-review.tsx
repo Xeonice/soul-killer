@@ -68,6 +68,13 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
     return <Text color={DIM}>无条目可审查</Text>
   }
 
+  // Chronicle entries get an extra header row showing the time anchor and a
+  // warning when sort_key was inferred (heuristic) — these need a human
+  // double-check before being trusted as canonical timeline data.
+  const isChronicle = current.meta.scope === 'chronicle'
+  const chronicleKind = current.chronicleType
+  const sortKeyUnreliable = current.meta.sort_key_inferred === false
+
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
@@ -75,6 +82,25 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
         <Text bold>{current.meta.name}</Text>
         <Text color={DIM}> ({current.meta.scope}, {current.meta.mode}, priority: {current.meta.priority})</Text>
       </Box>
+
+      {isChronicle && (
+        <Box marginBottom={1} flexDirection="column">
+          <Box>
+            <Text color={ACCENT}>📜 Chronicle{chronicleKind ? ` · ${chronicleKind}` : ''}</Text>
+            {current.meta.display_time && (
+              <Text color={DIM}>  时间: {current.meta.display_time}</Text>
+            )}
+            {typeof current.meta.sort_key === 'number' && (
+              <Text color={DIM}>  sort_key: {current.meta.sort_key}</Text>
+            )}
+          </Box>
+          {sortKeyUnreliable && (
+            <Box>
+              <Text color="yellow">⚠️  时间不可靠：sort_key 由启发式推断，请校正后再保存</Text>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {current.meta.keywords.length > 0 && (
         <Box marginBottom={1}>

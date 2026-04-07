@@ -39,6 +39,8 @@ import { loadBindings } from '../world/binding.js'
 import { emptyTagSet } from '../tags/taxonomy.js'
 import { WorldCommand } from './commands/world.js'
 import { ExportCommand } from './commands/export.js'
+import { PackCommand } from './commands/pack.js'
+import { UnpackCommand } from './commands/unpack.js'
 import { listWorlds } from '../world/manifest.js'
 
 type AppPhase = 'boot' | 'setup' | 'idle' | 'command' | 'exit'
@@ -72,10 +74,19 @@ const worldCompletionProvider = () => listWorlds().map((w) => ({
   group: 'worlds',
 }))
 
+const packSubcommandProvider = () => [
+  { name: 'soul', description: 'Pack a soul with bound worlds', group: 'subcommands' },
+  { name: 'world', description: 'Pack a world', group: 'subcommands' },
+]
+
 const ARG_COMPLETION_MAP: ArgCompletionMap = {
   use: {
     provider: soulCompletionProvider,
     title: 'SOULS',
+  },
+  pack: {
+    provider: packSubcommandProvider,
+    title: 'TYPE',
   },
   evolve: {
     provider: soulCompletionProvider,
@@ -528,6 +539,52 @@ export function App() {
             ),
           }))
           return
+        case 'pack':
+          if (!parsed.args) {
+            setState((s) => ({
+              ...s,
+              error: {
+                severity: 'warning',
+                title: 'MISSING ARGUMENT',
+                message: t('error.missing_argument', { command: 'pack', arg: 'soul|world <name>' }),
+              },
+            }))
+            return
+          }
+          setState((s) => ({
+            ...s,
+            commandOutput: (
+              <PackCommand
+                args={parsed.args}
+                onComplete={() => setState((s) => ({ ...s, commandOutput: null }))}
+              />
+            ),
+          }))
+          return
+        case 'unpack':
+          if (!parsed.args) {
+            setState((s) => ({
+              ...s,
+              error: {
+                severity: 'warning',
+                title: 'MISSING ARGUMENT',
+                message: t('error.missing_argument', { command: 'unpack', arg: '<path>' }),
+              },
+            }))
+            return
+          }
+          setState((s) => ({
+            ...s,
+            interactiveMode: true,
+            commandOutput: (
+              <UnpackCommand
+                args={parsed.args}
+                onComplete={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+                onCancel={() => setState((s) => ({ ...s, interactiveMode: false, commandOutput: null }))}
+              />
+            ),
+          }))
+          return
         default: {
           const suggestion = suggestCommand(parsed.name)
           const msg = suggestion
@@ -612,7 +669,7 @@ export function App() {
       // 2. Streaming phase
       setState((s) => ({ ...s, isThinking: false, isStreaming: true, streamContent: '', promptStatus: 'streaming' }))
 
-      const stream = streamChat(client, config.llm.default_model, messages)
+      const stream = streamChat(client, messages)
       let fullText = ''
 
       for await (const chunk of stream) {

@@ -30,6 +30,8 @@ const COMMAND_TEMPLATES: CommandTemplate[] = [
 
   // 导出
   { name: 'export', descriptionKey: 'cmd.export', groupKey: 'cmd.group.export' },
+  { name: 'pack', descriptionKey: 'cmd.pack', groupKey: 'cmd.group.export' },
+  { name: 'unpack', descriptionKey: 'cmd.unpack', groupKey: 'cmd.group.export' },
 
   // 设置
   { name: 'config', descriptionKey: 'cmd.config', groupKey: 'cmd.group.settings' },

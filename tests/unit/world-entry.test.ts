@@ -95,6 +95,69 @@ describe('serializeFrontmatter', () => {
   })
 })
 
+describe('chronicle entry frontmatter', () => {
+  it('serialize then parse a chronicle entry preserves all new fields', () => {
+    const meta: EntryMeta = {
+      name: '2020-arasaka-nuke',
+      keywords: ['荒坂塔', 'Arasaka Tower'],
+      priority: 950,
+      mode: 'always',
+      scope: 'chronicle',
+      sort_key: 2020.613,
+      display_time: '2020 年 8 月',
+      event_ref: '2020-arasaka-nuke',
+    }
+    const serialized = serializeFrontmatter(meta, '2020 年 8 月 · 荒坂塔核爆')
+    expect(serialized).toContain('scope: chronicle')
+    expect(serialized).toContain('sort_key: 2020.613')
+    expect(serialized).toContain('display_time: "2020 年 8 月"')
+    expect(serialized).toContain('event_ref: 2020-arasaka-nuke')
+
+    const { meta: parsed } = parseFrontmatter(serialized)
+    // Re-run parsed through scope/field validation by going through a full
+    // round trip via addEntry/loadEntry would be heavier; here we directly
+    // assert raw shape and trust parseEntryMeta below.
+    expect(parsed.scope).toBe('chronicle')
+    expect(parsed.sort_key).toBe(2020.613)
+    expect(parsed.display_time).toBe('2020 年 8 月')
+    expect(parsed.event_ref).toBe('2020-arasaka-nuke')
+  })
+
+  it('serialize emits sort_key_inferred only when explicitly false', () => {
+    const trustworthy: EntryMeta = {
+      name: 'a',
+      keywords: ['a'],
+      priority: 950,
+      mode: 'always',
+      scope: 'chronicle',
+      sort_key: 100,
+    }
+    const inferred: EntryMeta = { ...trustworthy, name: 'b', sort_key_inferred: false }
+
+    expect(serializeFrontmatter(trustworthy, '')).not.toContain('sort_key_inferred')
+    expect(serializeFrontmatter(inferred, '')).toContain('sort_key_inferred: false')
+  })
+
+  it('legacy entries without chronicle fields still parse cleanly', () => {
+    const input = `---
+name: megacorps
+keywords: ["荒坂"]
+priority: 100
+mode: keyword
+scope: lore
+---
+
+old content`
+    const { meta } = parseFrontmatter(input)
+    expect(meta.scope).toBe('lore')
+    // None of the new chronicle fields should leak in
+    expect(meta.sort_key).toBeUndefined()
+    expect(meta.display_time).toBeUndefined()
+    expect(meta.event_ref).toBeUndefined()
+    expect(meta.sort_key_inferred).toBeUndefined()
+  })
+})
+
 describe('Entry CRUD', () => {
   const meta: EntryMeta = {
     name: 'megacorps',

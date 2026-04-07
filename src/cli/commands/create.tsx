@@ -5,6 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { TextInput, CheckboxSelect } from '../components/text-input.js'
 import { SoulkillerProtocolPanel } from '../animation/soulkiller-protocol-panel.js'
+import { BatchProtocolPanel } from '../animation/batch-protocol-panel.js'
 import { DistillProgressPanel, type DistillToolCallDisplay } from '../components/distill-progress.js'
 import { IngestPipeline } from '../../ingest/pipeline.js'
 import type { AdapterType } from '../../ingest/pipeline.js'
@@ -13,8 +14,9 @@ import { getLLMClient } from '../../llm/client.js'
 import { loadConfig } from '../../config/loader.js'
 import { generateManifest, packageSoul, readManifest } from '../../soul/package.js'
 import { captureSoul, type CaptureProgress } from '../../agent/soul-capture-agent.js'
+import { runBatchPipeline, retryFailedSouls, type SoulInput, type SoulTaskStatus, type BatchResult, type BatchProgressEvent } from '../../agent/batch-pipeline.js'
 import type { ToolCallDisplay, AgentPhase, SearchPlanDimDisplay } from '../animation/soulkiller-protocol-panel.js'
-import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
+import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../animation/colors.js'
 import { t } from '../../i18n/index.js'
 import type { IngestProgress, SoulChunk } from '../../ingest/types.js'
 import type { SoulType, SoulManifest } from '../../soul/manifest.js'
@@ -43,6 +45,7 @@ type CreateStep =
   | 'type-select'     // Choose personal or public
   | 'name'
   | 'description'     // Q2: one-line description (optional)
+  | 'soul-list'       // Batch: show added souls, add more or continue
   | 'tags'            // Q3: personality/impression tags (optional)
   | 'confirm'         // Summary confirmation
   | 'name-conflict'   // Existing soul detected
@@ -53,6 +56,8 @@ type CreateStep =
   | 'source-path'
   | 'ingesting'
   | 'distilling'
+  | 'batch-capturing' // Batch: parallel capture + distill in progress
+  | 'batch-summary'   // Batch: results summary
   | 'done'
   | 'error'
 
@@ -131,12 +136,22 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
   const [agentChunks, setAgentChunks] = useState<SoulChunk[]>([])
   const [agentElapsed, setAgentElapsed] = useState(0)
   const [searchPlan, setSearchPlan] = useState<SearchPlanDimDisplay[]>([])
+  const [agentSessionDir, setAgentSessionDir] = useState<string | undefined>()
+  const [capturedDimensions, setCapturedDimensions] = useState<any[] | undefined>()
+  const [dimBreakdown, setDimBreakdown] = useState<Record<string, number>>({})
 
   const agentLogRef = useRef<import('../../utils/agent-logger.js').AgentLogger | undefined>(undefined)
 
   // Distill progress state
   const [distillToolCalls, setDistillToolCalls] = useState<DistillToolCallDisplay[]>([])
   const [distillPhase, setDistillPhase] = useState<'distilling' | 'complete'>('distilling')
+
+  // Batch state
+  const [soulInputs, setSoulInputs] = useState<SoulInput[]>([])
+  const [soulListCursor, setSoulListCursor] = useState(0)
+  const [batchStatuses, setBatchStatuses] = useState<SoulTaskStatus[]>([])
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null)
+  const [batchSummaryCursor, setBatchSummaryCursor] = useState(0)
 
   // Unified input handler
   useInput((_input, key) => {
@@ -145,6 +160,8 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       onCancel()
       return
     }
+    // batch-capturing: Esc is handled inside BatchProtocolPanel
+    // (detail → compact via internal state, compact → cancel via onCancel prop)
 
     // Type selection
     if (step === 'type-select') {
@@ -190,9 +207,9 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
     if (step === 'search-confirm') {
       if (key.escape) { onCancel(); return }
       if (key.upArrow) setSearchConfirmCursor((c) => Math.max(0, c - 1))
-      if (key.downArrow) setSearchConfirmCursor((c) => Math.min(2, c + 1))
+      if (key.downArrow) setSearchConfirmCursor((c) => Math.min(1, c + 1))
       if (key.return) {
-        const choices: SearchConfirmChoice[] = ['confirm', 'detail', 'retry']
+        const choices: SearchConfirmChoice[] = ['confirm', 'retry']
         handleSearchConfirmChoice(choices[searchConfirmCursor]!)
       }
       return
@@ -207,6 +224,66 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       }
       if (key.upArrow) setDetailScroll((s) => Math.max(0, s - 1))
       if (key.downArrow) setDetailScroll((s) => Math.min(Math.max(0, agentChunks.length - 1), s + 1))
+      return
+    }
+
+    // Soul list (batch management)
+    if (step === 'soul-list') {
+      if (key.escape) { onCancel(); return }
+      const menuItems = soulInputs.length > 1
+        ? ['add', 'continue', 'remove'] as const
+        : ['add', 'continue'] as const
+      if (key.upArrow) setSoulListCursor((c) => Math.max(0, c - 1))
+      if (key.downArrow) setSoulListCursor((c) => Math.min(menuItems.length - 1, c + 1))
+      if (key.return) {
+        const choice = menuItems[soulListCursor]
+        if (choice === 'add') {
+          // Go back to name step for next soul
+          setSoulName('')
+          setDescription('')
+          setStep('name')
+        } else if (choice === 'continue') {
+          if (soulInputs.length === 1) {
+            // Single soul: restore name/description and go to original flow
+            setSoulName(soulInputs[0]!.name)
+            setDescription(soulInputs[0]!.description)
+            setStep('tags')
+          } else {
+            // Multiple souls: skip tags, go to data-sources
+            setStep('data-sources')
+          }
+        } else if (choice === 'remove') {
+          setSoulInputs((prev) => prev.slice(0, -1))
+          setSoulListCursor(0)
+        }
+      }
+      return
+    }
+
+    // Batch summary
+    if (step === 'batch-summary') {
+      if (key.escape) { onCancel(); return }
+      const hasFailures = batchResult?.souls.some((s) => s.phase === 'failed')
+      const menuItems = hasFailures ? ['finish', 'retry', 'detail'] : ['finish', 'detail']
+      if (key.upArrow) setBatchSummaryCursor((c) => Math.max(0, c - 1))
+      if (key.downArrow) setBatchSummaryCursor((c) => Math.min(menuItems.length - 1, c + 1))
+      if (key.return) {
+        const choice = menuItems[batchSummaryCursor]
+        if (choice === 'finish') {
+          // Call onComplete for each successful soul
+          for (const soul of batchResult?.souls ?? []) {
+            if (soul.phase === 'done' && soul.soulDir) {
+              onComplete(soul.name, soul.soulDir)
+            }
+          }
+          setStep('done')
+        } else if (choice === 'retry') {
+          handleBatchRetry()
+        } else if (choice === 'detail') {
+          // Switch to batch-capturing view for review
+          setStep('batch-capturing')
+        }
+      }
       return
     }
 
@@ -270,9 +347,6 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
     if (choice === 'confirm') {
       // Continue to local sources if any were selected, otherwise distill
       proceedToLocalSources()
-    } else if (choice === 'detail') {
-      setDetailScroll(0)
-      setStep('search-detail')
     } else if (choice === 'retry') {
       setAgentChunks([])
       setToolCalls([])
@@ -281,6 +355,9 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       setOrigin(undefined)
       setChunkCount(0)
       setSearchPlan([])
+      setAgentSessionDir(undefined)
+      setCapturedDimensions(undefined)
+      setDimBreakdown({})
       setStep('capturing')
       setProtocolPhase('initiating')
       runAgentCapture(soulName)
@@ -295,7 +372,10 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
 
   function handleDescriptionSubmit(value: string) {
     setDescription(value.trim())
-    setStep('tags')
+    // Add current soul to soulInputs and go to soul-list
+    const newInput: SoulInput = { name: soulName, description: value.trim() }
+    setSoulInputs((prev) => [...prev, newInput])
+    setStep('soul-list')
   }
 
   async function handleTagsSubmit(value: string) {
@@ -311,8 +391,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       const config = loadConfig()
       if (config) {
         const client = getLLMClient()
-        const model = config.llm.default_model
-        const tags = await parseTags(value.trim(), client, model)
+        const tags = await parseTags(value.trim(), client)
         setParsedTags(tags)
       }
     } catch {
@@ -339,6 +418,177 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
     setErrorCursor(0)
 
     setStep('data-sources')
+  }
+
+  async function runBatch(dataSources: DataSourceOption[]) {
+    const config = loadConfig()
+    if (!config) {
+      setError(t('create.config_not_init'))
+      setStep('error')
+      return
+    }
+
+    setStep('batch-capturing')
+
+    // Initialize statuses for UI
+    const initialStatuses: SoulTaskStatus[] = soulInputs.map((s) => ({
+      name: s.name,
+      description: s.description,
+      phase: 'pending' as const,
+      toolCalls: [],
+      distillToolCalls: [],
+      fragments: 0,
+      elapsedMs: 0,
+    }))
+    setBatchStatuses(initialStatuses)
+
+    try {
+      const result = await runBatchPipeline({
+        souls: soulInputs,
+        config,
+        dataSources,
+        soulType,
+        soulsDir: SOULS_DIR,
+        deps: {
+          captureSoul,
+          distillSoul,
+          createSyntheticChunks,
+          packageSoul,
+          generateManifest,
+        },
+        maxConcurrency: 3,
+        onProgress: (event: BatchProgressEvent) => {
+          setBatchStatuses((prev) => {
+            const idx = prev.findIndex((s) => s.name === event.soulName)
+            if (idx === -1) return prev
+
+            const updated = [...prev]
+            const current = { ...updated[idx]! }
+
+            if (event.type === 'phase') {
+              current.phase = event.phase
+            } else if (event.type === 'capture_progress') {
+              const p = event.progress
+              if (p.type === 'phase') {
+                current.capturePhase = p.phase
+              } else if (p.type === 'tool_call') {
+                current.toolCalls = [...current.toolCalls, {
+                  tool: p.tool, query: p.query, status: 'running', phase: current.capturePhase,
+                }]
+              } else if (p.type === 'tool_result') {
+                const tcs = [...current.toolCalls]
+                const last = tcs.findLastIndex((tc) => tc.tool === p.tool && tc.status === 'running')
+                if (last !== -1) tcs[last] = { ...tcs[last]!, status: 'done', resultCount: p.resultCount }
+                current.toolCalls = tcs
+              } else if (p.type === 'classification') {
+                current.classification = p.classification
+                current.origin = p.origin
+              } else if (p.type === 'search_plan') {
+                current.searchPlan = p.dimensions
+              } else if (p.type === 'filter_progress') {
+                current.filterProgress = { kept: p.kept, total: p.total }
+              } else if (p.type === 'chunks_extracted') {
+                current.fragments = p.count
+              }
+            } else if (event.type === 'distill_progress') {
+              const p = event.progress
+              if (p.type === 'phase') {
+                current.distillPhase = p.phase
+              } else if (p.type === 'tool_call') {
+                current.distillToolCalls = [...current.distillToolCalls, {
+                  tool: p.tool, detail: p.detail, status: 'running',
+                }]
+              } else if (p.type === 'tool_result') {
+                const tcs = [...current.distillToolCalls]
+                const last = tcs.findLastIndex((tc) => tc.tool === p.tool && tc.status === 'running')
+                if (last !== -1) tcs[last] = { ...tcs[last]!, status: 'done', resultSummary: p.resultSummary }
+                current.distillToolCalls = tcs
+              }
+            } else if (event.type === 'done') {
+              current.soulDir = event.soulDir
+            } else if (event.type === 'error') {
+              current.error = event.error
+            }
+
+            updated[idx] = current
+            return updated
+          })
+        },
+      })
+
+      setBatchResult(result)
+      // Update final statuses from result
+      setBatchStatuses(result.souls)
+      setBatchSummaryCursor(0)
+      setStep('batch-summary')
+    } catch (err) {
+      setError(String(err))
+      setStep('error')
+    }
+  }
+
+  async function handleBatchRetry() {
+    const failedNames = (batchResult?.souls ?? [])
+      .filter((s) => s.phase === 'failed')
+      .map((s) => s.name)
+
+    if (failedNames.length === 0) return
+
+    const config = loadConfig()
+    if (!config) return
+
+    setStep('batch-capturing')
+
+    try {
+      const result = await retryFailedSouls(failedNames, soulInputs, {
+        config,
+        dataSources: selectedSources,
+        soulType,
+        soulsDir: SOULS_DIR,
+        deps: {
+          captureSoul,
+          distillSoul,
+          createSyntheticChunks,
+          packageSoul,
+          generateManifest,
+        },
+        maxConcurrency: 3,
+        onProgress: (event: BatchProgressEvent) => {
+          setBatchStatuses((prev) => {
+            const idx = prev.findIndex((s) => s.name === event.soulName)
+            if (idx === -1) return prev
+            const updated = [...prev]
+            const current = { ...updated[idx]! }
+            if (event.type === 'phase') current.phase = event.phase
+            else if (event.type === 'done') current.soulDir = event.soulDir
+            else if (event.type === 'error') current.error = event.error
+            updated[idx] = current
+            return updated
+          })
+        },
+      })
+
+      // Merge retry results into existing results
+      setBatchResult((prev) => {
+        if (!prev) return result
+        const merged = prev.souls.map((s) => {
+          const retried = result.souls.find((r) => r.name === s.name)
+          return retried ?? s
+        })
+        return { souls: merged, totalElapsedMs: prev.totalElapsedMs + result.totalElapsedMs }
+      })
+      setBatchStatuses((prev) => {
+        return prev.map((s) => {
+          const retried = result.souls.find((r) => r.name === s.name)
+          return retried ?? s
+        })
+      })
+      setBatchSummaryCursor(0)
+      setStep('batch-summary')
+    } catch (err) {
+      setError(String(err))
+      setStep('error')
+    }
   }
 
   async function runAgentCapture(name: string) {
@@ -386,15 +636,38 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       setAgentElapsed(result.elapsedMs)
       agentLogRef.current = result.agentLog
 
-      if (result.classification === 'UNKNOWN_ENTITY' || result.chunks.length === 0) {
+      // Save capture result metadata for distill (aligned with world-create-wizard)
+      if (result.sessionDir) {
+        setAgentSessionDir(result.sessionDir)
+        // Recount from cache files for accuracy
+        try {
+          const nodeFs = await import('node:fs')
+          const nodePath = await import('node:path')
+          const files = nodeFs.readdirSync(result.sessionDir).filter((f: string) => f.endsWith('.json'))
+          let total = 0
+          for (const f of files) {
+            const data = JSON.parse(nodeFs.readFileSync(nodePath.join(result.sessionDir, f), 'utf-8'))
+            total += (data.results?.length ?? 0)
+          }
+          setChunkCount(total)
+        } catch { /* keep event-based count */ }
+      }
+      if (result.dimensionPlan) setCapturedDimensions(result.dimensionPlan.dimensions)
+      if (result.dimensionScores) {
+        const breakdown: Record<string, number> = {}
+        for (const [dim, score] of Object.entries(result.dimensionScores)) {
+          breakdown[dim] = score.qualifiedCount
+        }
+        setDimBreakdown(breakdown)
+      }
+
+      if (result.classification === 'UNKNOWN_ENTITY') {
         result.agentLog?.close()
         agentLogRef.current = undefined
         setProtocolPhase('unknown')
         // Web search failed/empty — continue to local sources if any selected
         setTimeout(() => proceedToLocalSources(), 2000)
       } else {
-        setAgentChunks(result.chunks)
-        setChunkCount(result.chunks.length)
         setProtocolPhase('complete')
         setSearchConfirmCursor(0)
         setTimeout(() => setStep('search-confirm'), 1500)
@@ -408,12 +681,18 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
   function handleSourcesSubmit(selected: DataSourceOption[]) {
     setSelectedSources(selected)
 
+    // Batch mode: multiple souls
+    if (soulInputs.length > 1) {
+      runBatch(selected)
+      return
+    }
+
     if (selected.length === 0) {
       // Nothing selected — skip to distill with synthetic chunks only
       const syntheticChunks = createSyntheticChunks(soulName, description, parsedTags)
-      const allChunks = [...appendChunks, ...agentChunks, ...syntheticChunks]
+      const allChunks = [...appendChunks, ...syntheticChunks]
       setChunkCount(allChunks.length)
-      startDistill(soulName, allChunks)
+      startDistill(soulName, allChunks, agentSessionDir)
       return
     }
 
@@ -433,9 +712,9 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
     if (localSources.length === 0) {
       // No local sources — go to distill
       const syntheticChunks = createSyntheticChunks(soulName, description, parsedTags)
-      const allChunks = [...appendChunks, ...agentChunks, ...syntheticChunks]
+      const allChunks = [...appendChunks, ...syntheticChunks]
       setChunkCount(allChunks.length)
-      startDistill(soulName, allChunks)
+      startDistill(soulName, allChunks, agentSessionDir)
       return
     }
     // Set up local source processing
@@ -476,10 +755,10 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
 
       const chunks = await pipeline.run({ adapters })
       const syntheticChunks = createSyntheticChunks(soulName, description, parsedTags)
-      const allChunks = [...appendChunks, ...agentChunks, ...syntheticChunks, ...chunks]
+      const allChunks = [...appendChunks, ...syntheticChunks, ...chunks]
       setChunkCount(allChunks.length)
 
-      await startDistill(soulName, allChunks)
+      await startDistill(soulName, allChunks, agentSessionDir)
     } catch (err) {
       setError(String(err))
       setStep('error')
@@ -507,7 +786,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
     }
   }
 
-  async function startDistill(name: string, chunks: SoulChunk[]) {
+  async function startDistill(name: string, chunks: SoulChunk[], distillSessionDir?: string) {
     try {
       const soulDir = path.join(SOULS_DIR, name)
       packageSoul(soulDir)
@@ -524,12 +803,17 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       }
 
       const aLog = agentLogRef.current
-      const result = await distillSoul(name, chunks, soulDir, config, parsedTags, handleDistillAgentProgress, aLog)
+      const result = await distillSoul(name, soulDir, config, {
+        sessionDir: distillSessionDir,
+        chunks: chunks.length > 0 ? chunks : undefined,
+        tags: parsedTags,
+        onProgress: handleDistillAgentProgress,
+        agentLog: aLog,
+      })
 
       if (supplementSoul) {
         // Supplement mode: merge new distill results with existing soul files
         const client = getLLMClient()
-        const model = config.llm.distill_model ?? config.llm.default_model
         const existingSoul = loadSoulFiles(supplementSoul.dir)
 
         if (existingSoul) {
@@ -538,7 +822,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
 
           // Extract features from new chunks
           const sampled = sampleChunks(chunks)
-          const deltaFeatures = await extractFeatures(client, model, sampled, name)
+          const deltaFeatures = await extractFeatures(client, sampled, name)
 
           // Merge with existing
           const mergeInput: MergeInput = {
@@ -546,7 +830,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
             existingStyle: existingSoul.style,
             existingBehaviors: existingSoul.behaviors,
           }
-          const merged = await mergeSoulFiles(client, model, mergeInput, deltaFeatures, name)
+          const merged = await mergeSoulFiles(client, mergeInput, deltaFeatures, name)
           generateSoulFiles(supplementSoul.dir, merged, ['identity', 'style', 'behaviors'])
         }
 
@@ -561,7 +845,9 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
         })
       } else {
         // Normal create: generate manifest
-        generateManifest(soulDir, name, name, description, chunks.length, ['zh'], soulType, parsedTags)
+        // Use chunkCount state (includes sessionDir articles) when chunks array is empty
+        const manifestChunkCount = chunks.length > 0 ? chunks.length : chunkCount
+        generateManifest(soulDir, name, name, description, manifestChunkCount, ['zh'], soulType, parsedTags)
       }
 
       result.agentLog?.close()
@@ -609,6 +895,19 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
   }
 
   if (step === 'done') {
+    // Batch mode done
+    if (batchResult && soulInputs.length > 1) {
+      const successSouls = batchResult.souls.filter((s) => s.phase === 'done')
+      return (
+        <Box flexDirection="column" paddingLeft={2}>
+          {successSouls.map((soul) => (
+            <Text key={soul.name} color={PRIMARY} bold>✓ soul captured: {soul.name}</Text>
+          ))}
+          <Text color={DIM}>  {t('create.done.type')}: {soulType === 'personal' ? t('create.type.personal') : t('create.type.public')}</Text>
+        </Box>
+      )
+    }
+    // Single mode done
     return (
       <Box flexDirection="column" paddingLeft={2}>
         <Text color={PRIMARY} bold>✓ soul captured: {soulName}</Text>
@@ -663,6 +962,34 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
             onEscape={onCancel}
             onSubmit={handleDescriptionSubmit}
           />
+        </>
+      )}
+
+      {step === 'soul-list' && (
+        <>
+          <Text color={ACCENT} bold>── {t('batch.soul_list.title')} ──</Text>
+          <Text> </Text>
+          {soulInputs.map((soul, i) => (
+            <Text key={i} color={DIM}>
+              {'  '}{i + 1}. <Text color={PRIMARY}>{soul.name}</Text>
+              {soul.description ? ` — ${soul.description}` : ''}
+            </Text>
+          ))}
+          <Text> </Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            {[
+              { key: 'add', label: `[+] ${t('batch.soul_list.add')}` },
+              { key: 'continue', label: `[→] ${t('batch.soul_list.continue')}${soulInputs.length > 1 ? ` (${soulInputs.length} ${t('batch.complete')})` : ''}` },
+              ...(soulInputs.length > 1 ? [{ key: 'remove', label: `[✕] ${t('batch.soul_list.remove')}` }] : []),
+            ].map((item, i) => (
+              <Text key={item.key}>
+                <Text color={soulListCursor === i ? PRIMARY : DIM}>
+                  {soulListCursor === i ? '● ' : '○ '}
+                </Text>
+                <Text color={soulListCursor === i ? PRIMARY : undefined}>{item.label}</Text>
+              </Text>
+            ))}
+          </Box>
         </>
       )}
 
@@ -765,35 +1092,33 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
             <Text>  <Text color={PRIMARY}>{t('create.search.class')}:</Text> {getClassificationLabels()[classification]}</Text>
           )}
           {origin && <Text>  <Text color={PRIMARY}>{t('create.search.origin')}:</Text> {origin}</Text>}
-          <Text>  <Text color={PRIMARY}>{t('create.search.fragments')}:</Text> {agentChunks.length} {t('create.search.unit')}</Text>
+          <Text>  <Text color={PRIMARY}>{t('create.search.fragments')}:</Text> {chunkCount} {t('create.search.unit')}</Text>
+
+          {/* Dimension quality breakdown (aligned with world-create-wizard) */}
+          {Object.keys(dimBreakdown).length > 0 && (
+            <>
+              <Text> </Text>
+              {Object.entries(dimBreakdown).map(([dim, qualified]) => {
+                const dimDef = capturedDimensions?.find((d: any) => d.name === dim)
+                const minRequired = dimDef?.minArticles ?? 2
+                const sufficient = qualified >= minRequired
+                const bar = '█'.repeat(Math.min(qualified, 10))
+                const pLabel = dimDef?.priority === 'required' ? t('protocol.priority.required')
+                  : dimDef?.priority === 'important' ? t('protocol.priority.important')
+                  : t('protocol.priority.supplementary')
+                return (
+                  <Text key={dim} color={DIM}>
+                    {'    '}{dim.padEnd(20)} <Text color={sufficient ? PRIMARY : WARNING}>{bar}</Text> {qualified}/{minRequired} <Text color={DARK}>({pLabel})</Text>
+                  </Text>
+                )
+              })}
+            </>
+          )}
           <Text> </Text>
-          {agentChunks.length > 0 && (() => {
-            const dimCounts: Record<string, number> = {}
-            for (const c of agentChunks) {
-              const dim = String(c.metadata?.extraction_step ?? '')
-              if (dim) dimCounts[dim] = (dimCounts[dim] ?? 0) + 1
-            }
-            const entries = Object.entries(dimCounts).sort(([, a], [, b]) => b - a)
-            if (entries.length === 0) return null
-            const maxCount = Math.max(...entries.map(([, v]) => v))
-            return (
-              <Box flexDirection="column" paddingLeft={2} marginBottom={1}>
-                <Text color={PRIMARY}>  {t('create.search.coverage')}:</Text>
-                {entries.map(([dim, count]) => {
-                  const barLen = Math.round((count / maxCount) * 8)
-                  const bar = '█'.repeat(barLen).padEnd(8)
-                  return (
-                    <Text key={dim} color={DIM}>    {dim.padEnd(12)} {bar} {count}</Text>
-                  )
-                })}
-              </Box>
-            )
-          })()}
           <Box flexDirection="column" paddingLeft={2}>
-            {(['confirm', 'detail', 'retry'] as const).map((choice, i) => {
+            {(['confirm', 'retry'] as const).map((choice, i) => {
               const labels = {
                 confirm: t('create.search.confirm'),
-                detail: t('create.search.detail'),
                 retry: t('create.search.retry'),
               }
               return (
@@ -875,6 +1200,66 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
           <Text color={DIM}>  {t('create.label.target')}: {soulName}</Text>
           <Text color={DIM}>  fragments: {chunkCount}</Text>
           <DistillProgressPanel toolCalls={distillToolCalls} phase={distillPhase} />
+        </>
+      )}
+
+      {step === 'batch-capturing' && (
+        <BatchProtocolPanel statuses={batchStatuses} onCancel={onCancel} />
+      )}
+
+      {step === 'batch-summary' && batchResult && (
+        <>
+          <Text color={ACCENT} bold>── {t('batch.summary.title')} ──</Text>
+          <Text> </Text>
+          {batchResult.souls.map((soul) => (
+            <Text key={soul.name}>
+              <Text color={soul.phase === 'done' ? PRIMARY : ACCENT}>
+                {soul.phase === 'done' ? '  ✓ ' : '  ✗ '}
+              </Text>
+              <Text color={soul.phase === 'done' ? PRIMARY : undefined}>
+                {soul.name.padEnd(16)}
+              </Text>
+              {soul.phase === 'done' ? (
+                <Text color={DIM}>
+                  {soul.classification ?? ''} · {soul.fragments} frags · {(soul.elapsedMs / 1000).toFixed(1)}s
+                </Text>
+              ) : (
+                <Text color={ACCENT}>{soul.error ?? 'FAILED'}</Text>
+              )}
+            </Text>
+          ))}
+          <Text> </Text>
+          <Text color={DIM}>
+            {'  '}{t('batch.summary.success', { count: String(batchResult.souls.filter((s) => s.phase === 'done').length) })}
+            {'  ·  '}{t('batch.summary.elapsed', { time: (batchResult.totalElapsedMs / 1000).toFixed(1) })}
+            {batchResult.souls.some((s) => s.phase === 'failed') &&
+              `  ·  ${t('batch.summary.failed', { count: String(batchResult.souls.filter((s) => s.phase === 'failed').length) })}`
+            }
+          </Text>
+          <Text> </Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            {(() => {
+              const hasFailures = batchResult.souls.some((s) => s.phase === 'failed')
+              const items = hasFailures
+                ? [
+                    { key: 'finish', label: t('batch.summary.finish') },
+                    { key: 'retry', label: t('batch.summary.retry') },
+                    { key: 'detail', label: t('batch.summary.detail') },
+                  ]
+                : [
+                    { key: 'finish', label: t('batch.summary.finish') },
+                    { key: 'detail', label: t('batch.summary.detail') },
+                  ]
+              return items.map((item, i) => (
+                <Text key={item.key}>
+                  <Text color={batchSummaryCursor === i ? PRIMARY : DIM}>
+                    {batchSummaryCursor === i ? '● ' : '○ '}
+                  </Text>
+                  <Text color={batchSummaryCursor === i ? PRIMARY : undefined}>{item.label}</Text>
+                </Text>
+              ))
+            })()}
+          </Box>
         </>
       )}
     </Box>

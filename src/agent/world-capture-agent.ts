@@ -1,10 +1,10 @@
 import type { SoulkillerConfig } from '../config/schema.js'
 import { runCaptureAgent } from './capture-agent.js'
-import { WorldCaptureStrategy } from './world-capture-strategy.js'
-import type { CaptureResult, OnProgress } from './capture-strategy.js'
+import { WorldCaptureStrategy } from './strategy/world-capture-strategy.js'
+import type { CaptureResult, OnProgress } from './strategy/capture-strategy.js'
 
 export type { CaptureResult, OnProgress }
-export type { WorldClassification } from './world-capture-strategy.js'
+export type { WorldClassification } from './strategy/world-capture-strategy.js'
 
 /**
  * Capture world data via AI agent search.

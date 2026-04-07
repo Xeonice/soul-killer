@@ -1,5 +1,8 @@
-## ADDED Requirements
+# agent-tool-loop Specification
 
+## Purpose
+定义 AI Agent 的自主搜索循环机制，使用 Vercel AI SDK ToolLoopAgent 实现 soul/world capture 的自动化搜索、信息提取和结果报告。
+## Requirements
 ### Requirement: ToolLoopAgent 驱动的自主搜索循环
 系统 SHALL 使用 AI SDK v6 的 `ToolLoopAgent` 类实现 soul capture 的搜索循环。Agent SHALL 自主决定搜索关键词、搜索工具、搜索顺序，直到收集到足够信息或达到步数上限。
 
@@ -154,3 +157,47 @@ Agent SHALL 通过 fullStream 事件将 AI SDK 流式事件映射为 `CapturePro
 #### Scenario: reportFindings 映射为 complete 事件
 - **WHEN** agent 调用 reportFindings
 - **THEN** 依次发送 classification 事件、chunks_extracted 事件、phase complete 事件
+
+### Requirement: Capture Agent 工具集简化为质量筛选
+Capture Agent SHALL 只拥有 evaluateDimension、supplementSearch、reportFindings 三个工具。
+
+#### Scenario: 移除深度阅读工具
+- **WHEN** 构建 capture agent 工具集
+- **THEN** SHALL 不创建 readFullResult 和 extractDimension 工具
+
+#### Scenario: reportFindings 简化
+- **WHEN** Agent 调用 reportFindings
+- **THEN** inputSchema SHALL 只包含 classification、origin、summary、dimensionStatus
+- **AND** SHALL 不包含 extractions 字段
+- **AND** dimensionStatus SHALL 报告每个维度的合格文章数和是否充分
+
+### Requirement: Agent 工具集简化
+capture agent 的 ToolLoopAgent SHALL 只拥有 evaluateDimension、supplementSearch、reportFindings 三个工具。
+
+#### Scenario: 移除搜索类工具
+- **WHEN** 构建 capture agent 的工具集
+- **THEN** SHALL 不创建 search、extractPage、planSearch、checkCoverage 工具
+- **AND** SHALL 创建 evaluateDimension、supplementSearch、reportFindings 工具
+
+#### Scenario: Agent 工作流程
+- **WHEN** Agent 开始运行
+- **THEN** system prompt SHALL 指示 Agent 按维度顺序工作
+- **AND** 每个维度: 先 evaluateDimension → 判断 → 可选 supplementSearch → 下一个维度
+- **AND** 所有维度审查完后调用 reportFindings
+
+#### Scenario: supplementSearch 上限
+- **WHEN** Agent 调用 supplementSearch
+- **THEN** 工具 SHALL 跟踪每维度的补充次数
+- **AND** 超过 2 次/维度时返回错误，阻止继续补充
+
+### Requirement: Agent 工具集增加深度阅读工具
+capture agent 的 ToolLoopAgent SHALL 拥有 evaluateDimension、readFullResult、extractDimension、supplementSearch、reportFindings 五个工具。
+
+#### Scenario: 工具集完整
+- **WHEN** 构建 capture agent 的工具集
+- **THEN** SHALL 包含 evaluateDimension、readFullResult、extractDimension、supplementSearch、reportFindings
+
+#### Scenario: maxSteps 适配深度阅读
+- **WHEN** 配置 ToolLoopAgent
+- **THEN** maxSteps SHALL 设为 dimCount * 5 + 5（每维度 ~5 步：evaluate + 3 reads + extract），上限 80
+

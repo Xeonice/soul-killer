@@ -1,12 +1,12 @@
 import type { SoulkillerConfig } from '../config/schema.js'
 import { runCaptureAgent } from './capture-agent.js'
-import { SoulCaptureStrategy } from './soul-capture-strategy.js'
-import type { CaptureResult, OnProgress } from './capture-strategy.js'
+import { SoulCaptureStrategy } from './strategy/soul-capture-strategy.js'
+import type { CaptureResult, OnProgress } from './strategy/capture-strategy.js'
 
 // Re-export types for backward compatibility
 export type { CaptureResult, OnProgress }
-export type { TargetClassification } from './soul-capture-strategy.js'
-export type { SearchPlanDimension as SearchPlanDimension, CaptureProgress } from './capture-strategy.js'
+export type { TargetClassification } from './strategy/soul-capture-strategy.js'
+export type { SearchPlanDimension as SearchPlanDimension, CaptureProgress } from './strategy/capture-strategy.js'
 
 /**
  * Capture soul data via AI agent search.

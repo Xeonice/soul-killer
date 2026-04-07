@@ -1,5 +1,8 @@
-## ADDED Requirements
+# world-capture-agent Specification
 
+## Purpose
+定义 World Capture Agent 的行为规范，用于搜索和提取世界设定信息。
+## Requirements
 ### Requirement: World Capture 策略
 系统 SHALL 提供 `WorldCaptureStrategy`，实现 `CaptureStrategy` 接口，用于 World 搜索。策略 SHALL 包含 World 专用的系统提示词，引导 Agent 按 9 个维度搜索世界设定信息。
 
@@ -48,3 +51,30 @@ World capture agent SHALL 使用 WorldClassification（FICTIONAL_UNIVERSE/REAL_S
 #### Scenario: captureWorld 返回 CaptureResult
 - **WHEN** 调用 `captureWorld('Night City', config)`
 - **THEN** 返回 CaptureResult，包含 classification（WorldClassification）、chunks（SoulChunk[]）、elapsedMs
+
+### Requirement: World system prompt 改为质量筛选模式
+WORLD_SYSTEM_PROMPT SHALL 与 Soul 使用相同的质量筛选工作流，不做深度阅读和提取。
+
+#### Scenario: prompt 工作流
+- **WHEN** 构建 system prompt
+- **THEN** SHALL 指示 Agent 逐维度评估 → 对照 qualityCriteria → 补充搜索 → reportFindings
+- **AND** SHALL 注入每个维度的 qualityCriteria 和 minArticles
+
+### Requirement: World system prompt 重写为质量评估模式
+WORLD_SYSTEM_PROMPT SHALL 从搜索指令改为质量评估指令，与 Soul 保持一致的模式。
+
+#### Scenario: prompt 内容
+- **WHEN** 构建 world capture agent 的 system prompt
+- **THEN** SHALL 指示 Agent 逐维度调用 evaluateDimension 审查搜索结果
+- **AND** SHALL 指示 Agent 在数据不足时用 supplementSearch 补充
+- **AND** SHALL 指示 Agent 审查完所有维度后调用 reportFindings
+- **AND** SHALL 不包含任何搜索策略指令
+
+### Requirement: World system prompt 增加深度阅读工作流
+WORLD_SYSTEM_PROMPT SHALL 与 Soul 使用相同的深度阅读工作流指令。
+
+#### Scenario: prompt 工作流指令
+- **WHEN** 构建 system prompt
+- **THEN** SHALL 指示 Agent 对每个维度执行 evaluate → read → extract 循环
+- **AND** 最后调 reportFindings 汇总
+

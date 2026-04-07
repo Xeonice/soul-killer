@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import type { WorldType, WorldClassification, WorldDimension } from '../agent/world-dimensions.js'
+import type { WorldType, WorldClassification, WorldDimension } from '../agent/strategy/world-dimensions.js'
+import type { DimensionDef } from '../agent/planning/dimension-framework.js'
 import type { WorldTagSet } from '../tags/world-taxonomy.js'
 import { emptyWorldTagSet } from '../tags/world-taxonomy.js'
 
@@ -33,6 +34,8 @@ export interface WorldManifest {
   sources?: { type: string; path_or_url?: string }[]
   origin?: string
   evolve_history?: WorldEvolveHistoryEntry[]
+  /** Dimension plan from Planning Agent (base + extensions) */
+  dimensions?: DimensionDef[]
 }
 
 export function getWorldsDir(): string {
@@ -79,8 +82,9 @@ export function createWorld(
     throw new Error(`World "${name}" already exists`)
   }
 
-  const entriesDir = path.join(worldDir, 'entries')
-  fs.mkdirSync(entriesDir, { recursive: true })
+  // Create the world root directory. Dimension subdirectories are created
+  // lazily by addEntry() when the first entry of each dimension is written.
+  fs.mkdirSync(worldDir, { recursive: true })
 
   const manifest = createWorldManifest(name, displayName, description, worldType, tags)
   fs.writeFileSync(
@@ -111,6 +115,7 @@ export function loadWorld(name: string): WorldManifest | null {
       sources: raw.sources as { type: string; path_or_url?: string }[] | undefined,
       origin: raw.origin as string | undefined,
       evolve_history: (raw.evolve_history as WorldEvolveHistoryEntry[]) ?? [],
+      dimensions: raw.dimensions as DimensionDef[] | undefined,
     }
   } catch {
     return null

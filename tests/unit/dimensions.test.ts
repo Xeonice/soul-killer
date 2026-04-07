@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/agent/soul-dimensions.js'
+import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/agent/strategy/soul-dimensions.js'
 
 describe('analyzeCoverage', () => {
   it('returns all uncovered for empty input', () => {
@@ -201,7 +201,7 @@ describe('generateSearchPlan', () => {
     expect(plan.dimensions).toHaveLength(8)
 
     const quotesPlan = plan.dimensions.find((d) => d.dimension === 'quotes')!
-    expect(quotesPlan.queries.some((q) => q.includes('interviews'))).toBe(true)
+    expect(quotesPlan.queries.some((q) => q.includes('quotes'))).toBe(true)
   })
 
   it('generates plan for HISTORICAL_RECORD', () => {
@@ -233,7 +233,38 @@ describe('generateSearchPlan', () => {
     const plan = generateSearchPlan('PUBLIC_ENTITY', 'Elon Musk', 'Elon Musk', 'Tesla')
     const localQueries = plan.dimensions
       .find((d) => d.dimension === 'quotes')!
-      .queries.filter((q) => q.includes('经典语录'))
+      .queries.filter((q) => q.includes('经典台词'))
     expect(localQueries[0]!).toContain('Elon Musk')
+  })
+
+  it('each dimension has 3-5 queries', () => {
+    const classifications = ['DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD'] as const
+    for (const cls of classifications) {
+      const plan = generateSearchPlan(cls, 'TestName', '测试名', 'TestOrigin')
+      for (const dim of plan.dimensions) {
+        expect(dim.queries.length, `${cls}/${dim.dimension} should have 3-5 queries`).toBeGreaterThanOrEqual(3)
+        expect(dim.queries.length, `${cls}/${dim.dimension} should have 3-5 queries`).toBeLessThanOrEqual(10) // allow tag-enhanced to exceed 5
+      }
+    }
+  })
+
+  it('no template query has more than 3 effective keywords (excluding name placeholders)', () => {
+    const classifications = ['DIGITAL_CONSTRUCT', 'PUBLIC_ENTITY', 'HISTORICAL_RECORD'] as const
+    for (const cls of classifications) {
+      const plan = generateSearchPlan(cls, '__NAME__', '__LOCAL__', '__ORIGIN__')
+      for (const dim of plan.dimensions) {
+        for (const query of dim.queries) {
+          // Remove name/localName/origin placeholders and count remaining words
+          const stripped = query
+            .replace(/__NAME__/g, '')
+            .replace(/__LOCAL__/g, '')
+            .replace(/__ORIGIN__/g, '')
+            .trim()
+          // Split by whitespace, filter out empty strings
+          const words = stripped.split(/\s+/).filter(Boolean)
+          expect(words.length, `${cls}/${dim.dimension} query "${query}" has ${words.length} keywords (max 3)`).toBeLessThanOrEqual(3)
+        }
+      }
+    }
   })
 })

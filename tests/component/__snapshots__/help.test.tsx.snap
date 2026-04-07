@@ -20,6 +20,8 @@ exports[`HelpCommand > renders full help output 1`] = `
 
   导出
     /export               导出 Soul + World 为 Cloud Skill
+    /pack                 打包 Soul/World 为可分享的数据包
+    /unpack               从数据包解包 Soul/World 到本地
 
   设置
     /config               查看/修改配置

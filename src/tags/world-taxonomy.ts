@@ -1,4 +1,4 @@
-import type OpenAI from 'openai'
+import { generateText, type LanguageModel } from 'ai'
 import { t } from '../i18n/index.js'
 
 export type WorldTagCategory = 'genre' | 'tone' | 'scale' | 'era' | 'theme'
@@ -51,13 +51,12 @@ function buildWorldParsePrompt(): string {
 
 export async function parseWorldTags(
   input: string,
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
 ): Promise<WorldTagSet> {
   if (!input.trim()) return emptyWorldTagSet()
 
   try {
-    const res = await client.chat.completions.create({
+    const { text: content } = await generateText({
       model,
       messages: [
         { role: 'system', content: buildWorldParsePrompt() },
@@ -65,8 +64,6 @@ export async function parseWorldTags(
       ],
       temperature: 0,
     })
-
-    const content = res.choices[0]?.message?.content ?? ''
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return emptyWorldTagSet()
 

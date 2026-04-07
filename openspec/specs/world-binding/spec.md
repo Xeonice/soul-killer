@@ -1,5 +1,8 @@
-## ADDED Requirements
+# world-binding Specification
 
+## Purpose
+管理 Soul 与 World 之间的 N:M 绑定关系，提供绑定的 CRUD 操作、存储与校验。
+## Requirements
 ### Requirement: Binding 数据结构
 系统 SHALL 定义 `WorldBinding` 接口，包含：`world`（世界名）、`enabled`（boolean）、`order`（number，越小越优先，0 = 最高）、`overrides`（可选，含 `context_budget` 和 `injection_position`）、`entry_filter`（可选，含 `include_scopes`、`exclude_entries`、`priority_boost`）、`persona_context`（可选，Mustache 模板字符串）。
 
@@ -42,3 +45,19 @@ Binding SHALL 存储在 `~/.soulkiller/souls/<soul-name>/bindings/<world-name>.j
 #### Scenario: 绑定不存在的世界
 - **WHEN** 调用 `bindWorld("johnny", "nonexistent")`
 - **THEN** 抛出错误，提示世界 "nonexistent" 不存在
+
+### Requirement: Reverse lookup of souls bound to a world
+The binding module SHALL provide a function to find all souls that have a binding file for a given world name.
+
+#### Scenario: Find bound souls
+- **WHEN** `findSoulsBoundToWorld("night-city")` is called and souls "alice" and "charlie" have binding files for "night-city"
+- **THEN** the function returns `["alice", "charlie"]`
+
+#### Scenario: No souls bound
+- **WHEN** `findSoulsBoundToWorld("empty-world")` is called and no souls have a binding file for "empty-world"
+- **THEN** the function returns an empty array
+
+#### Scenario: Includes disabled bindings
+- **WHEN** soul "bob" has a binding file for "night-city" with `enabled: false`
+- **THEN** `findSoulsBoundToWorld("night-city")` includes "bob" in the result
+

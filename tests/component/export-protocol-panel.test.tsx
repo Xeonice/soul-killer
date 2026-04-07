@@ -104,16 +104,18 @@ describe('ExportProtocolPanel', () => {
         trail={[]}
         activeZone={{
           type: 'complete',
-          output_dir: '/home/.soulkiller/exports/soulkiller:v-in-cyberpunk-2077',
-          files: ['SKILL.md', 'soul/identity.md', 'story-spec.md'],
-          skill_name: 'soulkiller:v-in-cyberpunk-2077',
+          output_file: '/home/.soulkiller/exports/v-in-cyberpunk-2077.skill',
+          file_count: 3,
+          size_bytes: 4096,
+          skill_name: 'v-in-cyberpunk-2077.skill',
         }}
       />
     )
     const frame = lastFrame()!
     expect(frame).toContain('export complete')
-    expect(frame).toContain('SKILL.md')
-    expect(frame).toContain('soulkiller:v-in-cyberpunk-2077')
+    expect(frame).toContain('.skill')
+    expect(frame).toContain('v-in-cyberpunk-2077')
+    expect(frame).toContain('3 files')
   })
 
   it('renders trail with collapse for 5+ steps', () => {
@@ -178,14 +180,17 @@ describe('reducePanelEvent', () => {
 
     state = reducePanelEvent(state, {
       type: 'complete',
-      output_dir: '/tmp/test',
-      files: ['SKILL.md'],
-      skill_name: 'soulkiller:test-skill',
+      output_file: '/tmp/test-skill.skill',
+      file_count: 5,
+      size_bytes: 2048,
+      skill_name: 'test-skill.skill',
     })
     expect(state.phase).toBe('complete')
     expect(state.activeZone.type).toBe('complete')
     if (state.activeZone.type === 'complete') {
-      expect(state.activeZone.skill_name).toBe('soulkiller:test-skill')
+      expect(state.activeZone.skill_name).toBe('test-skill.skill')
+      expect(state.activeZone.output_file).toBe('/tmp/test-skill.skill')
+      expect(state.activeZone.file_count).toBe(5)
     }
   })
 })

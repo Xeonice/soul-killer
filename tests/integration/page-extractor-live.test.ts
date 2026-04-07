@@ -3,7 +3,7 @@
  * Requires internet connectivity.
  */
 import { describe, it, expect } from 'vitest'
-import { extractPageContent, extractPagesParallel } from '../../src/agent/tools/page-extractor.js'
+import { extractPageContent, extractPagesParallel } from '../../src/agent/search/page-extractor.js'
 
 describe('Page Extractor — Live Wikipedia', () => {
   it('extracts content from English Wikipedia article', async () => {

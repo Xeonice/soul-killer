@@ -1,4 +1,4 @@
-import type OpenAI from 'openai'
+import { generateText, type LanguageModel } from 'ai'
 import type { ExtractedFeatures } from './extractor.js'
 import type { TagSet } from '../tags/taxonomy.js'
 import { t } from '../i18n/index.js'
@@ -32,8 +32,7 @@ export interface MergeInput {
  * Merge delta features with existing soul files using LLM.
  */
 export async function mergeSoulFiles(
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
   existing: MergeInput,
   delta: ExtractedFeatures,
   soulName: string,
@@ -48,14 +47,14 @@ export async function mergeSoulFiles(
   // Merge identity
   if (delta.identity) {
     if (existing.existingIdentity) {
-      const res = await client.chat.completions.create({
+      const { text } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeMergePrompt('identity', soulName, tags) },
           { role: 'user', content: `## ${t('merger.existing_file')}\n\n${existing.existingIdentity}\n\n## ${t('merger.new_delta')}\n\n${delta.identity}` },
         ],
       })
-      result.identity = res.choices[0]?.message?.content ?? delta.identity
+      result.identity = text || delta.identity
     } else {
       result.identity = delta.identity
     }
@@ -64,14 +63,14 @@ export async function mergeSoulFiles(
   // Merge style
   if (delta.style) {
     if (existing.existingStyle) {
-      const res = await client.chat.completions.create({
+      const { text } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeMergePrompt('style', soulName, tags) },
           { role: 'user', content: `## ${t('merger.existing_file')}\n\n${existing.existingStyle}\n\n## ${t('merger.new_delta')}\n\n${delta.style}` },
         ],
       })
-      result.style = res.choices[0]?.message?.content ?? delta.style
+      result.style = text || delta.style
     } else {
       result.style = delta.style
     }
@@ -83,7 +82,7 @@ export async function mergeSoulFiles(
     const existingContent = existingBehaviors[deltaBehavior.name]
     if (existingContent) {
       // Merge with existing behavior
-      const res = await client.chat.completions.create({
+      const { text } = await generateText({
         model,
         messages: [
           { role: 'system', content: makeBehaviorMergePrompt(soulName, deltaBehavior.name) },
@@ -92,7 +91,7 @@ export async function mergeSoulFiles(
       })
       result.behaviors.push({
         name: deltaBehavior.name,
-        content: res.choices[0]?.message?.content ?? deltaBehavior.content,
+        content: text || deltaBehavior.content,
       })
     } else {
       // New behavior category — use as-is

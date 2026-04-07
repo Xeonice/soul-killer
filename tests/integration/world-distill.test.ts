@@ -2,9 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { generateText } from 'ai'
 import { WorldDistiller, type GeneratedEntry } from '../../src/world/distill.js'
 import { createWorld, loadWorld, deleteWorld } from '../../src/world/manifest.js'
 import { loadAllEntries } from '../../src/world/entry.js'
+
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>()
+  return { ...actual, generateText: vi.fn() }
+})
 
 let tmpDir: string
 let origHome: string
@@ -20,46 +26,39 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true })
 })
 
-// Mock OpenAI client that returns predictable classifications and entries
-function createMockClient() {
+// Mock generateText that returns predictable classifications and entries
+function setupMockClient() {
   let callCount = 0
-  return {
-    chat: {
-      completions: {
-        create: async ({ messages }: any) => {
-          callCount++
-          const systemMsg = messages[0]?.content ?? ''
+  vi.mocked(generateText).mockImplementation(async (opts: any) => {
+    callCount++
+    const messages = opts.messages ?? []
+    const systemMsg = messages[0]?.content ?? ''
 
-          if (systemMsg.includes('classifier')) {
-            // Classification phase — classify all as lore
-            const userContent = messages[1]?.content ?? ''
-            const indices = [...userContent.matchAll(/\[(\d+)\]/g)].map(m => parseInt(m[1]))
-            const result = indices.map(i => ({ index: i, scope: 'lore' }))
-            return { choices: [{ message: { content: JSON.stringify(result) } }] }
-          }
+    if (systemMsg.includes('classifier')) {
+      const userContent = messages[1]?.content ?? ''
+      const indices = [...userContent.matchAll(/\[(\d+)\]/g)].map((m: any) => parseInt(m[1]))
+      const result = indices.map((i: number) => ({ index: i, scope: 'lore' }))
+      return { text: JSON.stringify(result) } as any
+    }
 
-          if (systemMsg.includes('entry generator')) {
-            // Extract phase — generate an entry
-            return {
-              choices: [{
-                message: {
-                  content: JSON.stringify({
-                    name: `generated-entry-${callCount}`,
-                    keywords: ['test', 'keyword'],
-                    mode: 'keyword',
-                    priority: 500,
-                    content: 'Generated world entry content from distillation.',
-                  }),
-                },
-              }],
-            }
-          }
+    if (systemMsg.includes('entry generator')) {
+      return {
+        text: JSON.stringify([{
+          name: `generated-entry-${callCount}`,
+          keywords: ['test', 'keyword'],
+          mode: 'keyword',
+          priority: 500,
+          content: 'Generated world entry content from distillation. This is a detailed entry with multiple sentences explaining the context and significance.',
+        }]),
+      } as any
+    }
 
-          return { choices: [{ message: { content: '{}' } }] }
-        },
-      },
-    },
-  }
+    if (systemMsg.includes('editor')) {
+      return { text: JSON.stringify({ merges: [], deletes: [] }) } as any
+    }
+
+    return { text: '{}' } as any
+  })
 }
 
 describe('WorldDistiller', () => {
@@ -74,8 +73,8 @@ describe('WorldDistiller', () => {
       '# Night City History\n\nNight City was founded in 1994 by Richard Night.\n\n## Corporations\n\nArasaka and Militech dominate the city.\n',
     )
 
-    const client = createMockClient() as any
-    const distiller = new WorldDistiller(client, 'test-model')
+    setupMockClient()
+    const distiller = new WorldDistiller({} as any)
 
     const progressEvents: string[] = []
     distiller.on('progress', (p: any) => progressEvents.push(p.phase))
@@ -87,6 +86,7 @@ describe('WorldDistiller', () => {
     expect(progressEvents).toContain('classify')
     expect(progressEvents).toContain('cluster')
     expect(progressEvents).toContain('extract')
+    expect(progressEvents).toContain('review')
 
     // Write entries
     await distiller.writeEntries('distill-test', entries)
@@ -96,6 +96,36 @@ describe('WorldDistiller', () => {
     // Verify manifest entry_count updated
     const manifest = loadWorld('distill-test')
     expect(manifest!.entry_count).toBe(entries.length)
+  })
+
+  it('uses custom dimensions from manifest for classify', async () => {
+    createWorld('dim-test', 'Dim World', 'Custom dimensions')
+
+    // Write custom dimensions to manifest (simulating Planning Agent output)
+    const manifest = loadWorld('dim-test')!
+    manifest.dimensions = [
+      { name: 'geography', display: '地理', description: 'Locations', priority: 'required', source: 'planned', signals: ['location'], queries: [], distillTarget: 'background' },
+      { name: 'military', display: '军事', description: 'Military strategy', priority: 'important', source: 'planned', signals: ['battle', '战役'], queries: [], distillTarget: 'lore' },
+    ] as any
+    const { saveWorld: save } = await import('../../src/world/manifest.js')
+    save(manifest)
+
+    const fixtureDir = path.join(tmpDir, 'dim-fixtures')
+    fs.mkdirSync(fixtureDir, { recursive: true })
+    fs.writeFileSync(path.join(fixtureDir, 'data.md'), '# Battle\n\nThe battle of Chibi was decisive.\n')
+
+    setupMockClient()
+    const distiller = new WorldDistiller({} as any)
+    distiller.on('progress', () => {})
+
+    const entries = await distiller.distill('dim-test', fixtureDir, 'markdown')
+    expect(entries.length).toBeGreaterThan(0)
+
+    // Verify manifest still has dimensions after distill
+    const updated = loadWorld('dim-test')!
+    expect(updated.dimensions).toBeDefined()
+    expect(updated.dimensions!.length).toBe(2)
+    expect(updated.dimensions!.some((d: any) => d.name === 'military')).toBe(true)
   })
 
   it('evolve adds new entries and bumps version', async () => {
@@ -115,8 +145,8 @@ describe('WorldDistiller', () => {
     fs.mkdirSync(fixtureDir, { recursive: true })
     fs.writeFileSync(path.join(fixtureDir, 'new-data.md'), '# New Data\n\nSome new world information.\n')
 
-    const client = createMockClient() as any
-    const distiller = new WorldDistiller(client, 'test-model')
+    setupMockClient()
+    const distiller = new WorldDistiller({} as any)
 
     const { newEntries, conflicts } = await distiller.evolve('evolve-test', fixtureDir, 'markdown')
 

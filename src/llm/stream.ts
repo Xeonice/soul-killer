@@ -1,4 +1,4 @@
-import type OpenAI from 'openai'
+import { streamText, type LanguageModel } from 'ai'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -9,20 +9,15 @@ export interface ChatMessage {
  * Stream chat completion from OpenRouter, yielding text chunks.
  */
 export async function* streamChat(
-  client: OpenAI,
-  model: string,
+  model: LanguageModel,
   messages: ChatMessage[],
 ): AsyncGenerator<string> {
-  const stream = await client.chat.completions.create({
+  const result = streamText({
     model,
     messages,
-    stream: true,
   })
 
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content
-    if (delta) {
-      yield delta
-    }
+  for await (const chunk of result.textStream) {
+    yield chunk
   }
 }

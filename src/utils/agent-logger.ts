@@ -5,7 +5,8 @@ import { createHash } from 'node:crypto'
 import { logger } from './logger.js'
 import type { CaptureResult } from '../agent/soul-capture-agent.js'
 
-const LOG_DIR = path.join(os.homedir(), '.soulkiller', 'logs', 'agent')
+const LOGS_ROOT = path.join(os.homedir(), '.soulkiller', 'logs')
+const DEFAULT_SUBDIR = 'agent'
 
 export interface ToolTimelineEntry {
   step: number
@@ -36,15 +37,16 @@ export class AgentLogger {
   private distillPhaseStart = 0
   readonly filePath: string
 
-  constructor(prompt: string, config: { model: string; provider: string; raw?: unknown }) {
+  constructor(prompt: string, config: { model: string; provider: string; raw?: unknown; subdir?: string }) {
     const now = new Date()
     const ts = now.toISOString().replace(/:/g, '-').replace(/\.\d+Z$/, '')
     const hash = createHash('sha256').update(prompt).digest('hex').slice(0, 8)
     const fileName = `${ts}_${hash}.log`
-    this.filePath = path.join(LOG_DIR, fileName)
+    const logDir = path.join(LOGS_ROOT, config.subdir ?? DEFAULT_SUBDIR)
+    this.filePath = path.join(logDir, fileName)
 
     try {
-      fs.mkdirSync(LOG_DIR, { recursive: true })
+      fs.mkdirSync(logDir, { recursive: true })
       this.fd = fs.openSync(this.filePath, 'w')
 
       this.writeLine('══════════════════════════════════════════════════════')
@@ -164,7 +166,7 @@ export class AgentLogger {
     this.writeLine('')
     this.writeLine(`  Classification : ${result.classification}`)
     this.writeLine(`  Origin         : ${result.origin ?? 'N/A'}`)
-    this.writeLine(`  Chunks         : ${result.chunks.length}`)
+    this.writeLine(`  Session Dir    : ${result.sessionDir ?? 'N/A'}`)
     this.writeLine(`  Total Steps    : ${stepCount}`)
     this.writeLine(`  Total Duration : ${result.elapsedMs}ms (${(result.elapsedMs / 1000).toFixed(1)}s)`)
     this.writeLine('')
@@ -176,16 +178,11 @@ export class AgentLogger {
     this.writeLine('══════════════════════════════════════════════════════')
     this.writeLine('')
 
-    // Dimension coverage
+    // Dimension coverage — dynamically from actual extractions (not hardcoded)
     if (extractions && extractions.length > 0) {
-      const dims: Record<string, number> = {
-        identity: 0, quotes: 0, expression: 0,
-        thoughts: 0, behavior: 0, relations: 0,
-      }
+      const dims: Record<string, number> = {}
       for (const e of extractions) {
-        if (e.dimension in dims) {
-          dims[e.dimension]!++
-        }
+        dims[e.dimension] = (dims[e.dimension] ?? 0) + 1
       }
 
       this.writeLine('  Dimension Coverage:')
@@ -193,9 +190,8 @@ export class AgentLogger {
       for (const [dim, count] of Object.entries(dims)) {
         const barLen = Math.round((count / maxCount) * 10)
         const bar = '\u2588'.repeat(barLen).padEnd(10)
-        const required = ['identity', 'quotes', 'expression'].includes(dim)
-        const indicator = count >= 2 ? '\u2705' : (required ? '\u274C' : '\u26A0\uFE0F')
-        this.writeLine(`    ${dim.padEnd(12)}: ${bar} ${String(count).padStart(2)} extractions ${indicator}`)
+        const indicator = count >= 2 ? '\u2705' : '\u26A0\uFE0F'
+        this.writeLine(`    ${dim.padEnd(20)}: ${bar} ${String(count).padStart(2)} extractions ${indicator}`)
       }
       this.writeLine('')
     }
@@ -282,6 +278,17 @@ export class AgentLogger {
     this.writeLine('')
   }
 
+  worldDistillEnd(result: { entries: number; dimensions: number; totalDurationMs: number }): void {
+    this.writeLine('══════════════════════════════════════════════════════')
+    this.writeLine(' WORLD DISTILL RESULT')
+    this.writeLine('══════════════════════════════════════════════════════')
+    this.writeLine('')
+    this.writeLine(`  Entries        : ${result.entries}`)
+    this.writeLine(`  Dimensions     : ${result.dimensions}`)
+    this.writeLine(`  Total Duration : ${result.totalDurationMs}ms (${(result.totalDurationMs / 1000).toFixed(1)}s)`)
+    this.writeLine('')
+  }
+
   close(): void {
     if (this.fd !== null) {
       try {
@@ -349,5 +356,7 @@ export class AgentLogger {
   }
 }
 
-/** Log directory path — used by cleanup */
-export const AGENT_LOG_DIR = LOG_DIR
+/** Log directory path for capture/distill agents — used by cleanup */
+export const AGENT_LOG_DIR = path.join(LOGS_ROOT, DEFAULT_SUBDIR)
+/** Log directory path for export agent */
+export const EXPORT_LOG_DIR = path.join(LOGS_ROOT, 'export')

@@ -5,6 +5,7 @@ import type { ResolvedEntry } from './resolver.js'
 import { resolveEntries, resolveSemanticEntries } from './resolver.js'
 import { renderTemplate, type TemplateContext } from './template.js'
 import { loadAllEntries } from './entry.js'
+import { loadChronicleTimeline, loadChronicleEvents, sortByChronicle } from './chronicle.js'
 import { loadWorld } from './manifest.js'
 import type { EngineAdapter, RecallResult } from '../engine/adapter.js'
 import type { ChatMessage } from '../llm/stream.js'
@@ -36,6 +37,25 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length * TOKENS_PER_CHAR)
 }
 
+/**
+ * Apply a binding's entry_filter to a raw entry list. Mirrors the logic
+ * inside resolver.ts:applyFilter so the chronicle bucket (which doesn't go
+ * through resolveEntries) honors include_scopes / exclude_entries.
+ */
+function applyEntryFilter(entries: WorldEntry[], binding: WorldBinding): WorldEntry[] {
+  const filter = binding.entry_filter
+  if (!filter) return entries
+  return entries.filter((e) => {
+    if (filter.include_scopes && !filter.include_scopes.includes(e.meta.scope)) {
+      return false
+    }
+    if (filter.exclude_entries && filter.exclude_entries.includes(e.meta.name)) {
+      return false
+    }
+    return true
+  })
+}
+
 export async function assembleContext(input: AssemblyInput): Promise<string> {
   const {
     soulFiles,
@@ -57,6 +77,9 @@ export async function assembleContext(input: AssemblyInput): Promise<string> {
   // Collect all resolved entries from all worlds
   const allResolved: ResolvedEntry[] = []
   const worldManifests = new Map<string, WorldManifest>()
+  // Per-world chronicle timeline (only the always-mode "background layer").
+  // Stored in binding order so we render world A before world B.
+  const chronicleByWorld: { worldName: string; timeline: WorldEntry[] }[] = []
 
   for (const binding of bindings) {
     const manifest = loadWorld(binding.world)
@@ -65,14 +88,30 @@ export async function assembleContext(input: AssemblyInput): Promise<string> {
 
     const entries = loadAllEntries(binding.world)
 
+    // Chronicle entries live in their own subdirectories. Timeline (background
+    // layer) is always-injected via the dedicated chronicle block; events
+    // (detail layer) join the keyword candidate pool just like normal lore.
+    const chronicleTimeline = loadChronicleTimeline(binding.world)
+    const chronicleEvents = loadChronicleEvents(binding.world)
+    if (chronicleTimeline.length > 0) {
+      chronicleByWorld.push({
+        worldName: binding.world,
+        timeline: sortByChronicle(applyEntryFilter(chronicleTimeline, binding)),
+      })
+    }
+
+    // Merge events into the entries pool so resolveEntries handles them via
+    // the normal keyword/semantic flow.
+    const allEntries = entries.concat(chronicleEvents)
+
     // Resolve always + keyword entries
-    const resolved = resolveEntries(entries, binding, userInput, recentMessages)
+    const resolved = resolveEntries(allEntries, binding, userInput, recentMessages)
     allResolved.push(...resolved)
 
     // Resolve semantic entries if engine is available
     if (engine) {
       const semanticResolved = await resolveSemanticEntries(
-        entries,
+        allEntries,
         binding,
         userInput,
         engine,
@@ -132,6 +171,28 @@ export async function assembleContext(input: AssemblyInput): Promise<string> {
   // 1. World always entries (background + rule)
   for (const r of alwaysBefore) {
     parts.push(renderTemplate(r.entry.content, templateCtx))
+  }
+
+  // 1.5. Chronicle background layer — sorted timeline aggregated into a
+  // single block per world. Only emitted when there's at least one timeline
+  // entry across all bindings; never renders an empty heading.
+  // Chronicle entries count toward each binding's context_budget; when a
+  // world's chronicle would overflow its budget, lowest-priority entries
+  // are dropped first (sort_key order is preserved among the survivors).
+  const budgetedChronicle = applyChronicleBudget(chronicleByWorld, bindings, worldManifests)
+  if (budgetedChronicle.some((c) => c.timeline.length > 0)) {
+    const chronicleHeading = t('world.chronicle.title') || '编年史'
+    parts.push(`\n## ${chronicleHeading}\n`)
+    for (const { timeline } of budgetedChronicle) {
+      if (timeline.length === 0) continue
+      for (const entry of timeline) {
+        const time = entry.meta.display_time?.trim()
+        const body = renderTemplate(entry.content, templateCtx).trim()
+        // Render each entry as `- {display_time} · {body}` if a time label
+        // exists, otherwise just `- {body}`.
+        parts.push(time ? `- ${time} · ${body}` : `- ${body}`)
+      }
+    }
   }
 
   // 2. Persona context from bindings
@@ -241,6 +302,46 @@ function buildEntriesMap(entries: ResolvedEntry[]): Record<string, string> {
     map[r.entry.meta.name] = r.entry.content
   }
   return map
+}
+
+/**
+ * Truncate each world's chronicle timeline so it fits within that world's
+ * `context_budget`. When over budget, entries with the **lowest** entry
+ * priority are dropped first (so high-priority headline events survive),
+ * then sort_key order is restored among the survivors.
+ *
+ * Note: this is a per-world budget — chronicle and triggered entries do
+ * not share a single pool, mirroring the existing `applyBudget` behaviour.
+ */
+function applyChronicleBudget(
+  chronicleByWorld: { worldName: string; timeline: WorldEntry[] }[],
+  bindings: WorldBinding[],
+  manifests: Map<string, WorldManifest>,
+): { worldName: string; timeline: WorldEntry[] }[] {
+  return chronicleByWorld.map(({ worldName, timeline }) => {
+    const binding = bindings.find((b) => b.world === worldName)
+    const manifest = manifests.get(worldName)
+    const budget = binding?.overrides?.context_budget
+      ?? manifest?.defaults.context_budget
+      ?? 2000
+
+    let usage = 0
+    const fits: WorldEntry[] = []
+    // Greedy by entry priority desc — highest-priority events survive first.
+    const byPriority = [...timeline].sort((a, b) => b.meta.priority - a.meta.priority)
+    for (const entry of byPriority) {
+      const cost = estimateTokens(entry.content)
+      if (usage + cost <= budget) {
+        fits.push(entry)
+        usage += cost
+      }
+    }
+    // Restore sort_key ordering among survivors so the rendered timeline is
+    // still chronological.
+    const surviving = new Set(fits)
+    const ordered = timeline.filter((e) => surviving.has(e))
+    return { worldName, timeline: ordered }
+  })
 }
 
 function applyBudget(

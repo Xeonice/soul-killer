@@ -325,10 +325,9 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
         const config = loadConfig()
         if (!config) throw new Error(t('evolve.config_not_init'))
         const client = getLLMClient()
-        const model = config.llm.distill_model ?? config.llm.default_model
 
         const deltaFeatures = await extractFeatures(
-          client, model, sampled, soulName, undefined,
+          client, sampled, soulName, undefined,
           (p) => {
             if (!cancelled) updateStep(S_EXTRACT, { detail: `${p.phase} ${p.status}${p.batch ? ` (${p.batch}/${p.totalBatches})` : ''}` })
           },
@@ -346,7 +345,7 @@ export function EvolveCommand({ soulName, soulDir, engine, chunks, onComplete, o
             existingStyle: existingSoul.style,
             existingBehaviors: existingSoul.behaviors,
           }
-          const merged = await mergeSoulFiles(client, model, mergeInput, deltaFeatures, soulName)
+          const merged = await mergeSoulFiles(client, mergeInput, deltaFeatures, soulName)
           if (cancelled) return
           updateStep(S_MERGE, { status: 'done' })
 

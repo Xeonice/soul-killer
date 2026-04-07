@@ -7,7 +7,55 @@ import type { SoulkillerConfig } from '../config/schema.js'
 import type { SoulChunk } from '../ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
 import type { AgentLogger } from '../utils/agent-logger.js'
+import { withExacto } from '../llm/client.js'
 import { logger } from '../utils/logger.js'
+
+// ========== Article Index (for sessionDir path) ==========
+
+interface ArticleEntry {
+  index: number
+  title: string
+  url: string
+  dimension: string
+  charCount: number
+  score: number
+  content: string // full content kept in memory, served by readArticle
+}
+
+function buildArticleIndex(sessionDir: string): ArticleEntry[] {
+  const articles: ArticleEntry[] = []
+  const files = fs.readdirSync(sessionDir).filter((f) => f.endsWith('.json'))
+
+  for (const file of files) {
+    const dimName = file.replace('.json', '')
+    const data = JSON.parse(fs.readFileSync(path.join(sessionDir, file), 'utf-8'))
+    const results: { title?: string; url?: string; content?: string; _score?: number }[] = data.results ?? []
+
+    for (const r of results) {
+      if (!r.content) continue
+      articles.push({
+        index: articles.length,
+        title: r.title ?? '',
+        url: r.url ?? '',
+        dimension: dimName,
+        charCount: r.content.length,
+        score: r._score ?? 3,
+        content: r.content,
+      })
+    }
+  }
+
+  // Sort: group by dimension, within group by score desc
+  articles.sort((a, b) => {
+    if (a.dimension !== b.dimension) return a.dimension.localeCompare(b.dimension)
+    return b.score - a.score
+  })
+
+  // Re-index after sort
+  articles.forEach((a, i) => { a.index = i })
+
+  return articles
+}
 
 // ========== Types ==========
 
@@ -29,7 +77,7 @@ export type OnDistillAgentProgress = (progress: DistillAgentProgress) => void
 
 // ========== System Prompt ==========
 
-function buildDistillPrompt(name: string, chunkCount: number, tags?: TagSet): string {
+function buildDistillPrompt(name: string, dataCount: number, tags?: TagSet, useArticleMode?: boolean, hasRelations?: boolean): string {
   let tagHints = ''
   if (tags) {
     const parts: string[] = []
@@ -41,7 +89,49 @@ function buildDistillPrompt(name: string, chunkCount: number, tags?: TagSet): st
     if (parts.length > 0) tagHints = `\n\nTag hints from the user:\n${parts.join('\n')}`
   }
 
-  return `You are a soul distiller. You have ${chunkCount} data fragments about "${name}".
+  const dataDescription = useArticleMode
+    ? `You have ${dataCount} research articles about "${name}", organized by dimension.`
+    : `You have ${dataCount} data fragments about "${name}".`
+
+  const workflowGuide = useArticleMode
+    ? `## Recommended Workflow
+
+1. Call listArticles() to see all available articles across dimensions
+2. Call listArticles with specific dimensions (identity, quotes, expression, thoughts, behavior, relations, capabilities, milestones) to focus on each area
+3. Call readArticle for the most relevant articles in each dimension — read at least 2-3 per dimension before writing
+4. writeIdentity based on identity/background articles
+5. writeStyle referencing the identity you just wrote — MUST include a "Characteristic Expressions" section with preserved original quotes
+6. writeCapabilities based on abilities/skills/equipment/expertise articles
+7. writeMilestones based on timeline/events articles — use structured format with [time marker] entries
+8. writeBehavior for each distinct behavior pattern (typically 3-6 files). Always create a "relationships" behavior if relation data exists.
+9. writeExample to create conversation examples (at least 3: greeting, deep topic, conflict/sensitive topic)
+10. reviewSoul to read back all files and check cross-file consistency
+11. Rewrite any files if you find inconsistencies or gaps
+12. finalize when satisfied with quality
+
+**Important notes on articles:**
+- Articles may be truncated (readArticle shows \`truncated: true\`). Focus on extracting key facts from available content.
+- Prioritize high-quality articles (those listed first in each dimension are highest scored).
+- You don't need to read every article — focus on the most informative ones per dimension.`
+    : `## Recommended Workflow
+
+1. Call sampleChunks() to get an overview of all available data
+2. Call sampleChunks with specific dimensions (identity, quotes, expression, thoughts, behavior, relations, capabilities, milestones) to deep-dive
+3. writeIdentity based on identity/background data
+4. writeStyle referencing the identity you just wrote — MUST include a "Characteristic Expressions" section with preserved original quotes
+5. writeCapabilities based on abilities/skills/equipment/expertise data
+6. writeMilestones based on timeline/events data — use structured format with [time marker] entries
+7. writeBehavior for each distinct behavior pattern (typically 3-6 files). Always create a "relationships" behavior if relation data exists.
+8. writeExample to create conversation examples (at least 3: greeting, deep topic, conflict/sensitive topic)
+9. reviewSoul to read back all files and check cross-file consistency
+10. Rewrite any files if you find inconsistencies or gaps
+11. finalize when satisfied with quality`
+
+  const readRule = useArticleMode
+    ? '- Always read relevant articles (listArticles → readArticle) before writing a dimension — do not fabricate content'
+    : '- Always call sampleChunks before writing a dimension — do not fabricate content'
+
+  return `You are a soul distiller. ${dataDescription}
 Your job is to create soul profile files from this raw data.${tagHints}
 
 ## Output Files
@@ -56,19 +146,7 @@ Your job is to create soul profile files from this raw data.${tagHints}
   Events should be in chronological order with causal relationships noted.
 - **behaviors/*.md** — How they think and act: each distinct behavior pattern gets its own file (e.g., honor-code.md, combat-style.md, leadership.md)
 
-## Recommended Workflow
-
-1. Call sampleChunks() to get an overview of all available data
-2. Call sampleChunks with specific dimensions (identity, quotes, expression, thoughts, behavior, relations, capabilities, milestones) to deep-dive
-3. writeIdentity based on identity/background data
-4. writeStyle referencing the identity you just wrote — MUST include a "Characteristic Expressions" section with preserved original quotes
-5. writeCapabilities based on abilities/skills/equipment/expertise data
-6. writeMilestones based on timeline/events data — use structured format with [time marker] entries
-7. writeBehavior for each distinct behavior pattern (typically 3-6 files). Always create a "relationships" behavior if relation data exists.
-8. writeExample to create conversation examples (at least 3: greeting, deep topic, conflict/sensitive topic)
-9. reviewSoul to read back all files and check cross-file consistency
-10. Rewrite any files if you find inconsistencies or gaps
-11. finalize when satisfied with quality
+${workflowGuide}
 
 You may adjust this order based on data availability. The key constraint:
 **style must be consistent with identity, behaviors must be consistent with both.**
@@ -93,7 +171,13 @@ Example structure:
 
 ## Behavior Guidelines
 
-- Create a **relationships** behavior file when relation data is available, describing key relationships and how the character's attitude changes with different people
+${hasRelations
+  ? `- **MANDATORY**: You MUST create a \`relationships\` behavior file. The research data contains relations dimension content — this file is REQUIRED for downstream multi-character export to work.
+- The relationships file MUST be structured by character pairs:
+  - Each related character gets its own \`## 与{角色名}的关系\` (or equivalent in source language) section
+  - Each section MUST contain: relationship type (宿敌/君臣/同盟/师徒/夫妻/...), interaction patterns, emotional dynamics
+  - Use the character's common name (便于跨 soul 交叉匹配)`
+  : '- Create a **relationships** behavior file when relation data is available, describing key relationships and how the character\'s attitude changes with different people'}
 - Each behavior file should focus on ONE distinct pattern (e.g., "honor-code", "combat-style", "leadership", "relationships")
 
 ## Example Guidelines
@@ -108,7 +192,7 @@ Each example should have 2-4 dialogue turns showing natural back-and-forth.
 ## Rules
 
 - IMPORTANT: Always use tools — do not generate plain text responses
-- Always call sampleChunks before writing a dimension — do not fabricate content
+${readRule}
 - Each writeBehavior call creates a separate file — call it once per behavior
 - Each writeExample call creates a separate example file
 - Use reviewSoul at least once before finalizing
@@ -122,25 +206,50 @@ const DOOM_LOOP_THRESHOLD = 3
 
 // ========== Main Function ==========
 
+export interface DistillSoulOptions {
+  /** Web-search path: read data from dimension cache directory */
+  sessionDir?: string
+  /** Local source path: use SoulChunk[] directly */
+  chunks?: SoulChunk[]
+  tags?: TagSet
+  onProgress?: OnDistillAgentProgress
+  agentLog?: AgentLogger
+}
+
 export async function distillSoul(
   name: string,
-  chunks: SoulChunk[],
   soulDir: string,
   config: SoulkillerConfig,
-  tags?: TagSet,
-  onProgress?: OnDistillAgentProgress,
-  agentLog?: AgentLogger,
+  options: DistillSoulOptions = {},
 ): Promise<DistillResult> {
+  const { sessionDir, chunks, tags, onProgress, agentLog } = options
+
+  if (!sessionDir && !chunks) {
+    throw new Error('distillSoul requires either sessionDir or chunks')
+  }
+
   const startTime = Date.now()
   const distillModel = config.llm.distill_model ?? config.llm.default_model
-  logger.info('[distillSoul] Start:', { name, chunkCount: chunks.length, model: distillModel })
+
+  // Build article index for sessionDir path
+  const articleIndex = sessionDir ? buildArticleIndex(sessionDir) : undefined
+  const dataCount = articleIndex ? articleIndex.length : chunks!.length
+  // Detect whether relations dimension data is available — required for multi-soul export
+  const hasRelations = articleIndex
+    ? articleIndex.some((a) => a.dimension === 'relations' || a.dimension === 'relationships')
+    : (chunks?.some((c) => {
+        const dim = String(c.metadata?.extraction_step ?? '')
+        return dim === 'relations' || dim === 'relationships'
+      }) ?? false)
+  const dataLabel = sessionDir ? `sessionDir(${dataCount} articles)` : `chunks(${dataCount})`
+  logger.info('[distillSoul] Start:', { name, dataSource: dataLabel, model: distillModel, hasRelations })
 
   const provider = createOpenAICompatible({
     name: 'openrouter',
     apiKey: config.llm.api_key,
     baseURL: process.env.SOULKILLER_API_URL ?? 'https://openrouter.ai/api/v1',
   })
-  const model = provider(distillModel)
+  const model = provider(withExacto(distillModel))
 
   // Ensure soul directory structure
   const soulPath = path.join(soulDir, 'soul')
@@ -149,7 +258,7 @@ export async function distillSoul(
   fs.mkdirSync(behaviorsPath, { recursive: true })
   fs.mkdirSync(examplesPath, { recursive: true })
 
-  agentLog?.distillStart({ model: distillModel, totalChunks: chunks.length, sampledChunks: chunks.length })
+  agentLog?.distillStart({ model: distillModel, totalChunks: dataCount, sampledChunks: dataCount })
   onProgress?.({ type: 'phase', phase: 'distilling' })
 
   // ========== Tool Definitions ==========
@@ -162,10 +271,10 @@ export async function distillSoul(
     }),
     execute: async ({ dimension, limit }) => {
       const maxLimit = Math.min(limit ?? 50, 100)
-      let filtered = chunks
+      let filtered = chunks ?? []
 
       if (dimension) {
-        const dimChunks = chunks.filter((c) => c.metadata?.extraction_step === dimension)
+        const dimChunks = (chunks ?? []).filter((c) => c.metadata?.extraction_step === dimension)
         if (dimChunks.length > 0) {
           filtered = dimChunks
         }
@@ -333,8 +442,66 @@ export async function distillSoul(
     // No execute — stopWhen triggers
   })
 
-  const tools = {
-    sampleChunks: sampleChunksTool,
+  // ========== sessionDir Tools: listArticles + readArticle ==========
+
+  const READ_ARTICLE_MAX_CHARS = 8000
+
+  const listArticlesTool = tool({
+    description: 'List available articles from the research data. Optionally filter by dimension. Returns a lightweight index with title, URL, dimension, character count, and a short preview. Use this to browse what data is available before reading specific articles.',
+    inputSchema: z.object({
+      dimension: z.string().optional().describe('Filter by dimension name (e.g., "identity", "quotes"). Leave empty for all dimensions.'),
+    }),
+    execute: async ({ dimension }) => {
+      if (!articleIndex) return { error: 'No article index available', articles: [] }
+
+      const filtered = dimension
+        ? articleIndex.filter((a) => a.dimension === dimension)
+        : articleIndex
+
+      return {
+        total: filtered.length,
+        articles: filtered.map((a) => ({
+          index: a.index,
+          title: a.title,
+          url: a.url,
+          dimension: a.dimension,
+          charCount: a.charCount,
+          preview: a.content.slice(0, 200).replace(/\n/g, ' '),
+        })),
+      }
+    },
+  })
+
+  const readArticleTool = tool({
+    description: 'Read the full content of a specific article by its index. Content may be truncated for very long articles. Use listArticles first to find relevant article indices.',
+    inputSchema: z.object({
+      index: z.number().describe('Article index from listArticles'),
+    }),
+    execute: async ({ index: idx }) => {
+      if (!articleIndex || idx < 0 || idx >= articleIndex.length) {
+        return { error: `Article index out of range (valid: 0-${(articleIndex?.length ?? 1) - 1})` }
+      }
+
+      const article = articleIndex[idx]!
+      const truncated = article.charCount > READ_ARTICLE_MAX_CHARS
+      const content = truncated
+        ? article.content.slice(0, READ_ARTICLE_MAX_CHARS) + '\n\n[... article truncated ...]'
+        : article.content
+
+      return {
+        title: article.title,
+        url: article.url,
+        dimension: article.dimension,
+        charCount: article.charCount,
+        truncated,
+        content,
+      }
+    },
+  })
+
+  // ========== Tool routing based on data source ==========
+
+  const writeTools = {
     writeIdentity: writeIdentityTool,
     writeStyle: writeStyleTool,
     writeCapabilities: writeCapabilitiesTool,
@@ -345,11 +512,15 @@ export async function distillSoul(
     finalize: finalizeTool,
   }
 
+  const tools = articleIndex
+    ? { listArticles: listArticlesTool, readArticle: readArticleTool, ...writeTools }
+    : { sampleChunks: sampleChunksTool, ...writeTools }
+
   // ========== Agent ==========
 
   const agent = new ToolLoopAgent({
     model,
-    instructions: buildDistillPrompt(name, chunks.length, tags),
+    instructions: buildDistillPrompt(name, dataCount, tags, !!articleIndex, hasRelations),
     tools,
     toolChoice: 'auto',
     temperature: 0.3,
@@ -358,6 +529,19 @@ export async function distillSoul(
       hasToolCall('finalize'),
     ],
     prepareStep: async ({ stepNumber, steps }) => {
+      // Enforce relationships.md when relations data is available
+      if (hasRelations) {
+        const relationshipsPath = path.join(behaviorsPath, 'relationships.md')
+        const relationshipsExists = fs.existsSync(relationshipsPath)
+        const lastTool = steps[steps.length - 1]?.toolCalls?.[0]?.toolName
+        const aboutToFinalize = lastTool === 'finalize' || stepNumber >= MAX_STEPS - 2
+
+        if (!relationshipsExists && aboutToFinalize) {
+          logger.warn('[distillSoul] hasRelations=true but relationships.md missing, forcing writeBehavior')
+          return { toolChoice: { type: 'tool' as const, toolName: 'writeBehavior' as const } }
+        }
+      }
+
       if (stepNumber >= MAX_STEPS - 1) {
         logger.info('[distillSoul] Last step, forcing finalize')
         return { toolChoice: { type: 'tool' as const, toolName: 'finalize' as const } }
@@ -387,7 +571,9 @@ export async function distillSoul(
 
   // ========== Stream Processing ==========
 
-  const userMessage = `Distill the soul of "${name}" from the provided data fragments. Begin by sampling the data.`
+  const userMessage = articleIndex
+    ? `Distill the soul of "${name}" from the research articles. Begin by listing articles to see what data is available.`
+    : `Distill the soul of "${name}" from the provided data fragments. Begin by sampling the data.`
 
   logger.info('[distillSoul] Running ToolLoopAgent (streaming)...')
   const streamResult = await agent.stream({ prompt: userMessage })
