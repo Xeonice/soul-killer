@@ -1,18 +1,76 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import type { SoulkillerConfig } from '../config/schema.js'
 
 let _model: LanguageModel | null = null
 let _modelName: string = ''
 
 /**
+ * Models whose reasoning/thinking stream format is incompatible with
+ * @ai-sdk/openai-compatible (e.g. delta.reasoning field not recognized).
+ * For these models, we disable reasoning via providerOptions to get
+ * standard non-reasoning responses.
+ */
+const REASONING_INCOMPATIBLE_MODELS = [
+  'qwen/qwen3.5-plus',
+  'qwen/qwen3.5-flash',
+  'qwen/qwen3.5-',      // all open-weight qwen3.5 variants
+  'qwen/qwen3.6-plus',
+  'minimax/minimax-m2.7',
+]
+
+/**
+ * Models that don't support `toolChoice: 'required'` on OpenRouter.
+ * These will use 'auto' instead.
+ */
+const NO_TOOL_CHOICE_REQUIRED = [
+  'qwen/qwen3.6-plus',
+  'minimax/minimax-m2.7',
+]
+
+/**
+ * Returns the appropriate toolChoice value for the given model.
+ * Some models (e.g. Qwen 3.6 Plus) don't support 'required' on OpenRouter.
+ */
+export function getToolChoice(modelName: string, preferred: 'auto' | 'required'): 'auto' | 'required' {
+  if (preferred === 'required' && NO_TOOL_CHOICE_REQUIRED.some((m) => modelName.startsWith(m))) {
+    return 'auto'
+  }
+  return preferred
+}
+
+/**
+ * Returns extra providerOptions for the given model. Currently used to
+ * disable reasoning for models whose thinking format is incompatible
+ * with the AI SDK's OpenAI-compatible provider.
+ */
+export function getProviderOptions(modelName: string): SharedV3ProviderOptions | undefined {
+  if (REASONING_INCOMPATIBLE_MODELS.some((m) => modelName.startsWith(m))) {
+    return { openrouter: { reasoning: { effort: 'none' } } } as SharedV3ProviderOptions
+  }
+  return undefined
+}
+
+/**
+ * Models known to work reliably with the :exacto routing variant on OpenRouter.
+ * Other models may not have multiple providers or may fail silently with :exacto.
+ */
+const EXACTO_COMPATIBLE_MODELS = [
+  'z-ai/glm-5-turbo',
+  'z-ai/glm-5',
+  'deepseek/deepseek-chat',
+  'anthropic/claude-sonnet-4.6',
+]
+
+/**
  * Append :exacto to OpenRouter model names for improved tool calling reliability.
- * Exacto routes to providers with better tool calling quality signals.
+ * Only applies to models known to have multiple providers on OpenRouter.
  * See: https://openrouter.ai/docs/guides/routing/model-variants/exacto
  */
 export function withExacto(modelName: string): string {
-  // Don't double-append; skip for non-OpenRouter or local models
   if (modelName.includes(':exacto') || !modelName.includes('/')) return modelName
+  if (!EXACTO_COMPATIBLE_MODELS.some((m) => modelName.startsWith(m))) return modelName
   return `${modelName}:exacto`
 }
 

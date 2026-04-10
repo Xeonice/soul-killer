@@ -61,10 +61,24 @@ export const RECOMMENDED_MODELS: RecommendedModel[] = [
     useCase: 'distill',
   },
   {
-    id: 'z-ai/glm-5',
-    name: 'GLM-5',
-    pricingKey: 'model.pricing.glm5',
+    id: 'z-ai/glm-5-turbo',
+    name: 'GLM-5 Turbo',
+    pricingKey: 'model.pricing.glm5_turbo',
     tagKey: 'model.tag.agent',
+    useCase: 'chat',
+  },
+  {
+    id: 'qwen/qwen3.5-plus-02-15',
+    name: 'Qwen 3.5 Plus',
+    pricingKey: 'model.pricing.qwen35',
+    tagKey: 'model.tag.cheapest',
+    useCase: 'chat',
+  },
+  {
+    id: 'minimax/minimax-m2.7',
+    name: 'MiniMax M2.7',
+    pricingKey: 'model.pricing.minimax27',
+    tagKey: 'model.tag.cheapest',
     useCase: 'chat',
   },
   {

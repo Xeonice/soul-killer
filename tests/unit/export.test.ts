@@ -79,6 +79,7 @@ describe('generateSkillMd', () => {
     expect(result).toMatch(/allowed-tools:.*Read/)
     expect(result).toMatch(/allowed-tools:.*Write/)
     expect(result).toMatch(/allowed-tools:.*Glob/)
+    expect(result).toMatch(/allowed-tools:.*Edit/)
     expect(result).toContain('Phase 0')
     expect(result).toContain('Phase 1')
     expect(result).toContain('Phase 2')
@@ -133,20 +134,25 @@ describe('generateSkillMd', () => {
     })
 
     expect(result).toContain('Phase -1: 剧本库菜单')
-    expect(result).toContain('runtime/scripts/*.yaml')
-    expect(result).toContain('继续游戏')
-    expect(result).toContain('重玩某个剧本')
+    // Post-bun-runtime migration: scripts live at runtime/scripts/*.json
+    expect(result).toContain('runtime/scripts/*.json')
+    expect(result).not.toContain('runtime/scripts/*.yaml')
+    // Flat script list with save status + management sub-menu
+    expect(result).toContain('生成新剧本')
+    expect(result).toContain('管理剧本')
     expect(result).toContain('重命名剧本')
     expect(result).toContain('删除剧本')
-    expect(result).toContain('生成新剧本')
-    // Frontmatter parsing instructions
+    expect(result).toContain('从头重玩')
+    // state list for save enumeration
+    expect(result).toContain('runtime/bin/state list')
+    // Header fields that were formerly in YAML frontmatter
     expect(result).toContain('user_direction')
     expect(result).toContain('generated_at')
     // Damaged script handling
     expect(result).toContain('损坏')
   })
 
-  it('includes Phase 1 script persistence with Write instructions', () => {
+  it('includes Phase 1 script persistence with JSON Write instructions', () => {
     const result = generateSkillMd({
       skillName: 'v-in-cyberpunk-2077',
       storyName: 'V',
@@ -156,17 +162,21 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    // Phase 1 must instruct Write tool usage
+    // Phase 1 must instruct Write tool usage (JSON, not YAML)
     expect(result).toContain('剧本持久化')
     expect(result).toContain('Write 工具')
     expect(result).toContain('runtime/scripts/script-')
-    expect(result).toContain('script-<id>.yaml')
-    // Frontmatter fields enumerated
-    expect(result).toContain('id:')
-    expect(result).toContain('title:')
-    expect(result).toContain('generated_at:')
-    expect(result).toContain('user_direction:')
-    expect(result).toContain('acts:')
+    expect(result).toContain('script-<id>.json')
+    expect(result).not.toContain('script-<id>.yaml')
+    // Header fields still enumerated (inside JSON object now)
+    expect(result).toContain('"id"')
+    expect(result).toContain('"title"')
+    expect(result).toContain('"generated_at"')
+    expect(result).toContain('"user_direction"')
+    expect(result).toContain('"acts"')
+    // Explicit JSON format instruction
+    expect(result).toContain('JSON 格式')
+    expect(result).toContain('合法 JSON')
     // Old "save in internal context" wording must be gone
     expect(result).not.toContain('剧本在你的内部上下文中保存，不要输出给用户')
     // Failure tolerance
@@ -183,11 +193,11 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    // Rename flow: ask new title, modify frontmatter, write back
-    expect(result).toContain('「重命名剧本」')
-    expect(result).toContain('frontmatter 的 \`title\` 字段')
+    // Rename flow: now modifies top-level JSON `title` field in memory and writes back
+    expect(result).toContain('重命名剧本')
+    expect(result).toContain('顶层的 \`title\` 字段')
     // Delete flow: confirmation + cascade delete saves
-    expect(result).toContain('「删除剧本」')
+    expect(result).toContain('删除剧本')
     expect(result).toContain('二次确认')
     expect(result).toContain('已删除剧本')
     // Corruption tolerance
@@ -195,7 +205,7 @@ describe('generateSkillMd', () => {
     expect(result).toContain('继续解析其他文件')
   })
 
-  it('includes save system with three fixed slots', () => {
+  it('includes per-script save system with auto + manual saves', () => {
     const result = generateSkillMd({
       skillName: 'v-in-cyberpunk-2077',
       storyName: 'V',
@@ -206,14 +216,16 @@ describe('generateSkillMd', () => {
     })
 
     expect(result).toContain('存档机制')
-    expect(result).toContain('slot-1')
-    expect(result).toContain('slot-2')
-    expect(result).toContain('slot-3')
+    expect(result).toContain('auto/')
+    expect(result).toContain('manual/')
     expect(result).toContain('runtime/saves/')
     expect(result).toContain('script_ref')
     expect(result).toContain('last_played_at')
-    // Phase 2 must reference slot writes
-    expect(result).toContain('立即写入当前 slot')
+    // Save updates go through state apply (auto) and state save (manual)
+    expect(result).toContain('runtime/bin/state apply')
+    expect(result).toContain('runtime/bin/state save')
+    expect(result).toContain('💾 保存当前进度')
+    expect(result).not.toContain('Edit ${CLAUDE_SKILL_DIR}/runtime/saves')
   })
 
   it('includes ending display and replay rules', () => {
@@ -232,6 +244,194 @@ describe('generateSkillMd', () => {
     expect(result).toContain('结局图鉴')
     expect(result).toContain('从头再来')
     expect(result).toContain('重玩规则')
+  })
+
+  it('includes state_schema creation constraints section', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Section header + key concepts
+    expect(result).toContain('state_schema 创作约束')
+    // Naming constraint mentions
+    expect(result).toContain('snake_case')
+    expect(result).toContain('点号分隔命名空间')
+    expect(result).toContain('必须带引号')
+    // Type set
+    expect(result).toContain('int')
+    expect(result).toContain('bool')
+    expect(result).toContain('enum')
+    // Required field metadata
+    expect(result).toContain('desc')
+    expect(result).toContain('default')
+    // Namespace convention
+    expect(result).toContain('affinity.<character>.<axis>')
+    expect(result).toContain('flags.<event_name>')
+    // Example presence
+    expect(result).toContain('"affinity.judy.trust"')
+  })
+
+  it('includes endings DSL section with cross-character aggregation primitives', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    expect(result).toContain('endings condition 结构化 DSL')
+    // Existing boolean operators
+    expect(result).toContain('>=')
+    expect(result).toContain('all_of')
+    expect(result).toContain('any_of')
+    expect(result).toContain('not')
+    // New cross-character aggregation primitives
+    expect(result).toContain('all_chars:')
+    expect(result).toContain('any_char:')
+    expect(result).toContain('except:')
+    // Axis restriction
+    expect(result).toContain('只能是**共享轴**')
+    // Default fallback
+    expect(result).toContain('condition: default')
+    // Example uses new primitives
+    expect(result).toContain('"ending-unity"')
+    expect(result).toContain('"ending-breakthrough"')
+    // Forbid natural-language expressions
+    expect(result).toContain('不接受')
+  })
+
+  it('Phase -1 delegates validation to state CLI with full error code table', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Validation is now delegated to the state CLI — no more inline六重 prose
+    expect(result).toContain('runtime/bin/state validate')
+    expect(result).toContain('--continue')
+    // Structured JSON contract
+    expect(result).toContain('"ok"')
+    expect(result).toContain('"errors"')
+    // Full error code table for LLM to dispatch on
+    expect(result).toContain('DANGLING_SCRIPT_REF')
+    expect(result).toContain('STATE_SCHEMA_MISSING')
+    expect(result).toContain('INITIAL_STATE_MISMATCH')
+    expect(result).toContain('CONSEQUENCES_UNKNOWN_KEY')
+    expect(result).toContain('SHARED_AXES_INCOMPLETE')
+    expect(result).toContain('FLAGS_SET_MISMATCH')
+    expect(result).toContain('FIELD_MISSING')
+    expect(result).toContain('FIELD_EXTRA')
+    expect(result).toContain('FIELD_TYPE_MISMATCH')
+    expect(result).toContain('MALFORMED')
+    // Error outcome labels
+    expect(result).toContain('(孤儿)')
+    expect(result).toContain('(损坏)')
+    expect(result).toContain('legacy 不可重玩')
+    // Inline prose-style six-fold validation text must be gone
+    expect(result).not.toContain('**六重验证**')
+    expect(result).not.toContain('**验证 1：dangling reference 检查**')
+  })
+
+  it('Phase -1 repair menu routes through state rebuild / state reset', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Repair menu exists and is explicit about forbidding manual Edit/Write
+    expect(result).toContain('修复菜单')
+    expect(result).toContain('state rebuild')
+    expect(result).toContain('state reset')
+    expect(result).toContain('绝对不要')
+    expect(result).toContain('自己手动修补 state.yaml')
+  })
+
+  it('replay rule delegates to state reset CLI command', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    expect(result).toContain('# 重玩规则')
+    expect(result).toContain('runtime/bin/state reset')
+    // The old Write-to-reset pattern must be gone from the replay rule
+    expect(result).not.toContain('整体覆盖为 script 的 `initial_state`')
+    expect(result).not.toContain('允许 Write 整个 state.yaml 的两个例外')
+    // Note: "用 Write 工具" still appears elsewhere for Phase 1 script.json
+    // persistence (a legitimate use — Phase 1 creates the script file).
+  })
+
+  it('Phase 2 apply_consequences is delegated to state apply CLI command', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Section header still exists but now dispatches to CLI
+    expect(result).toContain('apply_consequences 标准流程')
+    expect(result).toContain('runtime/bin/state apply')
+    expect(result).toContain('<current-scene-id>')
+    expect(result).toContain('<choice-id>')
+    // stdout output format anchors
+    expect(result).toContain('SCENE')
+    expect(result).toContain('CHANGES')
+    expect(result).toContain('clamped')
+    // First-enter path uses state init
+    expect(result).toContain('runtime/bin/state init')
+    // Hard red line: no manual Edit/Write on state.yaml or meta.yaml
+    expect(result).toContain('状态文件直写')
+    expect(result).toContain('所有**状态写入必须通过')
+    // Old pseudo-code must be gone
+    expect(result).not.toContain('schema_field is None')
+    expect(result).not.toContain('clamp(new,')
+    expect(result).not.toContain('Edit ${CLAUDE_SKILL_DIR}/runtime/saves')
+    // Old section names that depended on Edit semantics must be gone
+    expect(result).not.toContain('Edit 工具的关键约束')
+    expect(result).not.toContain('唯一允许 Write 整个 state.yaml 的两个时机')
+  })
+
+  it('Phase 1 has 7-step creation procedure', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    expect(result).toContain('Phase 1 创作步骤（严格按顺序）')
+    expect(result).toContain('Step 1：设计 state_schema')
+    expect(result).toContain('Step 2：写 initial_state')
+    expect(result).toContain('Step 3：写 scenes')
+    expect(result).toContain('Step 4：写 endings')
+    expect(result).toContain('Step 5：自检')
+    expect(result).toContain('Step 6：Write')
+    expect(result).toContain('Step 7：进入 Phase 2')
+    expect(result).toContain('逐字符复制')
   })
 
   it('Phase 1 instructions reference chronicle timeline and events directories', () => {
@@ -260,15 +460,242 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    // The new replay rule must reference initial_state, not Phase 0 / regeneration
-    expect(result).toContain('复用')
-    expect(result).toContain('当前正在玩的 script')
+    // The new replay rule dispatches to state reset — the CLI handles
+    // copying script.initial_state → state.yaml + resetting current_scene.
+    expect(result).toContain('runtime/bin/state reset')
+    expect(result).toContain('复用当前剧本的 script')
     expect(result).toContain('initial_state')
     expect(result).toContain('第一个场景')
     expect(result).toContain('生成新剧本')
     // Old behaviour must be gone
     expect(result).not.toContain('回到 Phase 0（重新询问 story seeds）')
     expect(result).not.toContain('重新生成全新剧本')
+  })
+
+  it('Phase 1 creation steps reference prose_style forbidden_patterns before writing scenes', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Phase 1 Step 3 must instruct LLM to read the prose_style anchor
+    // before writing narration/dialogue.
+    expect(result).toContain('叙事风格锚点')
+    expect(result).toContain('forbidden_patterns')
+    expect(result).toContain('ip_specific')
+    // The self-check step for prose_style must exist.
+    expect(result).toContain('prose_style 反例对照')
+  })
+
+  it('Phase 2 scene rendering lists high-frequency translatese patterns to avoid', () => {
+    const result = generateSkillMd({
+      skillName: 'v-in-cyberpunk-2077',
+      storyName: 'V',
+      worldDisplayName: '赛博朋克 2077',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+    })
+
+    // Phase 2 must have its own prose style constraints section.
+    expect(result).toContain('叙事风格约束')
+    // Must call out character_voice_summary as voice anchor priority.
+    expect(result).toContain('character_voice_summary')
+    // The five high-frequency pattern labels must appear in the cheat sheet.
+    expect(result).toContain('度量从句')
+    expect(result).toContain('所有格排比')
+    expect(result).toContain('直译比喻')
+    expect(result).toContain('直译姿态')
+    expect(result).toContain('直译否定')
+  })
+
+  it('Phase 1 includes context budget declaration with file count and size', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      expectedFileCount: 137,
+      expectedTextSizeKb: 420,
+    })
+
+    // Budget declaration header + concrete numbers
+    expect(result).toContain('上下文预算与全量读取')
+    expect(result).toContain('137')
+    expect(result).toContain('420 KB')
+    expect(result).toContain('1,000,000 token')
+    // The hard no-pagination constraint
+    expect(result).toContain('不得使用 `offset` 或 `limit` 参数')
+    // The "don't be frugal" authorization
+    expect(result).toContain('不要防御性地节省')
+  })
+
+  it('Phase 1 budget declaration uses fallback when no file count provided', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      // expectedFileCount / expectedTextSizeKb omitted
+    })
+
+    // Fallback still has the header and the no-pagination constraint
+    expect(result).toContain('上下文预算与全量读取')
+    expect(result).toContain('不得使用 `offset` 或 `limit` 参数')
+    // Fallback should NOT contain a specific file count like "约 N 个文件"
+    // (the generic version doesn't claim a number)
+    expect(result).not.toMatch(/约 \d+ 个文件/)
+  })
+
+  it('Phase 1 includes Step 0 data loading report instructions', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      expectedFileCount: 60,
+      expectedTextSizeKb: 230,
+    })
+
+    expect(result).toContain('Step 0：数据加载报告')
+    expect(result).toContain('# 数据加载报告')
+    // Structured markdown table headers
+    expect(result).toContain('| 类别 | 文件 | 行数 |')
+    expect(result).toContain('(not present)')
+    // Step 1 has the guard clause pointing back to Step 0
+    expect(result).toContain('前置条件检查')
+    expect(result).toContain('立刻停下回去做 Step 0')
+  })
+
+  it('Phase 1 re-reads story-spec.md to fix Phase 0 pollution', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      expectedFileCount: 60,
+      expectedTextSizeKb: 230,
+    })
+
+    expect(result).toContain('Phase 0 污染修复')
+    expect(result).toContain('重新 Read')
+    expect(result).toContain('story-spec.md')
+    expect(result).toContain('前 50 行')
+  })
+
+  it('Phase 1 Step 5 includes data coverage self-check (single-character engine)', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      expectedFileCount: 60,
+      expectedTextSizeKb: 230,
+    })
+
+    // Single-character engine uses Step 5.e for data coverage
+    expect(result).toContain('Step 5.e — 数据覆盖完整性')
+    // Sanity thresholds must be present
+    expect(result).toContain('> 50')
+    expect(result).toContain('> 40')
+    expect(result).toContain('> 20')
+    // Recovery path
+    expect(result).toContain('offset/limit')
+  })
+
+  it('Phase 1 Step 5 includes data coverage self-check (multi-character engine)', () => {
+    const result = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      expectedFileCount: 200,
+      expectedTextSizeKb: 800,
+      characters: [
+        { name: 'A', role: 'protagonist', axes: [], slug: 'a' },
+        { name: 'B', role: 'deuteragonist', axes: [], slug: 'b' },
+      ],
+    })
+
+    // Multi-character engine uses Step 5.h for data coverage
+    expect(result).toContain('Step 5.h — 数据覆盖完整性')
+    // Header updated to 八重
+    expect(result).toContain('Step 5：八重自检')
+    // Step 1 count in header updated to 8 steps (0-7)
+    expect(result).toContain('8 个步骤（Step 0 - Step 7）')
+  })
+
+  it('Phase 2 forbids LLM trained-default self-pause and fourth-wall breaks', () => {
+    // Covers a diagnosed failure mode: LLM inserting "要继续吗?" meta-prompts
+    // mid-Phase-2 and leaking save slot / scene ID details to the user.
+    // The SKILL.md must explicitly forbid these trained defaults.
+    const resultMulti = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      characters: [
+        { name: 'A', role: 'protagonist', axes: [], slug: 'a' },
+        { name: 'B', role: 'deuteragonist', axes: [], slug: 'b' },
+      ],
+    })
+
+    // Category 1: control-flow self-pause
+    expect(resultMulti).toContain('控制流自暂停')
+    expect(resultMulti).toContain('要继续吗')
+    expect(resultMulti).toContain('回复过长')
+    expect(resultMulti).toContain('apply_consequences → 渲染下一场景是**同一个原子动作**')
+
+    // Category 2: progress / save exposure (fourth wall)
+    expect(resultMulti).toContain('进度/存档暴露')
+    expect(resultMulti).toContain('第三幕中段')
+    expect(resultMulti).toContain('scene-007')
+    expect(resultMulti).toContain('auto/')
+    expect(resultMulti).toContain('故事状态更新')
+
+    // Category 3: chatbot meta-narration
+    expect(resultMulti).toContain('聊天机器人式元叙述')
+
+    // Category 4: option label contamination
+    expect(resultMulti).toContain('选项标签污染')
+    expect(resultMulti).toContain('友善路线')
+
+    // "Only stop in 4 cases" clarification
+    expect(resultMulti).toContain('你只在 4 种情况下停止渲染')
+    expect(resultMulti).toContain('立即渲染下一场景')
+
+    // Single-character engine has the same rules
+    const resultSingle = generateSkillMd({
+      skillName: 'test',
+      storyName: 'Test',
+      worldDisplayName: 'TestWorld',
+      description: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      // no characters → single-character engine path
+    })
+    expect(resultSingle).toContain('控制流自暂停')
+    expect(resultSingle).toContain('进度/存档暴露')
+    expect(resultSingle).toContain('你只在 4 种情况下停止渲染')
+    expect(resultSingle).toContain('立即渲染下一场景')
   })
 })
 
@@ -301,7 +728,7 @@ describe('generateStorySpec', () => {
     expect(result).toContain('不要出现超自然元素')
   })
 
-  it('includes state system and ending rules', () => {
+  it('includes state system and ending rules (single-character, post story-level-state)', () => {
     const result = generateStorySpec({
       story_name: 'test-story',
       genre: 'test',
@@ -312,12 +739,14 @@ describe('generateStorySpec', () => {
     })
 
     expect(result).toContain('状态系统')
-    expect(result).toContain('数值轴')
-    expect(result).toContain('关键事件标记')
+    // Three-layer structure replaces "数值轴 / 关键事件标记" heading
+    expect(result).toContain('三层结构')
+    expect(result).toContain('共享 axes')
+    expect(result).toContain('特异 axes')
+    expect(result).toContain('Flags')
+    // Endings still discussed
     expect(result).toContain('结局判定')
     expect(result).toContain('默认结局')
-    expect(result).toContain('结局展示')
-    expect(result).toContain('旅程回顾')
   })
 
   it('omits constraints block when empty', () => {
@@ -331,6 +760,30 @@ describe('generateStorySpec', () => {
     })
 
     expect(result).not.toContain('额外约束')
+  })
+
+  it('state system uses three-layer structure and DSL endings', () => {
+    const result = generateStorySpec({
+      story_name: 'test-story',
+      genre: 'test',
+      tone: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+    })
+
+    // Three-layer reference (replaces the old "state_schema 范式" label)
+    expect(result).toContain('三层结构')
+    expect(result).toContain('Layer 1: 共享 axes')
+    expect(result).toContain('Layer 2: 角色特异 axes')
+    expect(result).toContain('Layer 3: Flags')
+    expect(result).toContain('逐字符复制')
+    // Endings DSL — structured
+    expect(result).toContain('结构化 DSL')
+    expect(result).toContain('all_of')
+    expect(result).toContain('condition: default')
+    // No old free-text condition syntax
+    expect(result).not.toMatch(/条件: trust >= 7 AND shared_secret/)
   })
 
   it('replay option reuses current script', () => {
@@ -350,6 +803,92 @@ describe('generateStorySpec', () => {
     expect(result).not.toMatch(/回到 Phase 0/)
   })
 
+  it('emits story_state section with shared_axes_custom and flags yaml block when provided', () => {
+    const result = generateStorySpec({
+      story_name: 'test-story',
+      genre: 'test',
+      tone: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+      story_state: {
+        shared_axes_custom: ['trust', 'rivalry'],
+        flags: [
+          { name: 'met_illya', desc: '玩家首次遇到伊莉雅', initial: false },
+          { name: 'truth_revealed', desc: '真相被揭露', initial: false },
+        ],
+      },
+    })
+
+    // The Story State section exists and is machine-parseable
+    expect(result).toContain('## Story State')
+    expect(result).toContain('shared_axes_custom: [trust, rivalry]')
+    expect(result).toContain('- name: met_illya')
+    expect(result).toContain('- name: truth_revealed')
+    expect(result).toContain('initial: false')
+    // Legacy placeholder must NOT be present when story_state is provided
+    expect(result).not.toContain('未通过 set_story_state')
+  })
+
+  it('emits legacy placeholder in story_state section when not provided', () => {
+    const result = generateStorySpec({
+      story_name: 'test-story',
+      genre: 'test',
+      tone: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+    })
+
+    expect(result).toContain('## Story State')
+    expect(result).toContain('未通过 set_story_state 声明')
+  })
+
+  it('multi-character state system renders three layers with story_state shared axes', () => {
+    const result = generateStorySpec({
+      story_name: 'fsn-test',
+      genre: 'visual novel',
+      tone: '救赎',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+      story_state: {
+        shared_axes_custom: ['trust', 'rivalry'],
+        flags: [{ name: 'met_illya', desc: '...', initial: false }],
+      },
+      characters: [
+        {
+          name: 'illya',
+          display_name: '伊莉雅',
+          role: 'protagonist',
+          axes: [{ name: '自我价值', english: 'self_worth', initial: 3 }],
+        },
+        {
+          name: 'kotomine',
+          display_name: '绮礼',
+          role: 'antagonist',
+          axes: [],
+          shared_initial_overrides: { bond: 1, trust: 1, rivalry: 8 },
+        },
+      ],
+    })
+
+    // Multi-char three-layer header
+    expect(result).toContain('三层结构')
+    // Shared axes listed with the story_state names
+    expect(result).toContain('bond / trust / rivalry')
+    // Each character shows shared axis initial (kotomine's overrides)
+    expect(result).toContain('`bond`=1')
+    expect(result).toContain('`rivalry`=8')
+    // Specific axes listed
+    expect(result).toContain('self_worth')
+    // Flags yaml listing
+    expect(result).toContain('- `flags.met_illya`')
+    // all_chars / any_char in endings DSL section
+    expect(result).toContain('all_chars:')
+    expect(result).toContain('any_char:')
+  })
+
   it('marks default acts option in summary', () => {
     const result = generateStorySpec({
       story_name: 'test-story',
@@ -365,5 +904,114 @@ describe('generateStorySpec', () => {
     // Non-default should NOT have the marker
     expect(result).toContain('**短篇** (3 幕，24-36 轮，4 结局)')
     expect(result).not.toContain('**短篇** (3 幕，24-36 轮，4 结局) [推荐]')
+  })
+
+  it('emits prose_style section with voice_anchor / forbidden_patterns / ip_specific when provided', () => {
+    const result = generateStorySpec({
+      story_name: 'fsn-test',
+      genre: 'visual novel',
+      tone: '救赎',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+      prose_style: {
+        target_language: 'zh',
+        voice_anchor: 'type-moon 系日翻中视觉小说官方译本风格，克制冷峻',
+        forbidden_patterns: [
+          {
+            id: 'degree_clause',
+            bad: '她抓着你腰的手收紧到了指甲嵌进衣服的程度',
+            good: '她猛地收紧抓着你腰的手。指甲掐进了衣服里',
+            reason: '英文 to-the-degree-that 从句直译',
+          },
+          {
+            id: 'possessive_chain',
+            bad: '我的 A。我的 B。我的 C。',
+            good: 'A。B。还有 C。',
+            reason: '英文 my-X / my-Y 排比直译',
+          },
+          {
+            id: 'gaze_level',
+            bad: '让自己的视线和她的视线持平',
+            good: '与她平视',
+            reason: 'level gaze 直译',
+          },
+        ],
+        ip_specific: [
+          '宝具/Servant/Master 保留英文不意译',
+          '敬语：樱 → 樱小姐；士郎 → 卫宫',
+          '比喻池：月光/雪/灯笼/石阶，不用西式意象',
+        ],
+        character_voice_summary: {
+          sakura: '间桐桜：克制敬语中文。「先輩…」译为「学长……」',
+        },
+      },
+    })
+
+    // Section header
+    expect(result).toContain('## 叙事风格锚点')
+    // Scalar fields
+    expect(result).toContain('target_language: zh')
+    expect(result).toContain('type-moon 系日翻中')
+    // Forbidden patterns yaml block
+    expect(result).toContain('forbidden_patterns:')
+    expect(result).toContain('id: degree_clause')
+    expect(result).toContain('id: possessive_chain')
+    expect(result).toContain('id: gaze_level')
+    // ip_specific listed
+    expect(result).toContain('ip_specific:')
+    expect(result).toContain('宝具/Servant/Master')
+    // character_voice_summary
+    expect(result).toContain('character_voice_summary:')
+    expect(result).toContain('sakura:')
+    // Fallback marker should NOT appear
+    expect(result).not.toContain('（fallback）')
+  })
+
+  it('emits prose_style fallback section when prose_style is missing', () => {
+    const result = generateStorySpec({
+      story_name: 'legacy-story',
+      genre: 'test',
+      tone: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+    })
+
+    expect(result).toContain('## 叙事风格锚点（fallback）')
+    // Fallback inlines the top 5 highest-frequency forbidden patterns.
+    expect(result).toContain('id: degree_clause')
+    expect(result).toContain('id: gaze_level')
+    // Generic voice anchor message
+    expect(result).toContain('通用克制书面中文')
+  })
+
+  it('forbidden_patterns yaml in prose_style section escapes embedded quotes', () => {
+    const result = generateStorySpec({
+      story_name: 'test',
+      genre: 'test',
+      tone: 'test',
+      acts_options: sampleActOptions,
+      default_acts: 3,
+      constraints: [],
+      prose_style: {
+        target_language: 'zh',
+        voice_anchor: '足够长的 voice anchor 描述 twenty chars',
+        forbidden_patterns: [
+          {
+            id: 'quoted_pattern',
+            bad: '她说"朋友"时 voice was empty',
+            good: '她说"朋友"时声音平得像一面湖',
+            reason: '测试引号转义',
+          },
+          { id: 'p2', bad: 'b2', good: 'g2', reason: 'r2' },
+          { id: 'p3', bad: 'b3', good: 'g3', reason: 'r3' },
+        ],
+        ip_specific: ['rule one具体', 'rule two具体', 'rule three具体'],
+      },
+    })
+
+    // Quotes escaped
+    expect(result).toContain('\\"朋友\\"')
   })
 })

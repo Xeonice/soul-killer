@@ -93,7 +93,11 @@ vi.mock('../../src/soul/package.js', () => ({
   generateManifest: vi.fn(),
 }))
 
-const DELAY = 80
+// Generous delay for ink rendering — needs headroom when vitest runs
+// component tests in parallel. The multi-step wizard tests (type → name →
+// desc → soul-list → tags → confirm) need enough time for each ink
+// re-render cycle to complete before the next keystroke.
+const DELAY = 200
 
 describe('CreateCommand', () => {
   const onComplete = vi.fn()
@@ -214,7 +218,7 @@ describe('CreateCommand', () => {
     stdin.write('\r')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('\r') // skip tags
-    await new Promise((r) => setTimeout(r, 150))
+    await new Promise((r) => setTimeout(r, 250))
 
     const frame = lastFrame()!
     expect(frame).toContain('信息汇总')
@@ -258,7 +262,7 @@ describe('CreateCommand', () => {
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r') // skip tags
-      await new Promise((r) => setTimeout(r, 150))
+      await new Promise((r) => setTimeout(r, 250))
       stdin.write('\r') // confirm
       await new Promise((r) => setTimeout(r, DELAY))
 
@@ -291,7 +295,7 @@ describe('CreateCommand', () => {
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r') // skip tags
-      await new Promise((r) => setTimeout(r, 150))
+      await new Promise((r) => setTimeout(r, 250))
       stdin.write('\r') // confirm
       await new Promise((r) => setTimeout(r, DELAY))
 
@@ -325,7 +329,7 @@ describe('CreateCommand', () => {
       stdin.write('\r')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r') // skip tags
-      await new Promise((r) => setTimeout(r, 150))
+      await new Promise((r) => setTimeout(r, 250))
       stdin.write('\r') // confirm
       await new Promise((r) => setTimeout(r, DELAY))
 

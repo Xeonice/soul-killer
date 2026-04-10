@@ -20,7 +20,9 @@ After ALL dimensions are evaluated, call reportFindings with classification, sum
 - ALWAYS use tools.
 - Process dimensions ONE BY ONE.
 - Do NOT fabricate information.
-- Do NOT skip dimensions.`
+- Do NOT skip dimensions.
+- Your LAST tool call MUST be reportFindings. NEVER end without calling it.
+- Text output alone does NOT count as completion — only a reportFindings tool call finishes the task.`
 
 export class SoulCaptureStrategy implements CaptureStrategy {
   type = 'soul' as const
@@ -47,7 +49,9 @@ A complete profile requires data across these dimensions:
 
 ${dimList}
 
-You need at least ${Math.min(plan.dimensions.length, 4)} dimensions covered, with at least ${minRequired} of the REQUIRED dimensions, before you can report.`
+You need at least ${Math.min(plan.dimensions.length, 4)} dimensions covered, with at least ${minRequired} of the REQUIRED dimensions, before you can report.
+
+When all dimensions are covered, IMMEDIATELY call reportFindings. Do NOT output a text summary instead — call the tool.`
   }
 
   buildUserMessage(name: string, hint?: string): string {

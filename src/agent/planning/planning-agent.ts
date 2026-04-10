@@ -1,4 +1,5 @@
 import { generateText, type LanguageModel } from 'ai'
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import type { DimensionDef, DimensionPlan } from './dimension-framework.js'
 import { SOUL_DIMENSION_TEMPLATES } from '../strategy/soul-dimensions.js'
 import { WORLD_DIMENSION_TEMPLATES } from '../strategy/world-dimensions.js'
@@ -27,6 +28,38 @@ interface SearchResult {
   content: string
 }
 
+function buildClassificationStrategy(classification: string): string {
+  if (classification === 'REAL_SETTING') {
+    return `### Classification: REAL_SETTING — Strict In-World Qualifiers Required
+
+This world is set in the real world (or a close variant). Search engines will heavily mix production meta-info with in-story facts.
+
+MANDATORY for every query:
+- Append qualifiers like "故事内"/"剧情"/"设定"/"in-story"/"story setting" to disambiguate from meta content
+- Prefer character names + event descriptions over work title alone
+- Every dimension's qualityCriteria MUST include a meta-exclusion criterion:
+  "文章描述的是故事世界内部的事实，不是作品的发售/制作/改编/播出信息"
+
+Example bad query:  "White Album 2 历史 时间线"         → returns release dates
+Example good query: "白色相簿2 剧情 时间线 故事内事件"    → returns story events
+Example good query: "冬马かずさ 北原春希 出来事"          → returns character events`
+  }
+
+  if (classification === 'FICTIONAL_UNIVERSE') {
+    return `### Classification: FICTIONAL_UNIVERSE — Standard Queries
+
+This is a fictional universe with unique world-building. Standard queries will naturally return in-world content. No special qualifiers needed, but still ensure qualityCriteria includes a meta-exclusion criterion.`
+  }
+
+  // UNKNOWN_SETTING or anything else → conservative path
+  return `### Classification: UNKNOWN_SETTING — Conservative Strategy
+
+World type is uncertain. Apply the same strict in-world qualifiers as REAL_SETTING:
+- Append "故事内"/"剧情"/"设定"/"in-story" to queries
+- Prefer character names + event descriptions over work title alone
+- Every dimension's qualityCriteria MUST include a meta-exclusion criterion`
+}
+
 function buildPlanningPrompt(
   type: 'soul' | 'world',
   baseDims: DimensionDef[],
@@ -44,8 +77,25 @@ function buildPlanningPrompt(
     `${i + 1}. [${r.title}](${r.url})\n   ${r.content.slice(0, 200)}`,
   ).join('\n')
 
-  return `You are a research planning specialist. Based on the reconnaissance information below, create a customized dimension plan for researching the ${typeLabel} "${name}".
+  const worldMetaExclusion = type === 'world' ? `
+## Search Target: In-World Information ONLY
 
+Your search queries must target **facts that exist INSIDE the fictional world** — geography, events, characters, social structures, customs, timeline, etc. as they appear in the story's narrative.
+
+You MUST EXCLUDE queries that would return information ABOUT the work itself:
+- Release dates, sales figures, platform ports, remasters (発売, 发售, release, launch)
+- Anime/manga/drama-CD adaptations, broadcast schedules (放送, 配信, aired, broadcast)
+- Voice actors, staff, production companies, studios (声优, CV, 制作, スタッフ)
+- Reviews, ratings, awards, merchandise
+- Real-world reception, fan community, cultural impact
+
+If the reconnaissance articles are dominated by production/release info, your queries need STRONGER in-world qualifiers.
+
+${buildClassificationStrategy(classification)}
+` : ''
+
+  return `You are a research planning specialist. Based on the reconnaissance information below, create a customized dimension plan for researching the ${typeLabel} "${name}".
+${worldMetaExclusion}
 ## Dimension Templates (reference — select what fits)
 
 ${dimList}
@@ -115,7 +165,7 @@ Respond with a JSON object only, no other text:
       "priority": "required",
       "signals": ["history", "timeline", "历史"],
       "queries": ["${name} history", "${name} timeline"],
-      "qualityCriteria": ["包含具体时间和事件", "有因果关系分析"],
+      "qualityCriteria": ["包含具体时间和事件", "有因果关系分析"${type === 'world' ? ', "描述故事世界内部事实，排除作品制作/发行/改编信息"' : ''}],
       "minArticles": 3,
       "distillTarget": "background"
     }
@@ -186,15 +236,22 @@ export async function runPlanningAgent(
   classification: string,
   localName?: string,
   origin?: string,
+  providerOptions?: SharedV3ProviderOptions,
 ): Promise<DimensionPlan> {
   const templateDims = type === 'soul' ? SOUL_DIMENSION_TEMPLATES : WORLD_DIMENSION_TEMPLATES
   const prompt = buildPlanningPrompt(type, templateDims, name, hint, preSearchResults, classification)
 
+  // Surface the configured model id in error messages so users can tell
+  // immediately which provider/variant is misbehaving when the watchdog fires.
+  const modelId = (model as { modelId?: string }).modelId ?? 'unknown'
+
   logger.info(`[planning-agent] Running for ${type}:${name} (${classification})`)
 
   const abortController = new AbortController()
+  let timedOut = false
   const timeout = setTimeout(() => {
-    logger.warn(`[planning-agent] Timeout after ${PLANNING_TIMEOUT_MS}ms — aborting`)
+    logger.warn(`[planning-agent] Timeout after ${PLANNING_TIMEOUT_MS}ms — aborting (model=${modelId})`)
+    timedOut = true
     abortController.abort()
   }, PLANNING_TIMEOUT_MS)
 
@@ -206,8 +263,21 @@ export async function runPlanningAgent(
       prompt: `Generate the dimension plan for "${name}".`,
       temperature: 0,
       abortSignal: abortController.signal,
+      providerOptions,
     })
     text = result.text
+  } catch (err) {
+    // If the watchdog fired, rewrite the generic "operation was aborted"
+    // message into a concrete diagnostic the user can act on — naming the
+    // model and pointing at structured-output stability as the likely cause.
+    if (timedOut) {
+      throw new Error(
+        `Planning Agent 超时（${PLANNING_TIMEOUT_MS / 1000}s 无响应）：` +
+          `模型 ${modelId} 未在时限内返回结构化 JSON。` +
+          `建议换一个对 structured output 更稳定的模型（例如 deepseek/deepseek-v3.2、qwen/qwen3.6-plus 或 anthropic/claude-sonnet-4.5）。`
+      )
+    }
+    throw err
   } finally {
     clearTimeout(timeout)
   }

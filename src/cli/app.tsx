@@ -165,6 +165,7 @@ export function App() {
       soulDir,
       promptMode: 'loaded',
       interactiveMode: false,
+      commandOutput: null,
       conversationMessages: [],
     }))
   }, [])
@@ -178,6 +179,7 @@ export function App() {
       soulDir,
       promptMode: 'relic',
       interactiveMode: false,
+      commandOutput: null,
       conversationMessages: [],
     }))
   }, [])

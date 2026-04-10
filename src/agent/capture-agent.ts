@@ -12,7 +12,8 @@ import { readDimensionCache } from './tools/evaluate-dimension.js'
 import { filterByTitles } from './search/title-filter.js'
 import type { TitleFilterInput } from './search/title-filter.js'
 import { runPlanningAgent } from './planning/planning-agent.js'
-import { withExacto } from '../llm/client.js'
+import { withExacto, getProviderOptions, getToolChoice } from '../llm/client.js'
+import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import { logger } from '../utils/logger.js'
 import { AgentLogger } from '../utils/agent-logger.js'
 import { ensureSearxng } from './search/searxng-search.js'
@@ -140,6 +141,7 @@ async function scoreDimensionsParallel(
   targetName: string,
   hint: string | undefined,
   onProgress?: OnProgress,
+  providerOpts?: SharedV3ProviderOptions,
 ): Promise<Map<string, DimensionScore>> {
   const scores = new Map<string, DimensionScore>()
   const dims = dimensionPlan.dimensions
@@ -175,6 +177,7 @@ async function scoreDimensionsParallel(
         try {
           const { text } = await generateText({
             model,
+            providerOptions: providerOpts,
             system: `You are a search result quality evaluator. Score each article 1-5 against the criteria below.
 
 Target: "${targetName}"${hintLine}
@@ -265,6 +268,7 @@ export async function runCaptureAgent(
     baseURL: 'https://openrouter.ai/api/v1',
   })
   const model = provider(withExacto(config.llm.default_model))
+  const providerOpts = getProviderOptions(config.llm.default_model)
 
   let searxngAvailable = false
   if (config.search?.provider === 'searxng') {
@@ -328,6 +332,7 @@ export async function runCaptureAgent(
     dimensionPlan = await runPlanningAgent(
       model, strategy.type, name, hint,
       preSearchResults, '', name,
+      undefined, providerOpts,
     )
     const totalQueries = dimensionPlan.dimensions.reduce((sum, d) => sum + d.queries.length, 0)
     logger.info(`${tag} Planning Agent: ${dimensionPlan.dimensions.length} dimensions, ${totalQueries} queries`)
@@ -404,7 +409,7 @@ export async function runCaptureAgent(
   onProgress?.({ type: 'phase', phase: 'analyzing' })
 
   const dimensionScores = await scoreDimensionsParallel(
-    model, dimensionPlan, sessionDir, agentLog, name, hint, onProgress,
+    model, dimensionPlan, sessionDir, agentLog, name, hint, onProgress, providerOpts,
   )
 
   let scoredSummary = Array.from(dimensionScores.values())
@@ -471,7 +476,7 @@ export async function runCaptureAgent(
 
     // Re-score only the insufficient dimensions
     logger.info(`${tag} Re-scoring after round ${round + 1}...`)
-    const reScores = await scoreDimensionsParallel(model, dimensionPlan, sessionDir, agentLog, name, hint, onProgress)
+    const reScores = await scoreDimensionsParallel(model, dimensionPlan, sessionDir, agentLog, name, hint, onProgress, providerOpts)
     for (const [dim, score] of reScores) {
       dimensionScores.set(dim, score)
     }
@@ -531,8 +536,10 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
   })
 
   const dimCount = dimensionPlan.dimensions.length
-  // Budget: each dimension gets ~2 steps (evaluate + optional supplement), then reportFindings
-  const maxSteps = Math.min(dimCount * 2 + 5, 80)
+  // Budget: each dimension gets ~3 steps (evaluate + 1-2 supplement), plus
+  // reportFindings + retry buffer. Floor at 30 to ensure enough headroom
+  // for models that don't support toolChoice:'required'.
+  const maxSteps = Math.max(30, Math.min(dimCount * 3 + 8, 80))
   let stepCount = 0
   let reportFindingsBackup: unknown = undefined
 
@@ -540,17 +547,26 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
     model,
     instructions: (dimensionPlan && strategy.buildSystemPrompt) ? strategy.buildSystemPrompt(dimensionPlan) : strategy.systemPrompt,
     tools,
-    toolChoice: 'required',
+    toolChoice: getToolChoice(config.llm.default_model, 'required'),
     temperature: 0,
+    providerOptions: providerOpts,
     stopWhen: [
       stepCountIs(maxSteps),
       hasToolCall('reportFindings'),
     ],
     prepareStep: async ({ stepNumber }) => {
-      // After enough steps for all dimensions (evaluate + optional supplement each), force reportFindings
-      if (stepNumber >= dimCount + 3 || stepNumber >= maxSteps - 1) {
+      // After enough steps for all dimensions, force reportFindings
+      if (stepNumber >= dimCount + 3 || stepNumber >= maxSteps - 2) {
         logger.info(`${tag} Step ${stepNumber}: forcing reportFindings (dimCount=${dimCount})`)
-        return { toolChoice: { type: 'tool' as const, toolName: 'reportFindings' as const } }
+        const forced = getToolChoice(config.llm.default_model, 'required')
+        if (forced === 'required') {
+          return { toolChoice: { type: 'tool' as const, toolName: 'reportFindings' as const } }
+        }
+        // Fallback for models that don't support toolChoice:'required':
+        // restrict activeTools to only reportFindings so the model has no
+        // other option. This works with toolChoice:'auto' because the model
+        // can only see one tool.
+        return { activeTools: ['reportFindings' as const] }
       }
       return {}
     },

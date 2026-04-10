@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { TextInput } from '../../src/cli/components/text-input.js'
 
-const DELAY = 50
+// Generous delay for ink event processing — needs headroom for parallel test runs
+const DELAY = 120
 
 // Key sequences
 const LEFT = '\u001B[D'

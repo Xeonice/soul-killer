@@ -29,6 +29,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="initiating"
+        planningTrail={[]}
         trail={[]}
         activeZone={{ type: 'idle' }}
       />
@@ -41,6 +42,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="selecting"
+        planningTrail={[]}
         trail={[]}
         activeZone={{ type: 'tool', tool: 'list_souls' }}
       />
@@ -54,6 +56,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="selecting"
+        planningTrail={[]}
         trail={[{ description: 'list_souls', summary: '3 souls' }]}
         activeZone={{
           type: 'select',
@@ -77,6 +80,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="packaging"
+        planningTrail={[]}
         trail={[
           { description: 'list_souls', summary: '1 souls' },
           { description: 'select soul', summary: 'V' },
@@ -101,6 +105,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="complete"
+        planningTrail={[]}
         trail={[]}
         activeZone={{
           type: 'complete',
@@ -129,6 +134,7 @@ describe('ExportProtocolPanel', () => {
     const { lastFrame } = render(
       <ExportProtocolPanel
         phase="configuring"
+        planningTrail={[]}
         trail={trail}
         activeZone={{ type: 'idle' }}
       />
@@ -173,6 +179,55 @@ describe('reducePanelEvent', () => {
       allow_free_input: true,
     })
     expect(state.activeZone.type).toBe('text_input')
+  })
+
+  it('reasoning_progress attaches reasoning info to idle zone', () => {
+    let state = createInitialPanelState()
+
+    state = reducePanelEvent(state, {
+      type: 'reasoning_progress',
+      chars: 1200,
+      tokens: 300,
+    })
+
+    expect(state.activeZone.type).toBe('idle')
+    if (state.activeZone.type === 'idle') {
+      expect(state.activeZone.reasoning).toBeDefined()
+      expect(state.activeZone.reasoning?.tokens).toBe(300)
+      expect(state.activeZone.reasoning?.chars).toBe(1200)
+    }
+  })
+
+  it('reasoning_progress is dropped when an active tool is running', () => {
+    let state = createInitialPanelState()
+
+    state = reducePanelEvent(state, { type: 'tool_start', tool: 'list_souls' })
+    expect(state.activeZone.type).toBe('tool')
+
+    state = reducePanelEvent(state, {
+      type: 'reasoning_progress',
+      chars: 1200,
+      tokens: 300,
+    })
+    // Tool zone preserved — reasoning is irrelevant when concrete progress is showing
+    expect(state.activeZone.type).toBe('tool')
+  })
+
+  it('tool_end clears reasoning info from idle zone', () => {
+    let state = createInitialPanelState()
+
+    state = reducePanelEvent(state, {
+      type: 'reasoning_progress',
+      chars: 500,
+      tokens: 125,
+    })
+    state = reducePanelEvent(state, { type: 'tool_start', tool: 'list_souls' })
+    state = reducePanelEvent(state, { type: 'tool_end', tool: 'list_souls', result_summary: 'done' })
+
+    expect(state.activeZone.type).toBe('idle')
+    if (state.activeZone.type === 'idle') {
+      expect(state.activeZone.reasoning).toBeUndefined()
+    }
   })
 
   it('handles complete event', () => {

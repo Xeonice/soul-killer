@@ -4,7 +4,7 @@ import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { t } from '../../i18n/index.js'
-import type { ExportProgressEvent, ExportPhase, AskUserOption } from '../../agent/export-agent.js'
+import type { ExportProgressEvent, ExportPhase, ExportPlan, AskUserOption } from '../../agent/export-agent.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 
@@ -26,10 +26,17 @@ interface TrailStep {
 // --- Active zone state ---
 
 type ActiveZoneState =
-  | { type: 'idle' }
+  /**
+   * `idle.reasoning` carries the latest reasoning_progress event from the
+   * agent. When present, the active zone shows "推理中 (N tokens)" instead
+   * of the generic "思考中" — so the user can tell a reasoning model is
+   * actively thinking, not stuck on the network.
+   */
+  | { type: 'idle'; reasoning?: { tokens: number; chars: number } }
   | { type: 'tool'; tool: string; args?: Record<string, unknown> }
   | { type: 'select'; question: string; options: AskUserOption[]; cursor: number; multi?: boolean; selected?: number[] }
   | { type: 'text_input'; question: string; value: string; items: string[] }
+  | { type: 'plan_review'; plan: ExportPlan }
   | { type: 'packaging'; steps: { name: string; status: 'pending' | 'running' | 'done' }[] }
   | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name?: string }
   | { type: 'error'; error: string }
@@ -38,19 +45,23 @@ type ActiveZoneState =
 
 interface ExportProtocolPanelProps {
   phase: ExportPhase
+  planningTrail: TrailStep[]
   trail: TrailStep[]
   activeZone: ActiveZoneState
   onSelectConfirm?: (index: number) => void
   onTextSubmit?: (value: string) => void
+  onPlanConfirm?: () => void
   onCancel?: () => void
 }
 
 export function ExportProtocolPanel({
   phase,
+  planningTrail,
   trail,
   activeZone,
   onSelectConfirm,
   onTextSubmit,
+  onPlanConfirm,
   onCancel,
 }: ExportProtocolPanelProps) {
   const animationEnabled = isAnimationEnabled()
@@ -76,10 +87,17 @@ export function ExportProtocolPanel({
     ? Math.floor((Date.now() - idleStartRef.current) / 1000)
     : 0
 
-  // Handle keyboard input for select and text_input modes
+  // Handle keyboard input for plan_review, select, and text_input modes
   useInput((input, key) => {
     if (key.escape) {
       onCancel?.()
+      return
+    }
+
+    if (activeZone.type === 'plan_review') {
+      if (key.return) {
+        onPlanConfirm?.()
+      }
       return
     }
 
@@ -148,8 +166,36 @@ export function ExportProtocolPanel({
             </Text>
           )
         }
+        if (phase === 'planning') {
+          if (activeZone.reasoning) {
+            const tokens = activeZone.reasoning.tokens
+            return (
+              <Text color={ACCENT}>
+                {'  ▓ '}{t('export.planning')} {spinnerChar}{' '}
+                <Text color={DIM}>{tokens} tokens · {idleElapsedSec}s</Text>
+              </Text>
+            )
+          }
+          return (
+            <Text color={ACCENT}>
+              {'  ▓ '}{t('export.planning')} {spinnerChar} <Text color={DIM}>{idleElapsedSec}s</Text>
+            </Text>
+          )
+        }
         if (phase === 'analyzing' || phase === 'selecting' || phase === 'configuring') {
-          // Show thinking indicator with elapsed time between tool calls so UI doesn't look stuck
+          // If a reasoning model is actively streaming its thinking, show
+          // "推理中 (N tokens)" so the user can see the model is working
+          // instead of being stuck on the network. Otherwise fall back to
+          // the generic "思考中" + elapsed seconds since last activity.
+          if (activeZone.reasoning) {
+            const tokens = activeZone.reasoning.tokens
+            return (
+              <Text color={ACCENT}>
+                {'  ▓ '}{t('export.reasoning')} {spinnerChar}{' '}
+                <Text color={DIM}>{tokens} tokens · {idleElapsedSec}s</Text>
+              </Text>
+            )
+          }
           return (
             <Text color={ACCENT}>
               {'  ▓ '}{t('export.thinking')} {spinnerChar} <Text color={DIM}>{idleElapsedSec}s</Text>
@@ -173,12 +219,28 @@ export function ExportProtocolPanel({
       case 'select': {
         const isMulti = !!activeZone.multi
         const selectedSet = new Set(activeZone.selected ?? [])
+        const WINDOW_SIZE = 10
+        const total = activeZone.options.length
+        const needsWindow = total > WINDOW_SIZE
+        let windowStart = 0
+        let windowEnd = total
+        if (needsWindow) {
+          windowStart = Math.max(0, Math.min(activeZone.cursor - 3, total - WINDOW_SIZE))
+          windowEnd = windowStart + WINDOW_SIZE
+        }
+        const visibleOptions = activeZone.options.slice(windowStart, windowEnd)
+        const hasAbove = windowStart > 0
+        const hasBelow = windowEnd < total
         return (
           <Box flexDirection="column" marginLeft={2}>
             <Text color={ACCENT}>  ▓ {activeZone.question}</Text>
             <Text> </Text>
             <Box flexDirection="column" borderStyle="single" borderColor={DARK} paddingX={1}>
-              {activeZone.options.map((opt, i) => {
+              {hasAbove && (
+                <Text color={DIM}>    ▲ {windowStart} more</Text>
+              )}
+              {visibleOptions.map((opt, vi) => {
+                const i = windowStart + vi
                 const focused = i === activeZone.cursor
                 const checked = selectedSet.has(i)
                 const checkbox = isMulti ? (checked ? '[✓] ' : '[ ] ') : ''
@@ -193,6 +255,9 @@ export function ExportProtocolPanel({
                   </Box>
                 )
               })}
+              {hasBelow && (
+                <Text color={DIM}>    ▼ {total - windowEnd} more</Text>
+              )}
             </Box>
             {isMulti && (
               <Text color={DIM}>  {t('export.multi_select_hint')}</Text>
@@ -220,6 +285,39 @@ export function ExportProtocolPanel({
             </Box>
           </Box>
         )
+
+      case 'plan_review': {
+        const { plan } = activeZone
+        const roleLabel: Record<string, string> = {
+          protagonist: 'P',
+          deuteragonist: 'D',
+          antagonist: 'A',
+        }
+        return (
+          <Box flexDirection="column" marginLeft={2}>
+            <Text color={ACCENT}>  ▓ {t('export.plan_review_title')}</Text>
+            <Text> </Text>
+            <Box flexDirection="column" borderStyle="single" borderColor={DARK} paddingX={1}>
+              <Text color={DIM}>  {t('export.plan_genre')}: <Text color={PRIMARY}>{plan.genre_direction}</Text></Text>
+              <Text color={DIM}>  {t('export.plan_tone')}: <Text color={PRIMARY}>{plan.tone_direction}</Text></Text>
+              <Text color={DIM}>  {t('export.plan_axes')}: <Text color={PRIMARY}>{plan.shared_axes.join(' / ')}</Text></Text>
+              <Text color={DIM}>  Flags: <Text color={PRIMARY}>{plan.flags.length} {t('export.plan_flags_unit')}</Text></Text>
+              <Text> </Text>
+              <Text color={DIM}>  {t('export.plan_characters')}:</Text>
+              {plan.characters.map((c, i) => (
+                <Text key={i} color={PRIMARY}>
+                  {'    '}{roleLabel[c.role] ?? '?'} {c.name}
+                  {c.specific_axes_direction.length > 0
+                    ? <Text color={DIM}> [{c.specific_axes_direction.join(', ')}]</Text>
+                    : null}
+                </Text>
+              ))}
+            </Box>
+            <Text> </Text>
+            <Text color={DIM}>  {t('export.plan_confirm_hint')}</Text>
+          </Box>
+        )
+      }
 
       case 'packaging':
         return (
@@ -279,9 +377,24 @@ export function ExportProtocolPanel({
       <Text color={ACCENT} bold> {t('export.title')} </Text>
       <Text> </Text>
 
-      {/* Progress trail */}
-      {phase !== 'initiating' && trail.length > 0 && (
+      {/* Planning trail */}
+      {planningTrail.length > 0 && (
         <>
+          <Text color={DIM}>  ── {t('export.phase_planning')} ──</Text>
+          {planningTrail.map((step, i) => (
+            <React.Fragment key={`p-${i}`}>
+              <Text color={PRIMARY}>  ▓ {step.description} ✓</Text>
+              {step.summary && <Text color={DIM}>    ▸ {step.summary}</Text>}
+            </React.Fragment>
+          ))}
+          <Text> </Text>
+        </>
+      )}
+
+      {/* Execution trail */}
+      {phase !== 'initiating' && phase !== 'planning' && phase !== 'plan_review' && trail.length > 0 && (
+        <>
+          <Text color={DIM}>  ── {t('export.phase_execution')} ──</Text>
           {renderTrail()}
           <Text> </Text>
         </>
@@ -301,13 +414,17 @@ export function ExportProtocolPanel({
 
 export interface ExportPanelState {
   phase: ExportPhase
+  planningTrail: TrailStep[]
   trail: TrailStep[]
   activeZone: ActiveZoneState
+  /** Tracks the current character being processed (add_character done, awaiting set_character_axes) */
+  _pendingCharacter?: { name: string; addSummary: string }
 }
 
 export function createInitialPanelState(): ExportPanelState {
   return {
     phase: 'initiating',
+    planningTrail: [],
     trail: [],
     activeZone: { type: 'idle' },
   }
@@ -328,12 +445,50 @@ export function reducePanelEvent(
       }
 
     case 'tool_end': {
-      // Move completed tool to trail
+      // Move completed tool to trail. Reset to plain idle (no reasoning
+      // payload) so the next "推理中" display starts fresh on the next
+      // reasoning burst.
       const description = event.tool
       const summary = event.result_summary
+      // Route to planningTrail during planning phase
+      if (state.phase === 'planning') {
+        return {
+          ...state,
+          planningTrail: [...state.planningTrail, { description, summary }],
+          activeZone: { type: 'idle' },
+        }
+      }
+
+      // Character grouping: merge add_character + set_character_axes into one trail entry
+      if (event.tool === 'add_character') {
+        // Extract character name from summary (format: "Character N/M added: NAME (ROLE)")
+        const nameMatch = summary?.match(/added:\s*(.+?)\s*\(/)
+        const charName = nameMatch?.[1] ?? summary ?? ''
+        return {
+          ...state,
+          _pendingCharacter: { name: charName, addSummary: summary ?? '' },
+          activeZone: { type: 'idle' },
+        }
+      }
+      if (event.tool === 'set_character_axes' && state._pendingCharacter) {
+        // Merge with pending character into one trail entry
+        const merged = `${state._pendingCharacter.addSummary} · ${summary}`
+        return {
+          ...state,
+          trail: [...state.trail, { description: state._pendingCharacter.name, summary: merged }],
+          _pendingCharacter: undefined,
+          activeZone: { type: 'idle' },
+        }
+      }
+
+      // Flush any pending character that wasn't followed by set_character_axes
+      const trailWithFlush = state._pendingCharacter
+        ? [...state.trail, { description: state._pendingCharacter.name, summary: state._pendingCharacter.addSummary }]
+        : state.trail
       return {
         ...state,
-        trail: [...state.trail, { description, summary }],
+        trail: [...trailWithFlush, { description, summary }],
+        _pendingCharacter: undefined,
         activeZone: { type: 'idle' },
       }
     }
@@ -391,6 +546,40 @@ export function reducePanelEvent(
       return {
         ...state,
         activeZone: { type: 'packaging', steps },
+      }
+    }
+
+    case 'reasoning_progress': {
+      // Only attach reasoning info to an idle zone — if a tool / select /
+      // packaging zone is active, the model's reasoning is irrelevant to the
+      // user (they're seeing concrete progress). This avoids stomping the
+      // active interaction.
+      if (state.activeZone.type !== 'idle') return state
+      return {
+        ...state,
+        activeZone: {
+          type: 'idle',
+          reasoning: { tokens: event.tokens, chars: event.chars },
+        },
+      }
+    }
+
+    case 'plan_ready':
+      return {
+        ...state,
+        phase: 'plan_review',
+        activeZone: { type: 'plan_review', plan: event.plan },
+      }
+
+    case 'plan_confirmed': {
+      // Move plan summary to planningTrail and reset for execution phase
+      const planSummary = state.activeZone.type === 'plan_review'
+        ? `${state.activeZone.plan.characters.length} 角色 · ${state.activeZone.plan.shared_axes.join('/')}`
+        : undefined
+      return {
+        ...state,
+        planningTrail: [...state.planningTrail, { description: t('export.plan_confirmed'), summary: planSummary }],
+        activeZone: { type: 'idle' },
       }
     }
 

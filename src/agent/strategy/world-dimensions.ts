@@ -26,6 +26,10 @@ export type WorldDimension =
 
 export type WorldDimensionPriority = 'required' | 'important' | 'supplementary'
 
+// ========== Shared meta-exclusion quality criterion ==========
+
+const META_EXCLUSION_CRITERION = '描述故事世界内部的事实，排除作品制作/发行/改编/播出/声优等 meta 信息'
+
 // ========== Dimension Templates (unified DimensionDef interface) ==========
 
 export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
@@ -38,7 +42,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['map', 'location', 'district', 'region', 'city', 'continent', 'planet', 'territory', '地图', '地点', '区域', '地标', '城市', '大陆', '星球', '领地', '位于', '坐落'],
     queries: ['{name} map locations', '{name} districts regions', '{name} wiki geography', '{localName} 地图 地点', '{localName} 区域划分'],
     distillTarget: 'background',
-    qualityCriteria: ['包含具体地点名称和位置描述', '有战略或历史意义的分析'],
+    qualityCriteria: ['包含具体地点名称和位置描述', '有战略或历史意义的分析', META_EXCLUSION_CRITERION],
     minArticles: 3,
   },
   {
@@ -50,7 +54,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['timeline', 'history', 'chronolog', 'era', 'epoch', 'war', 'event', 'founded', 'origin', '历史', '编年', '纪元', '战争', '事件', '创立', '起源', '年代', '时间线'],
     queries: ['{name} timeline events', '{name} history lore', '{name} wiki chronology', '{localName} 历史 时间线', '{localName} 大事件', '{localName} 年表', 'timeline of {name}'],
     distillTarget: 'background',
-    qualityCriteria: ['包含具体时间和事件', '有因果关系分析'],
+    qualityCriteria: ['包含具体时间和事件', '有因果关系分析', META_EXCLUSION_CRITERION],
     minArticles: 3,
   },
   {
@@ -62,7 +66,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['faction', 'organization', 'group', 'alliance', 'corporation', 'guild', 'party', 'government', '势力', '组织', '阵营', '联盟', '公司', '帮派', '政府', '派系', '部门', '团体'],
     queries: ['{name} major factions', '{name} political structure', '{name} organizations guilds', '{localName} 主要势力', '{localName} 政治结构'],
     distillTarget: 'lore',
-    qualityCriteria: ['描述组织结构和权力关系', '有政策或治理方式的说明'],
+    qualityCriteria: ['描述组织结构和权力关系', '有政策或治理方式的说明', META_EXCLUSION_CRITERION],
     minArticles: 3,
   },
   {
@@ -74,7 +78,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['technology', 'magic', 'system', 'law', 'rule', 'mechanic', 'infrastructure', 'economy', '科技', '魔法', '体系', '法律', '规则', '机制', '基础设施', '经济', '法则', '制度'],
     queries: ['{name} technology system', '{name} magic rules', '{name} game mechanics', '{localName} 科技体系', '{localName} 规则 法则'],
     distillTarget: 'rule',
-    qualityCriteria: ['解释制度或体系的运作机制', '有历史渊源说明'],
+    qualityCriteria: ['解释制度或体系的运作机制', '有历史渊源说明', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
   {
@@ -86,7 +90,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['daily life', 'class', 'social', 'poverty', 'wealth', 'survival', 'living', 'wage', 'work', '日常', '阶层', '社会', '贫富', '生存', '生活', '工资', '打工', '阶级', '民生'],
     queries: ['{name} daily life', '{name} social structure', '{name} economy classes', '{localName} 社会阶层', '{localName} 经济 日常'],
     distillTarget: 'lore',
-    qualityCriteria: ['描述社会阶层或日常生活', '有具体的经济或民生数据'],
+    qualityCriteria: ['描述社会阶层或日常生活', '有具体的经济或民生数据', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
   {
@@ -98,7 +102,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['custom', 'tradition', 'religion', 'art', 'language', 'belief', 'value', 'ritual', 'festival', '习俗', '传统', '信仰', '艺术', '语言', '价值观', '仪式', '节日', '文化', '宗教'],
     queries: ['{name} customs traditions', '{name} religion beliefs', '{name} language art', '{localName} 文化 习俗', '{localName} 信仰 价值观'],
     distillTarget: 'lore',
-    qualityCriteria: ['描述文化特征或艺术成就', '有具体作品或人物举例'],
+    qualityCriteria: ['描述文化特征或艺术成就', '有具体作品或人物举例', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
   {
@@ -110,7 +114,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['race', 'species', 'tribe', 'clan', 'elf', 'dwarf', 'human', 'creature', 'inhabitant', 'people', '种族', '族群', '部族', '精灵', '矮人', '人类', '生物', '居民', '物种', '族裔'],
     queries: ['{name} races species', '{name} inhabitants creatures', '{localName} 种族 物种', '{localName} 居民 族群'],
     distillTarget: 'lore',
-    qualityCriteria: ['描述族群特征或分布', '有人口或民族关系信息'],
+    qualityCriteria: ['描述族群特征或分布', '有人口或民族关系信息', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
   {
@@ -122,7 +126,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['leader', 'founder', 'hero', 'villain', 'key figure', 'notable', 'famous', 'prominent', '领袖', '创始人', '英雄', '反派', '关键人物', '著名', '标志性', '代表人物'],
     queries: ['{name} key characters', '{name} notable protagonists', '{name} important figures', '{localName} 关键人物', '{localName} 重要角色'],
     distillTarget: 'lore',
-    qualityCriteria: ['包含人物的生卒年和主要事迹', '有历史评价或影响分析'],
+    qualityCriteria: ['包含人物的生卒年和主要事迹', '有历史评价或影响分析', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
   {
@@ -134,7 +138,7 @@ export const WORLD_DIMENSION_TEMPLATES: DimensionDef[] = [
     signals: ['atmosphere', 'mood', 'tone', 'aesthetic', 'vibe', 'feeling', 'ambiance', 'dark', 'grim', '氛围', '基调', '情绪', '美学', '风格', '感觉', '格调', '气氛'],
     queries: ['{name} aesthetic mood', '{name} tone atmosphere', '{name} art style', '{localName} 氛围 风格', '{localName} 美学 基调'],
     distillTarget: 'atmosphere',
-    qualityCriteria: ['有文学或美学分析', '描述情感氛围而非事实'],
+    qualityCriteria: ['有文学或美学分析', '描述情感氛围而非事实', META_EXCLUSION_CRITERION],
     minArticles: 2,
   },
 ]

@@ -7,7 +7,7 @@ import type { SoulkillerConfig } from '../config/schema.js'
 import type { SoulChunk } from '../ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
 import type { AgentLogger } from '../utils/agent-logger.js'
-import { withExacto } from '../llm/client.js'
+import { withExacto, getProviderOptions } from '../llm/client.js'
 import { logger } from '../utils/logger.js'
 
 // ========== Article Index (for sessionDir path) ==========
@@ -128,11 +128,22 @@ function buildDistillPrompt(name: string, dataCount: number, tags?: TagSet, useA
 11. finalize when satisfied with quality`
 
   const readRule = useArticleMode
-    ? '- Always read relevant articles (listArticles → readArticle) before writing a dimension — do not fabricate content'
-    : '- Always call sampleChunks before writing a dimension — do not fabricate content'
+    ? '- Always read relevant articles (listArticles → readArticle) before writing a dimension. Every claim in the output must trace back to an article you actually read in this session — do not fabricate content, do not use your model knowledge of the character'
+    : '- Always call sampleChunks before writing a dimension. Every claim in the output must trace back to a chunk you actually sampled in this session — do not fabricate content, do not use your model knowledge of the character'
 
   return `You are a soul distiller. ${dataDescription}
 Your job is to create soul profile files from this raw data.${tagHints}
+
+## CRITICAL: Source-only rule (highest priority)
+
+You may ONLY use information that you obtain through tool calls (sampleChunks / readArticle / listArticles) on the provided data.
+
+**Absolutely forbidden**:
+- Using your training-data knowledge about this character, the IP, the original work, fan canon, or any related media
+- Adding facts (relationships, abilities, backstory, quotes) that don't appear in the source data
+- Even if you "know" the canonical version of this character is different from what the source says, the source wins
+
+If the source data is sparse, write a SHORTER profile rather than padding with invented or remembered content. A short, accurate profile is far better than a long profile poisoned with hallucinated details — downstream features (multi-soul export, Phase 2 runtime演绎) depend on the source-only invariant being intact.
 
 ## Output Files
 
@@ -250,6 +261,7 @@ export async function distillSoul(
     baseURL: process.env.SOULKILLER_API_URL ?? 'https://openrouter.ai/api/v1',
   })
   const model = provider(withExacto(distillModel))
+  const providerOpts = getProviderOptions(distillModel)
 
   // Ensure soul directory structure
   const soulPath = path.join(soulDir, 'soul')
@@ -524,6 +536,7 @@ export async function distillSoul(
     tools,
     toolChoice: 'auto',
     temperature: 0.3,
+    providerOptions: providerOpts,
     stopWhen: [
       stepCountIs(MAX_STEPS),
       hasToolCall('finalize'),

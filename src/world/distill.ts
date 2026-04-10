@@ -361,9 +361,18 @@ Respond ONLY with the JSON array.`,
 
 Your ONLY job: list EVERY time-anchored event you can find in the provided articles. Do NOT write analysis. Do NOT filter for "importance". Do NOT write long descriptions. Just list events.
 
+CRITICAL: ONLY list events that appear in the provided articles. Do NOT add events from your training-data knowledge of the world or any IP. If an event you "know" about is not in the source, leave it out.
+
+CRITICAL — IN-WORLD ONLY: Only list events that happen INSIDE the fictional world, to the characters, factions, places, or civilizations of the story. You MUST EXCLUDE real-world / meta / production events about the work itself, such as:
+- game / novel / manga / anime / CD / soundtrack / drama-CD / Blu-ray / merchandise releases (发售, 発売, release, launch, 出版, 上市)
+- broadcast / airing / streaming dates (放送, 配信, aired, broadcast, streamed)
+- voice cast / staff announcements, production milestones, awards, sales figures, re-releases, ports, remasters
+- any date that belongs to the real calendar of the author / studio / publisher rather than to the story's internal timeline
+If an "event" is about the product shipping to customers or being published to the real world, DROP IT, even if the source article clearly lists it with a date.
+
 A time-anchored event has:
-- a concrete time label (year, era, numbered war, dynasty, etc.), AND
-- a specific happening tied to that time (battle, founding, death, treaty, disaster, etc.)
+- a concrete time label IN THE STORY'S OWN TIMELINE (in-story year, era, numbered war, dynasty, semester, etc.), AND
+- a specific happening tied to that time that happens to someone/something INSIDE the story (battle, founding, death, treaty, disaster, confession, transfer, festival, etc.)
 
 For each event, output:
 - name: kebab-case English slug (e.g. "battle-of-chibi")
@@ -460,7 +469,13 @@ Output a JSON array of objects. No other text. No markdown fences.`,
                   role: 'system',
                   content: `You are a history event writer for the world "${worldName}".
 
-Given a single historical event and its source excerpt, write a 5-10 sentence detailed description. Explain the causes, key participants, how it unfolded, and its consequences. Use only information from the source excerpt and your context about the world.
+Given a single historical event and its source excerpt, write a 5-10 sentence detailed description. Explain the causes, key participants, how it unfolded, and its consequences.
+
+CRITICAL RULES:
+- Use ONLY information from the source excerpt and the article context provided in the user message.
+- Do NOT add information from your training-data knowledge of the world, the IP, or any related works.
+- If the source excerpt is sparse, write a SHORTER description rather than padding with invented details.
+- Every fact you state must trace back to the provided excerpt or article context.
 
 Output ONLY the description text, no preamble, no markdown headings.`,
                 },
@@ -534,14 +549,17 @@ ${combinedText.slice(0, 6000)}`,
 
 Pass A of the history pipeline has ALREADY extracted every time-anchored event as a separate timeline entry. Your job is to extract the OTHER kind of history content — long-term trends, institutional evolution, cultural shifts, power transitions — that span eras rather than happen at a single point in time.
 
+CRITICAL: ONLY use information that appears in the provided text. Do NOT add long-term trends or institutional analyses from your training-data knowledge of any IP. If the source doesn't describe a trend, do not invent one.
+
 DO NOT:
 - List specific dated events (Pass A already did that)
 - Write about single battles, single deaths, or single treaties (those belong to Pass A)
+- Add information from your model knowledge that isn't in the source
 
 DO:
-- Write about aristocratic class rise/fall, institutional decay, shifting alliances, long-term economic trends, etc.
+- Write about aristocratic class rise/fall, institutional decay, shifting alliances, long-term economic trends, etc. — but ONLY when the source supports it
 - 5-10 sentences per entry, analytical tone, explain WHY and HOW
-- Generate 0-5 entries — it's fine to return an empty array if the source has no non-event content
+- Generate 0-5 entries — it's fine to return an empty array if the source has no non-event content. **Empty array is the correct answer when source is sparse.**
 
 Output a JSON array of objects, each with:
 - name: kebab-case English identifier
@@ -907,6 +925,12 @@ Output format — JSON array only, no other text:
           {
             role: 'system',
             content: `You are a world-building entry generator. From the provided text about the "${dimKey}" dimension, create 2-5 detailed world entries.
+
+CRITICAL RULES:
+- ONLY extract information that appears in the provided text. Do NOT add information from your training-data knowledge of any IP, world, or fictional setting.
+- Every fact in an entry MUST come from the provided text.
+- If the text doesn't contain enough information for 2 entries, generate FEWER entries (even just 1) rather than padding with invented content.
+- Initial correctness from the source data outweighs entry count quotas.
 
 Each entry should be 5-10 sentences. Explain WHY and HOW, not just WHAT. Include causes, consequences, mechanisms, and relationships. Do NOT write single-sentence entries.
 

@@ -115,3 +115,61 @@ describe('Planning Agent', () => {
     expect(plan.dimensions.every((d) => d.source === 'planned')).toBe(true)
   })
 })
+
+describe('Planning Agent — meta exclusion prompt', () => {
+  /** Extract the system prompt passed to generateText */
+  function capturePrompt(): string {
+    const call = vi.mocked(generateText).mock.calls.at(-1)
+    return (call?.[0] as any)?.system ?? ''
+  }
+
+  const validResponse = {
+    dimensions: Array.from({ length: 6 }, (_, i) => ({
+      name: `dim-${i}`, display: `Dim ${i}`, description: 'desc', priority: 'important',
+      signals: ['sig'], queries: ['query'], qualityCriteria: ['criteria'], minArticles: 2, distillTarget: 'lore',
+    })),
+  }
+
+  it('includes meta exclusion section when type is world', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
+    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    await runPlanningAgent({} as any, 'world', 'TestWorld', undefined, [], 'FICTIONAL_UNIVERSE')
+
+    const prompt = capturePrompt()
+    expect(prompt).toContain('In-World Information ONLY')
+    expect(prompt).toContain('Release dates')
+    expect(prompt).toContain('Voice actors')
+  })
+
+  it('does NOT include meta exclusion section when type is soul', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
+    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    await runPlanningAgent({} as any, 'soul', 'TestSoul', undefined, [], 'PUBLIC_ENTITY')
+
+    const prompt = capturePrompt()
+    expect(prompt).not.toContain('In-World Information ONLY')
+    expect(prompt).not.toContain('REAL_SETTING')
+  })
+
+  it('includes strict qualifiers for REAL_SETTING classification', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
+    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    await runPlanningAgent({} as any, 'world', 'White Album 2', undefined, [], 'REAL_SETTING')
+
+    const prompt = capturePrompt()
+    expect(prompt).toContain('REAL_SETTING')
+    expect(prompt).toContain('故事内')
+    expect(prompt).toContain('in-story')
+    expect(prompt).toContain('meta-exclusion criterion')
+  })
+
+  it('does NOT include strict qualifiers for FICTIONAL_UNIVERSE', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
+    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    await runPlanningAgent({} as any, 'world', 'Cyberpunk 2077', undefined, [], 'FICTIONAL_UNIVERSE')
+
+    const prompt = capturePrompt()
+    expect(prompt).toContain('FICTIONAL_UNIVERSE')
+    expect(prompt).not.toContain('Strict In-World Qualifiers Required')
+  })
+})

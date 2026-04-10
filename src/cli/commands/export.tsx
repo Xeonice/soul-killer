@@ -104,6 +104,8 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
 
   // Promise resolvers for agent ask_user bridging
   const askResolverRef = useRef<((answer: string) => void) | null>(null)
+  // Promise resolver for plan confirmation (Enter → confirm, Esc → cancel)
+  const planConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null)
   const cancelledRef = useRef(false)
 
   const handleProgress = useCallback((event: ExportProgressEvent) => {
@@ -132,6 +134,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   function showSoulSelector(souls: SoulListItem[]) {
     setPanelState({
       phase: 'selecting',
+      planningTrail: [],
       trail: [],
       activeZone: {
         type: 'select',
@@ -147,6 +150,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   function showWorldSelector(worlds: WorldListItem[], soulsPicked: string[]) {
     setPanelState({
       phase: 'selecting',
+      planningTrail: [],
       trail: [{ description: t('export.step.select_souls'), summary: `${soulsPicked.length} ${t('export.souls_unit')}` }],
       activeZone: {
         type: 'select',
@@ -161,6 +165,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   function showNameStoryInput(soulsCount: number, worldLabel: string) {
     setPanelState({
       phase: 'selecting',
+      planningTrail: [],
       trail: [
         { description: t('export.step.select_souls'), summary: `${soulsCount} ${t('export.souls_unit')}` },
         { description: t('export.step.select_world'), summary: worldLabel },
@@ -176,6 +181,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   function showStoryDirectionInput(soulsCount: number, worldLabel: string, story: string) {
     setPanelState({
       phase: 'selecting',
+      planningTrail: [],
       trail: [
         { description: t('export.step.select_souls'), summary: `${soulsCount} ${t('export.souls_unit')}` },
         { description: t('export.step.select_world'), summary: worldLabel },
@@ -201,6 +207,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
     }
     setPanelState({
       phase: 'selecting',
+      planningTrail: [],
       trail: trailItems,
       activeZone: {
         type: 'select',
@@ -213,7 +220,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   }
 
   function showIdleWithTrail(trail: { description: string; summary?: string }[], phase: ExportPanelState['phase']) {
-    setPanelState({ phase, trail, activeZone: { type: 'idle' } })
+    setPanelState({ phase, planningTrail: [], trail, activeZone: { type: 'idle' } })
   }
 
   function showError(errorMsg: string) {
@@ -223,6 +230,13 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       activeZone: { type: 'error', error: errorMsg },
     }))
   }
+
+  const handlePlanConfirm = useCallback(() => {
+    if (planConfirmResolverRef.current) {
+      planConfirmResolverRef.current(true)
+      planConfirmResolverRef.current = null
+    }
+  }, [])
 
   const handleCancel = useCallback(() => {
     // Step-specific Esc navigation
@@ -255,6 +269,10 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
 
     // All other steps: cancel the entire flow
     cancelledRef.current = true
+    if (planConfirmResolverRef.current) {
+      planConfirmResolverRef.current(false)
+      planConfirmResolverRef.current = null
+    }
     if (askResolverRef.current) {
       askResolverRef.current('')
       askResolverRef.current = null
@@ -510,6 +528,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       setUiStep('running')
       setPanelState({
         phase: 'analyzing',
+        planningTrail: [],
         trail,
         activeZone: { type: 'idle' },
       })
@@ -520,7 +539,10 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         return
       }
 
-      await runExportAgent(config, preSelected, handleProgress, handleAskUser)
+      const waitForPlanConfirm = () => new Promise<boolean>((resolve) => {
+        planConfirmResolverRef.current = resolve
+      })
+      await runExportAgent(config, preSelected, handleProgress, handleAskUser, waitForPlanConfirm)
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err))
     }
@@ -530,10 +552,12 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
     <Box flexDirection="column">
       <ExportProtocolPanel
         phase={panelState.phase}
+        planningTrail={panelState.planningTrail}
         trail={panelState.trail}
         activeZone={panelState.activeZone}
         onSelectConfirm={handleSelectConfirm}
         onTextSubmit={handleTextSubmit}
+        onPlanConfirm={handlePlanConfirm}
         onCancel={handleCancel}
       />
       {textInputActive && (
