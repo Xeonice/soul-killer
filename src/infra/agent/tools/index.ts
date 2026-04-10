@@ -1,7 +1,7 @@
 import type { SoulkillerConfig } from '../../../config/schema.js'
 import type { CaptureStrategy } from '../capture-strategy.js'
 import type { DimensionPlan } from '../dimension-framework.js'
-import type { AgentLogger } from '../../../utils/agent-logger.js'
+import type { AgentLogger } from '../../utils/agent-logger.js'
 import { createEvaluateDimensionTool, type DimensionScore } from './evaluate-dimension.js'
 import { createSupplementSearchTool } from './supplement-search.js'
 import { createReportFindingsTool } from './report-findings.js'

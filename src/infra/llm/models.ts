@@ -1,4 +1,4 @@
-import { RECOMMENDED_MODELS } from '../config/schema.js'
+import { RECOMMENDED_MODELS } from '../../config/schema.js'
 
 export function getRecommendedModels() {
   return RECOMMENDED_MODELS

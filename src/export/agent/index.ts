@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { withExacto, getProviderOptions } from '../../llm/client.js'
+import { withExacto, getProviderOptions } from '../../infra/llm/client.js'
 import type { SoulkillerConfig } from '../../config/schema.js'
 import type {
   OnExportProgress,
@@ -12,8 +12,8 @@ import { runPlanningLoop } from './planning.js'
 import { runStorySetup } from './story-setup.js'
 import { runCharacterLoop } from './character.js'
 import { finalizeAndPackage } from './finalize.js'
-import { logger } from '../../utils/logger.js'
-import { AgentLogger } from '../../utils/agent-logger.js'
+import { logger } from '../../infra/utils/logger.js'
+import { AgentLogger } from '../../infra/utils/agent-logger.js'
 
 export async function runExportAgent(
   config: SoulkillerConfig,

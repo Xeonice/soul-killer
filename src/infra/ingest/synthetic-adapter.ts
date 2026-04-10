@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { SoulChunk, SourceType } from './types.js'
-import type { TagSet } from '../../tags/taxonomy.js'
-import { t } from '../../i18n/index.js'
+import type { TagSet } from '../../soul/tags/taxonomy.js'
+import { t } from '../i18n/index.js'
 
 /**
  * Convert user description into a SoulChunk.

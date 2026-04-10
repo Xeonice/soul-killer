@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolveEntries } from '../../src/world/resolver.js'
 import type { WorldEntry } from '../../src/world/entry.js'
 import type { WorldBinding } from '../../src/world/binding.js'
-import type { ChatMessage } from '../../src/llm/stream.js'
+import type { ChatMessage } from '../../src/infra/llm/stream.js'
 
 function makeBinding(overrides?: Partial<WorldBinding>): WorldBinding {
   return {

@@ -3,7 +3,7 @@ import { Text, Box } from 'ink'
 import { listWorlds, loadWorld } from '../../../world/manifest.js'
 import { loadAllEntries } from '../../../world/entry.js'
 import { PRIMARY, ACCENT, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 interface WorldListProps {
   // no props needed

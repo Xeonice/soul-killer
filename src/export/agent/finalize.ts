@@ -1,8 +1,8 @@
 import { packageSkill, getSkillFileName } from '../packager.js'
 import type { OnExportProgress, PreSelectedExportData } from './types.js'
 import { ExportBuilder } from './types.js'
-import { logger } from '../../utils/logger.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
+import { logger } from '../../infra/utils/logger.js'
+import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 
 // --- Finalize and package (pure code, no LLM) ---
 

@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import path from 'node:path'
-import { logger } from '../../utils/logger.js'
+import { logger } from '../utils/logger.js'
 import type { SearchResult } from './tavily-search.js'
 
 const CONTAINER_NAME = 'soulkiller-searxng'

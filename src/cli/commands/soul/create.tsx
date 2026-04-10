@@ -10,18 +10,18 @@ import { DistillProgressPanel, type DistillToolCallDisplay } from '../../compone
 import { IngestPipeline } from '../../../infra/ingest/pipeline.js'
 import type { AdapterType } from '../../../infra/ingest/pipeline.js'
 import { distillSoul, type DistillAgentProgress } from '../../../soul/distill/distill-agent.js'
-import { getLLMClient } from '../../../llm/client.js'
+import { getLLMClient } from '../../../infra/llm/client.js'
 import { loadConfig } from '../../../config/loader.js'
 import { generateManifest, packageSoul, readManifest } from '../../../soul/package.js'
 import { captureSoul, type CaptureProgress } from '../../../soul/capture/soul-capture-agent.js'
 import { runBatchPipeline, retryFailedSouls, type SoulInput, type SoulTaskStatus, type BatchResult, type BatchProgressEvent } from '../../../soul/batch-pipeline.js'
 import type { ToolCallDisplay, AgentPhase, SearchPlanDimDisplay } from '../../animation/soulkiller-protocol-panel.js'
 import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import type { IngestProgress, SoulChunk } from '../../../infra/ingest/types.js'
 import type { SoulType, SoulManifest } from '../../../soul/manifest.js'
-import { type TagSet, emptyTagSet } from '../../../tags/taxonomy.js'
-import { parseTags } from '../../../tags/parser.js'
+import { type TagSet, emptyTagSet } from '../../../soul/tags/taxonomy.js'
+import { parseTags } from '../../../soul/tags/parser.js'
 import { createSyntheticChunks } from '../../../infra/ingest/synthetic-adapter.js'
 import { sampleChunks } from '../../../soul/distill/sampler.js'
 import { extractFeatures } from '../../../soul/distill/extractor.js'
@@ -140,7 +140,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
   const [capturedDimensions, setCapturedDimensions] = useState<any[] | undefined>()
   const [dimBreakdown, setDimBreakdown] = useState<Record<string, number>>({})
 
-  const agentLogRef = useRef<import('../../../utils/agent-logger.js').AgentLogger | undefined>(undefined)
+  const agentLogRef = useRef<import('../../../infra/utils/agent-logger.js').AgentLogger | undefined>(undefined)
 
   // Distill progress state
   const [distillToolCalls, setDistillToolCalls] = useState<DistillToolCallDisplay[]>([])

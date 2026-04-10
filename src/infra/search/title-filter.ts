@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from 'ai'
-import { logger } from '../../utils/logger.js'
+import { logger } from '../utils/logger.js'
 
 export interface TitleFilterInput {
   index: number

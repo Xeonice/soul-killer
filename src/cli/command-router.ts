@@ -1,4 +1,4 @@
-import { t } from '../i18n/index.js'
+import { t } from '../infra/i18n/index.js'
 import { suggestCommand } from './command-parser.js'
 import type { ParsedCommand } from './command-parser.js'
 import { getHandler, type CommandContext, type SubcommandHandler } from './command-registry.js'

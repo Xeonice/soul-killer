@@ -4,7 +4,7 @@ import { SoulkillerProtocolPanel } from './soulkiller-protocol-panel.js'
 import { DistillProgressPanel } from '../components/distill-progress.js'
 import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 import type { SoulTaskStatus, SoulTaskPhase } from '../../soul/batch-pipeline.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'

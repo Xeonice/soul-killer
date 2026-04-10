@@ -1,8 +1,8 @@
 import { generateText, type LanguageModel } from 'ai'
 import type { SoulChunk } from '../../infra/ingest/types.js'
-import type { TagSet } from '../../tags/taxonomy.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
-import { t } from '../../i18n/index.js'
+import type { TagSet } from '../tags/taxonomy.js'
+import type { AgentLogger } from '../../infra/utils/agent-logger.js'
+import { t } from '../../infra/i18n/index.js'
 
 function formatTagHints(tags?: TagSet): string {
   if (!tags) return ''

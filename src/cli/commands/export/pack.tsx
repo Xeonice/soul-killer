@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'
 import { PRIMARY, ACCENT, DIM, WARNING } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
-import { packSoul, packWorld, type PackOptions } from '../../../pack/packer.js'
+import { t } from '../../../infra/i18n/index.js'
+import { packSoul, packWorld, type PackOptions } from '../../../export/pack/packer.js'
 
 interface PackCommandProps {
   args: string

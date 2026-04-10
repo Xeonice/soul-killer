@@ -1,7 +1,7 @@
 import React from 'react'
 import { Text, Box } from 'ink'
 import { PRIMARY, ACCENT, DIM, WARNING } from '../../animation/colors.js'
-import type { EngineStatus } from '../../../engine/adapter.js'
+import type { EngineStatus } from '../../../infra/engine/adapter.js'
 
 interface StatusCommandProps {
   soulName?: string

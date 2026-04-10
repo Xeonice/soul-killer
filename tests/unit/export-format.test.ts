@@ -4,7 +4,7 @@ import {
   formatPathSegment,
   formatSkillBaseName,
   isValidSkillName,
-} from '../../src/export/format/index.js'
+} from '../../src/export/support/format-index.js'
 
 describe('formatSkillName — pure ASCII inputs', () => {
   it('passes through canonical kebab-case names', () => {

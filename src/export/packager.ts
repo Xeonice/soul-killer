@@ -5,19 +5,19 @@ import { fileURLToPath } from 'node:url'
 import { zipSync, strToU8, type ZipOptions } from 'fflate'
 import { readManifest, readSoulFiles } from '../soul/package.js'
 import { loadWorld, getWorldDir } from '../world/manifest.js'
-import { generateSkillMd } from './skill-template.js'
-import { generateStorySpec, type StorySpecConfig } from './story-spec.js'
+import { generateSkillMd } from './spec/skill-template.js'
+import { generateStorySpec, type StorySpecConfig } from './spec/story-spec.js'
 import {
   lintSkillTemplate,
   lintStorySpec,
   lintCharacterAxesConsistency,
   type LintReport,
-} from './lint/index.js'
+} from './support/lint-index.js'
 import {
   formatSkillBaseName,
   formatPathSegment,
   isValidSkillName,
-} from './format/index.js'
+} from './support/format-index.js'
 
 export interface PackageConfig {
   /** Array of soul names to include in souls/<name>/ subdirectories */

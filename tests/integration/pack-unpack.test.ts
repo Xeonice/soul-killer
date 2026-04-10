@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { packSoul, packWorld } from '../../src/pack/packer.js'
-import { inspectPack, applyUnpack, suggestRename } from '../../src/pack/unpacker.js'
+import { packSoul, packWorld } from '../../src/export/pack/packer.js'
+import { inspectPack, applyUnpack, suggestRename } from '../../src/export/pack/unpacker.js'
 
 // These tests use real filesystem operations with isolated temp directories.
 // They mock the soul/world home directory by creating structures in tmpdir.

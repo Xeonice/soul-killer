@@ -1,4 +1,4 @@
-import { t } from '../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 export type TagCategory = 'personality' | 'communication' | 'values' | 'behavior' | 'domain'
 

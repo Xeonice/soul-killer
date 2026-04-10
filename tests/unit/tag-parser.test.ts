@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateText } from 'ai'
-import { emptyTagSet, getTagAnchors } from '../../src/tags/taxonomy.js'
-import { parseTags } from '../../src/tags/parser.js'
+import { emptyTagSet, getTagAnchors } from '../../src/soul/tags/taxonomy.js'
+import { parseTags } from '../../src/soul/tags/parser.js'
 
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>()

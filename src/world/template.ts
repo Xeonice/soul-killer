@@ -1,4 +1,4 @@
-import type { TagSet } from '../tags/taxonomy.js'
+import type { TagSet } from '../soul/tags/taxonomy.js'
 
 export interface TemplateContext {
   soul: {

@@ -5,10 +5,10 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { z } from 'zod'
 import type { SoulkillerConfig } from '../../config/schema.js'
 import type { SoulChunk } from '../../infra/ingest/types.js'
-import type { TagSet } from '../../tags/taxonomy.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
-import { withExacto, getProviderOptions } from '../../llm/client.js'
-import { logger } from '../../utils/logger.js'
+import type { TagSet } from '../tags/taxonomy.js'
+import type { AgentLogger } from '../../infra/utils/agent-logger.js'
+import { withExacto, getProviderOptions } from '../../infra/llm/client.js'
+import { logger } from '../../infra/utils/logger.js'
 
 // ========== Article Index (for sessionDir path) ==========
 

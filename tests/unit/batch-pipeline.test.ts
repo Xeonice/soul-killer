@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { runBatchPipeline, retryFailedSouls, type BatchPipelineDeps, type BatchPipelineOptions, type BatchProgressEvent, type SoulInput } from '../../src/soul/batch-pipeline.js'
 import type { CaptureResult } from '../../src/infra/agent/capture-strategy.js'
 import type { DistillResult } from '../../src/soul/distill/distill-agent.js'
-import { emptyTagSet } from '../../src/tags/taxonomy.js'
+import { emptyTagSet } from '../../src/soul/tags/taxonomy.js'
 
 function createMockDeps(overrides?: Partial<BatchPipelineDeps>): BatchPipelineDeps {
   return {

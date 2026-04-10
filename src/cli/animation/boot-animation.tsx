@@ -5,7 +5,7 @@ import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { bootingBar } from './booting-bar.js'
 import { loadArasakaLogo } from './logo-loader.js'
 import { isAnimationEnabled } from './use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 interface BootAnimationProps {
   onComplete: () => void

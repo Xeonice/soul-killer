@@ -3,7 +3,7 @@ import { Text, Box, useInput } from 'ink'
 import { bindWorld, unbindWorld, findSoulsBoundToWorld } from '../../../world/binding.js'
 import { listLocalSouls, getSoulsDir } from '../../soul-resolver.js'
 import { PRIMARY, ACCENT, DIM, WARNING } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import path from 'node:path'
 
 interface WorldBindProps {

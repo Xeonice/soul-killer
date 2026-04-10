@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { render } from 'ink-testing-library'
 import { SoulkillerProtocolPanel } from '../../src/cli/animation/soulkiller-protocol-panel.js'
-import { setLocale } from '../../src/i18n/index.js'
+import { setLocale } from '../../src/infra/i18n/index.js'
 
 describe('SoulkillerProtocolPanel', () => {
   const originalSeed = process.env.SOULKILLER_SEED

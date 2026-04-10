@@ -5,8 +5,8 @@ import { z } from 'zod'
 import type { ExportPlan, ExportPlanCharacter, OnExportProgress, PreSelectedExportData } from './types.js'
 import { PLANNING_SYSTEM_PROMPT, buildPlanningPrompt } from './prompts.js'
 import { runAgentLoop } from './agent-loop.js'
-import { logger } from '../../utils/logger.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
+import { logger } from '../../infra/utils/logger.js'
+import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 
 // --- Planning Agent ---
 

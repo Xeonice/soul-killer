@@ -1,4 +1,4 @@
-import type { SoulChunk } from '../infra/ingest/types.js'
+import type { SoulChunk } from '../ingest/types.js'
 
 export interface RecallOptions {
   limit?: number

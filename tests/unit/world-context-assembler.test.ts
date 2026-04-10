@@ -7,8 +7,8 @@ import { createWorld } from '../../src/world/manifest.js'
 import { addEntry, type EntryMeta } from '../../src/world/entry.js'
 import { addChronicleEntry } from '../../src/world/chronicle.js'
 import { bindWorld } from '../../src/world/binding.js'
-import { emptyTagSet } from '../../src/tags/taxonomy.js'
-import { setLocale } from '../../src/i18n/index.js'
+import { emptyTagSet } from '../../src/soul/tags/taxonomy.js'
+import { setLocale } from '../../src/infra/i18n/index.js'
 
 let tmpDir: string
 let origHome: string

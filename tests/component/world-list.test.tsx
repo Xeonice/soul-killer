@@ -8,7 +8,7 @@ import { WorldListCommand, WorldShowCommand } from '../../src/cli/commands/world
 import { WorldCommand } from '../../src/cli/commands/world/world.js'
 import { createWorld } from '../../src/world/manifest.js'
 import { addEntry } from '../../src/world/entry.js'
-import { setLocale } from '../../src/i18n/index.js'
+import { setLocale } from '../../src/infra/i18n/index.js'
 
 let tmpDir: string
 let origHome: string

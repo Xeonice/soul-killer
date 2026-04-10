@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { PRIMARY, ACCENT, DIM, WARNING } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import {
   inspectPack,
   applyUnpack,
   suggestRename,
   type ConflictItem,
   type ConflictResolution,
-} from '../../../pack/unpacker.js'
+} from '../../../export/pack/unpacker.js'
 import { worldExists } from '../../../world/manifest.js'
 import fs from 'node:fs'
 import path from 'node:path'

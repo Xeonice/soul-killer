@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Text, Box } from 'ink'
 import { PRIMARY, ACCENT, DIM } from '../animation/colors.js'
 import { isAnimationEnabled } from '../animation/use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 

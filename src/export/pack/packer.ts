@@ -4,8 +4,8 @@ import os from 'node:os'
 import { execFile } from 'node:child_process'
 import { createMeta } from './meta.js'
 import { computeChecksum } from './checksum.js'
-import { readManifest, getBoundWorlds } from '../soul/package.js'
-import { loadWorld, getWorldDir } from '../world/manifest.js'
+import { readManifest, getBoundWorlds } from '../../soul/package.js'
+import { loadWorld, getWorldDir } from '../../world/manifest.js'
 
 export interface PackOptions {
   output?: string

@@ -4,7 +4,7 @@ import os from 'node:os'
 import { execFile } from 'node:child_process'
 import { parseMeta, validateVersion, type PackMeta } from './meta.js'
 import { verifyChecksum } from './checksum.js'
-import { worldExists } from '../world/manifest.js'
+import { worldExists } from '../../world/manifest.js'
 
 export interface ConflictItem {
   type: 'soul' | 'world'

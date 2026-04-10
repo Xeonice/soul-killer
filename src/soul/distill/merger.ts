@@ -1,7 +1,7 @@
 import { generateText, type LanguageModel } from 'ai'
 import type { ExtractedFeatures } from './extractor.js'
-import type { TagSet } from '../../tags/taxonomy.js'
-import { t } from '../../i18n/index.js'
+import type { TagSet } from '../tags/taxonomy.js'
+import { t } from '../../infra/i18n/index.js'
 
 function formatTagContext(tags?: TagSet): string {
   if (!tags) return ''

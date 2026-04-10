@@ -3,7 +3,7 @@ import {
   lintSkillTemplate,
   lintStorySpec,
   lintCharacterAxesConsistency,
-} from '../../src/export/lint/index.js'
+} from '../../src/export/support/lint-index.js'
 
 describe('lintSkillTemplate — yaml block parsing', () => {
   it('passes a clean SKILL.md with valid yaml example', () => {
@@ -389,7 +389,7 @@ bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply slot-1 scene-001 choice-1
 
   describe('real generated template passes all three rules', () => {
     it('a full SKILL.md rendered from the template has zero runtime-CLI rule errors', async () => {
-      const { generateSkillMd } = await import('../../src/export/skill-template.js')
+      const { generateSkillMd } = await import('../../src/export/spec/skill-template.js')
       const md = generateSkillMd({
         skillName: 'test-in-world',
         storyName: 'Test',

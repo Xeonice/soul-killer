@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { SoulChunk } from '../infra/ingest/types.js'
+import type { SoulChunk } from '../ingest/types.js'
 import type { EngineAdapter, RecallOptions, RecallResult, IngestResult, EngineStatus } from './adapter.js'
 
 /**

@@ -20,7 +20,7 @@ import { loadWorld, saveWorld, bumpPatchVersion } from './manifest.js'
 import type { WorldClassification, WorldDimension } from './capture/world-dimensions.js'
 import { WORLD_DIMENSIONS, ALL_WORLD_DIMENSIONS } from './capture/world-dimensions.js'
 import type { DimensionDef } from '../infra/agent/dimension-framework.js'
-import type { AgentLogger } from '../utils/agent-logger.js'
+import type { AgentLogger } from '../infra/utils/agent-logger.js'
 
 export type DistillPhase = 'ingest' | 'classify' | 'cluster' | 'extract' | 'review'
 

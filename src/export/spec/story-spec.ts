@@ -1,8 +1,8 @@
-import { formatPathSegment } from './format/index.js'
+import { formatPathSegment } from '../support/format-index.js'
 import {
   topForbiddenPatterns,
   type ProseStyleForbiddenPattern,
-} from './prose-style/index.js'
+} from '../support/prose-style-index.js'
 
 /**
  * The soulkiller platform's fixed shared axis name. Every character in every

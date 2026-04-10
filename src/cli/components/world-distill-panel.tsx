@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Text, Box } from 'ink'
 import { PRIMARY, ACCENT, DARK, DIM } from '../animation/colors.js'
 import { isAnimationEnabled } from '../animation/use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 import type { WorldDistillProgress, DimensionStats } from '../../world/distill.js'
 import { ALL_WORLD_DIMENSIONS, WORLD_DIMENSIONS } from '../../world/capture/world-dimensions.js'
 

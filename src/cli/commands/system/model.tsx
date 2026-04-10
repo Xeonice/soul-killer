@@ -3,7 +3,7 @@ import { Text, Box } from 'ink'
 import { RECOMMENDED_MODELS } from '../../../config/schema.js'
 import { loadConfig, saveConfig } from '../../../config/loader.js'
 import { PRIMARY, ACCENT, DIM, WARNING } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 interface ModelCommandProps {
   args: string

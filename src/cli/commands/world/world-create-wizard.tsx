@@ -20,14 +20,14 @@ import {
 import { captureWorld } from "../../../world/capture/world-capture-agent.js";
 import { WorldCaptureStrategy } from "../../../world/capture/world-capture-strategy.js";
 import { extractPageContent } from "../../../infra/search/page-extractor.js";
-import { getLLMClient } from "../../../llm/client.js";
+import { getLLMClient } from "../../../infra/llm/client.js";
 import { loadConfig } from "../../../config/loader.js";
-import { AgentLogger } from "../../../utils/agent-logger.js";
+import { AgentLogger } from "../../../infra/utils/agent-logger.js";
 import {
   parseWorldTags,
   emptyWorldTagSet,
   type WorldTagSet,
-} from "../../../tags/world-taxonomy.js";
+} from "../../../world/tags/world-taxonomy.js";
 import { bindWorld } from "../../../world/binding.js";
 import type {
   WorldType,
@@ -40,8 +40,8 @@ import type {
   SearchPlanDimDisplay,
 } from "../../animation/soulkiller-protocol-panel.js";
 import { PRIMARY, ACCENT, DIM, DARK, WARNING } from "../../animation/colors.js";
-import { t } from "../../../i18n/index.js";
-import { logger } from "../../../utils/logger.js";
+import { t } from "../../../infra/i18n/index.js";
+import { logger } from "../../../infra/utils/logger.js";
 
 /**
  * Flow:

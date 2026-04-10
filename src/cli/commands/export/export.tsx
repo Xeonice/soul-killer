@@ -22,7 +22,7 @@ import { TextInput } from '../../components/text-input.js'
 import { readManifest, readSoulFiles } from '../../../soul/package.js'
 import { listWorlds, loadWorld } from '../../../world/manifest.js'
 import { loadAllEntries } from '../../../world/entry.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import { PRIMARY, DIM, ACCENT } from '../../animation/colors.js'
 
 interface ExportCommandProps {

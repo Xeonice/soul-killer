@@ -3,8 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { readSoulFiles } from '../../src/soul/package.js'
-import { generateSkillMd } from '../../src/export/skill-template.js'
-import { generateStorySpec } from '../../src/export/story-spec.js'
+import { generateSkillMd } from '../../src/export/spec/skill-template.js'
+import { generateStorySpec } from '../../src/export/spec/story-spec.js'
 
 // --- readSoulFiles ---
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Text, Box, useInput } from 'ink'
 import { PRIMARY, ACCENT, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import { listSnapshots, restoreSnapshot, type SnapshotInfo } from '../../../soul/snapshot.js'
 
 interface EvolveRollbackCommandProps {

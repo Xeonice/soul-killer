@@ -3,7 +3,7 @@ import {
   emptyWorldTagSet,
   type WorldTagSet,
   type WorldTagCategory,
-} from '../../src/tags/world-taxonomy.js'
+} from '../../src/world/tags/world-taxonomy.js'
 
 describe('emptyWorldTagSet', () => {
   it('returns all categories as empty arrays', () => {

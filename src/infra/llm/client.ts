@@ -1,7 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
-import type { SoulkillerConfig } from '../config/schema.js'
+import type { SoulkillerConfig } from '../../config/schema.js'
 
 let _model: LanguageModel | null = null
 let _modelName: string = ''

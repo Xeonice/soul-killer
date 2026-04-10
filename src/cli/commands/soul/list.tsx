@@ -6,7 +6,7 @@ import os from 'node:os'
 import { CreateCommand } from './create.js'
 import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../../animation/colors.js'
 import { ScrollableList } from '../../components/scrollable-list.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 import type { SoulManifest } from '../../../soul/manifest.js'
 import { readManifest } from '../../../soul/package.js'
 

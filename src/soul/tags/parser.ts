@@ -1,6 +1,6 @@
 import { generateText, type LanguageModel } from 'ai'
 import { type TagSet, type TagCategory, getTagAnchors, emptyTagSet } from './taxonomy.js'
-import { t } from '../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 function buildParsePrompt(): string {
   const anchors = getTagAnchors()

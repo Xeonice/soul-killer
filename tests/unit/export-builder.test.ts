@@ -14,8 +14,8 @@ import type {
   CharacterAxis,
   CharacterAxisOverrides,
   ProseStyle,
-} from '../../src/export/story-spec.js'
-import { ZH_TRANSLATESE_PATTERNS } from '../../src/export/prose-style/index.js'
+} from '../../src/export/spec/story-spec.js'
+import { ZH_TRANSLATESE_PATTERNS } from '../../src/export/support/prose-style-index.js'
 
 // ExportBuilder is declared inside export-agent.ts without an export.
 // For testing, we replicate its behaviour via a lightweight shim that

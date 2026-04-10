@@ -3,7 +3,7 @@ import { Readability } from '@mozilla/readability'
 import { JSDOM } from 'jsdom'
 import TurndownService from 'turndown'
 import type { SoulChunk, ChunkTemporal } from './types.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../i18n/index.js'
 
 const FETCH_TIMEOUT_MS = 8000
 const MAX_CONTENT_LENGTH = 5000

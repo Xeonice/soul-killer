@@ -1,4 +1,4 @@
-import { formatPatternsForToolDescription } from '../prose-style/index.js'
+import { formatPatternsForToolDescription } from '../support/prose-style-index.js'
 import type { ExportPlan, ExportPlanCharacter, PreSelectedExportData, SoulFullData } from './types.js'
 
 // --- Planning Agent ---

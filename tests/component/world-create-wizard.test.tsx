@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { WorldCreateWizard } from '../../src/cli/commands/world/world-create-wizard.js'
-import { setLocale } from '../../src/i18n/index.js'
+import { setLocale } from '../../src/infra/i18n/index.js'
 
 let tmpDir: string
 let origHome: string

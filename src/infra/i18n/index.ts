@@ -1,4 +1,4 @@
-import type { SupportedLanguage } from '../config/schema.js'
+import type { SupportedLanguage } from '../../config/schema.js'
 import zh from './locales/zh.json' with { type: 'json' }
 import ja from './locales/ja.json' with { type: 'json' }
 import en from './locales/en.json' with { type: 'json' }

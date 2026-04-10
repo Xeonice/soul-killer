@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import type { SoulChunk } from './types.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../i18n/index.js'
 
 export type FeedbackRating = 'positive' | 'somewhat_positive' | 'somewhat_negative' | 'negative'
 

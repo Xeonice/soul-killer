@@ -1,8 +1,8 @@
 import React from 'react'
 import { Text, Box } from 'ink'
 import { PRIMARY, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
-import type { RecallResult } from '../../../engine/adapter.js'
+import { t } from '../../../infra/i18n/index.js'
+import type { RecallResult } from '../../../infra/engine/adapter.js'
 
 interface SourceCommandProps {
   lastRecallResults: RecallResult[]

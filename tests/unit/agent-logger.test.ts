@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { AgentLogger } from '../../src/utils/agent-logger.js'
+import { AgentLogger } from '../../src/infra/utils/agent-logger.js'
 import type { CaptureResult } from '../../src/soul/capture/soul-capture-agent.js'
 
 const TEST_LOG_DIR = path.join(os.tmpdir(), 'soulkiller-test-logs', 'agent')

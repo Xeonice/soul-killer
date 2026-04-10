@@ -1,7 +1,7 @@
 import type { ToolLoopAgent } from 'ai'
 import type { OnExportProgress } from './types.js'
-import { logger } from '../../utils/logger.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
+import { logger } from '../../infra/utils/logger.js'
+import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 
 // --- Shared agent loop helper ---
 

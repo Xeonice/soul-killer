@@ -3,7 +3,7 @@ import { Text, Box, useInput } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 import type { ExportProgressEvent, ExportPhase, ExportPlan, AskUserOption } from '../../export/agent/index.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'

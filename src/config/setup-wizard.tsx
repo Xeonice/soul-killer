@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react'
 import { Text, Box, useInput } from 'ink'
 import { TextInput, CheckboxSelect } from '../cli/components/text-input.js'
-import { validateApiKey } from '../llm/client.js'
+import { validateApiKey } from '../infra/llm/client.js'
 import { RECOMMENDED_MODELS, type SoulkillerConfig, type SupportedLanguage, type SearchProvider } from './schema.js'
 import { saveConfig } from './loader.js'
 import { PRIMARY, ACCENT, WARNING, DIM } from '../cli/animation/colors.js'
-import { t, setLocale } from '../i18n/index.js'
+import { t, setLocale } from '../infra/i18n/index.js'
 import { isDockerAvailable } from '../infra/search/searxng-search.js'
 
 type Step = 'language' | 'intro' | 'api_key' | 'validating' | 'model_select' | 'search_engine' | 'exa_key' | 'tavily_key' | 'done'

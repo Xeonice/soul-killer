@@ -2,8 +2,8 @@ import React from 'react'
 import { registerCommand, type CommandHandler, type CommandContext } from '../command-registry.js'
 import { listLocalSouls, getSoulsDir } from '../soul-resolver.js'
 import { loadConfig } from '../../config/loader.js'
-import { setLocale } from '../../i18n/index.js'
-import { t } from '../../i18n/index.js'
+import { setLocale } from '../../infra/i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 // ─── Lazy component imports (only resolved when handle is called) ───
 // We use inline imports via React.createElement to avoid top-level circular deps.

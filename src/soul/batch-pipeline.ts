@@ -2,7 +2,7 @@ import type { SoulkillerConfig } from '../config/schema.js'
 import type { SoulChunk } from '../infra/ingest/types.js'
 import type { CaptureProgress, CaptureResult } from '../infra/agent/capture-strategy.js'
 import type { DistillAgentProgress, DistillResult } from './distill/distill-agent.js'
-import type { TagSet } from '../tags/taxonomy.js'
+import type { TagSet } from './tags/taxonomy.js'
 import type { SoulType } from './manifest.js'
 import type { AgentPhase } from '../infra/agent/capture-strategy.js'
 import type { DistillToolCallDisplay } from '../cli/components/distill-progress.js'
@@ -186,7 +186,7 @@ export async function runBatchPipeline(options: BatchPipelineOptions): Promise<B
       }
 
       // Create synthetic chunks (used as supplementary data alongside sessionDir)
-      const { emptyTagSet } = await import('../tags/taxonomy.js')
+      const { emptyTagSet } = await import('./tags/taxonomy.js')
       const syntheticChunks = deps.createSyntheticChunks(soul.name, soul.description, emptyTagSet())
       updateStatus(soul.name, { fragments: syntheticChunks.length, chunks: syntheticChunks })
 
@@ -233,7 +233,7 @@ export async function runBatchPipeline(options: BatchPipelineOptions): Promise<B
       distillResult.agentLog?.close()
 
       // Generate manifest
-      const { emptyTagSet: getEmptyTags } = await import('../tags/taxonomy.js')
+      const { emptyTagSet: getEmptyTags } = await import('./tags/taxonomy.js')
       const fragmentCount = (statuses.get(soul.name)?.fragments ?? 0) + syntheticChunks.length
       deps.generateManifest(soulDir, soul.name, soul.name, soul.description, fragmentCount, ['zh'], soulType, getEmptyTags())
 

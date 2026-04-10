@@ -4,7 +4,7 @@ import {
   formatPatternsForToolDescription,
   topForbiddenPatterns,
   type ProseStyleForbiddenPattern,
-} from '../../src/export/prose-style/index.js'
+} from '../../src/export/support/prose-style-index.js'
 
 describe('ZH_TRANSLATESE_PATTERNS', () => {
   it('contains at least 8 entries', () => {

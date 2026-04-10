@@ -4,7 +4,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { DimensionPlan } from '../dimension-framework.js'
 import type { SearchResult } from '../../search/tavily-search.js'
-import type { AgentLogger } from '../../../utils/agent-logger.js'
+import type { AgentLogger } from '../../utils/agent-logger.js'
 
 export function readDimensionCache(sessionDir: string, dimensionName: string): SearchResult[] {
   const cacheFile = path.join(sessionDir, `${dimensionName}.json`)

@@ -2,7 +2,7 @@ import React from 'react'
 import { Text, Box } from 'ink'
 import { getCommandGroups } from '../../command-registry.js'
 import { PRIMARY, ACCENT, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 export function HelpCommand() {
   const groups = getCommandGroups()

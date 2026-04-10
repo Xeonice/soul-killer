@@ -9,9 +9,9 @@ import type {
   ProseStyle,
   StorySpecConfig,
   StoryState,
-} from '../story-spec.js'
-import { BOND_AXIS } from '../story-spec.js'
-import { logger } from '../../utils/logger.js'
+} from '../spec/story-spec.js'
+import { BOND_AXIS } from '../spec/story-spec.js'
+import { logger } from '../../infra/utils/logger.js'
 
 // Character cap removed (was 4). The original limit was a conservative early
 // guardrail with no documented motivation; in practice the real bottleneck is

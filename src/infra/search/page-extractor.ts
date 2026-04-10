@@ -1,7 +1,7 @@
 import { Readability } from '@mozilla/readability'
 import { JSDOM } from 'jsdom'
 import TurndownService from 'turndown'
-import { t } from '../../i18n/index.js'
+import { t } from '../i18n/index.js'
 
 const MAX_CONTENT_LENGTH = 3000
 const FETCH_TIMEOUT_MS = 5000

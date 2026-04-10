@@ -6,7 +6,7 @@ import {
   createInitialPanelState,
   reducePanelEvent,
 } from '../../src/cli/animation/export-protocol-panel.js'
-import { setLocale } from '../../src/i18n/index.js'
+import { setLocale } from '../../src/infra/i18n/index.js'
 
 describe('ExportProtocolPanel', () => {
   const originalSeed = process.env.SOULKILLER_SEED

@@ -8,7 +8,7 @@ import { executeTavilySearch } from '../../search/tavily-search.js'
 import { executeExaSearch } from '../../search/exa-search.js'
 import { searxngSearch } from '../../search/searxng-search.js'
 import { readDimensionCache } from './evaluate-dimension.js'
-import type { AgentLogger } from '../../../utils/agent-logger.js'
+import type { AgentLogger } from '../../utils/agent-logger.js'
 
 const MAX_SUPPLEMENTS_PER_DIM = 2
 

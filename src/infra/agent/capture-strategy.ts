@@ -1,5 +1,5 @@
 import type { SoulkillerConfig } from '../../config/schema.js'
-import type { AgentLogger } from '../../utils/agent-logger.js'
+import type { AgentLogger } from '../utils/agent-logger.js'
 import type { DimensionPlan } from './dimension-framework.js'
 
 // ========== Shared Types ==========

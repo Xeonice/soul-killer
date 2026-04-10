@@ -3,7 +3,7 @@ import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import type { DimensionDef, DimensionPlan } from './dimension-framework.js'
 import { SOUL_DIMENSION_TEMPLATES } from '../../soul/capture/soul-dimensions.js'
 import { WORLD_DIMENSION_TEMPLATES } from '../../world/capture/world-dimensions.js'
-import { logger } from '../../utils/logger.js'
+import { logger } from '../utils/logger.js'
 
 const MIN_TOTAL_DIMENSIONS = 6
 const MAX_TOTAL_DIMENSIONS = 15

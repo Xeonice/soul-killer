@@ -1,7 +1,7 @@
 import type { WorldEntry } from './entry.js'
 import type { WorldBinding, EntryFilter } from './binding.js'
-import type { EngineAdapter } from '../engine/adapter.js'
-import type { ChatMessage } from '../llm/stream.js'
+import type { EngineAdapter } from '../infra/engine/adapter.js'
+import type { ChatMessage } from '../infra/llm/stream.js'
 
 export interface ResolvedEntry {
   entry: WorldEntry

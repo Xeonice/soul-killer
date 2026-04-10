@@ -1,7 +1,7 @@
 import React from 'react'
-import { t } from '../i18n/index.js'
-import type { EngineAdapter, RecallResult } from '../engine/adapter.js'
-import type { ChatMessage } from '../llm/stream.js'
+import { t } from '../infra/i18n/index.js'
+import type { EngineAdapter, RecallResult } from '../infra/engine/adapter.js'
+import type { ChatMessage } from '../infra/llm/stream.js'
 
 export interface CommandDef {
   name: string

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createMeta, parseMeta, validateVersion, FORMAT_VERSION, SUPPORTED_MAJOR } from '../../src/pack/meta.js'
+import { createMeta, parseMeta, validateVersion, FORMAT_VERSION, SUPPORTED_MAJOR } from '../../src/export/pack/meta.js'
 
 describe('pack meta', () => {
   describe('createMeta', () => {

@@ -4,7 +4,7 @@ import { TextInput } from '../../components/text-input.js'
 import { addEntry, type EntryMode, type EntryScope } from '../../../world/entry.js'
 import { worldExists } from '../../../world/manifest.js'
 import { PRIMARY, ACCENT, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 type Step = 'name' | 'mode' | 'scope' | 'keywords' | 'priority' | 'content' | 'done' | 'error'
 

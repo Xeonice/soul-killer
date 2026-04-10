@@ -7,7 +7,7 @@ import { WorldShowCommand } from './world-list.js'
 import { listWorlds, deleteWorld, type WorldManifest } from '../../../world/manifest.js'
 import { PRIMARY, ACCENT, DIM, DARK, WARNING } from '../../animation/colors.js'
 import { ScrollableList } from '../../components/scrollable-list.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 type WorldPhase =
   | 'top-menu'

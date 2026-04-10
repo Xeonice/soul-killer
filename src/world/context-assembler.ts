@@ -7,10 +7,10 @@ import { renderTemplate, type TemplateContext } from './template.js'
 import { loadAllEntries } from './entry.js'
 import { loadChronicleTimeline, loadChronicleEvents, sortByChronicle } from './chronicle.js'
 import { loadWorld } from './manifest.js'
-import type { EngineAdapter, RecallResult } from '../engine/adapter.js'
-import type { ChatMessage } from '../llm/stream.js'
-import type { TagSet } from '../tags/taxonomy.js'
-import { t } from '../i18n/index.js'
+import type { EngineAdapter, RecallResult } from '../infra/engine/adapter.js'
+import type { ChatMessage } from '../infra/llm/stream.js'
+import type { TagSet } from '../soul/tags/taxonomy.js'
+import { t } from '../infra/i18n/index.js'
 
 export interface SoulFiles {
   identity: string

@@ -5,7 +5,7 @@ import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { loadArasakaLogo } from './logo-loader.js'
 import { LogoAnnihilator } from './logo-annihilator.js'
 import { isAnimationEnabled } from './use-animation.js'
-import { t } from '../../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 interface ExitAnimationProps {
   onComplete: () => void

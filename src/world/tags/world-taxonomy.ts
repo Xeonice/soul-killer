@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from 'ai'
-import { t } from '../i18n/index.js'
+import { t } from '../../infra/i18n/index.js'
 
 export type WorldTagCategory = 'genre' | 'tone' | 'scale' | 'era' | 'theme'
 

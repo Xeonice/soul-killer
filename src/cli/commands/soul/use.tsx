@@ -5,7 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { RelicLoadAnimation } from '../../animation/relic-load-animation.js'
 import { PRIMARY, DIM } from '../../animation/colors.js'
-import { t } from '../../../i18n/index.js'
+import { t } from '../../../infra/i18n/index.js'
 
 const SOULS_DIR = path.join(os.homedir(), '.soulkiller', 'souls')
 

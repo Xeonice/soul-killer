@@ -1,5 +1,5 @@
-import type { TagSet } from '../tags/taxonomy.js'
-import { emptyTagSet } from '../tags/taxonomy.js'
+import type { TagSet } from './tags/taxonomy.js'
+import { emptyTagSet } from './tags/taxonomy.js'
 
 export type SoulType = 'personal' | 'public'
 
