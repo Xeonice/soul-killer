@@ -23,6 +23,9 @@ import { readManifest, readSoulFiles } from '../../../soul/package.js'
 import { listWorlds, loadWorld } from '../../../world/manifest.js'
 import { loadAllEntries } from '../../../world/entry.js'
 import { t } from '../../../infra/i18n/index.js'
+import { getLocale } from '../../../infra/i18n/index.js'
+import type { SupportedLanguage } from '../../../config/schema.js'
+import { SUPPORTED_LANGUAGES } from '../../../config/schema.js'
 import { PRIMARY, DIM, ACCENT } from '../../animation/colors.js'
 
 interface ExportCommandProps {
@@ -38,6 +41,7 @@ type UIStep =
   | 'selecting-world'
   | 'naming-story'
   | 'story-direction'
+  | 'selecting-language'
   | 'selecting-output'
   | 'loading-data'
   | 'running'
@@ -97,6 +101,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   const [selectedWorld, setSelectedWorld] = useState<string>('')
   const [storyName, setStoryName] = useState<string>('')
   const [storyDirection, setStoryDirection] = useState<string>('')
+  const [exportLanguage, setExportLanguage] = useState<SupportedLanguage>(getLocale())
   const [outputBaseDir, setOutputBaseDir] = useState<string>('')
 
   // Output options (built once on mount)
@@ -219,6 +224,31 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
     })
   }
 
+  function showLanguageSelector() {
+    const langOptions: { label: string; code: SupportedLanguage }[] = [
+      { label: '中文 (zh)', code: 'zh' },
+      { label: 'English (en)', code: 'en' },
+      { label: '日本語 (ja)', code: 'ja' },
+    ]
+    const currentIdx = langOptions.findIndex((o) => o.code === exportLanguage)
+    setPanelState({
+      phase: 'selecting',
+      planningTrail: [],
+      trail: [
+        { description: t('export.step.select_souls'), summary: `${selectedSouls.length} ${t('export.souls_unit')}` },
+        { description: t('export.step.select_world'), summary: selectedWorld },
+        { description: t('export.step.naming_story'), summary: storyName },
+      ],
+      activeZone: {
+        type: 'select',
+        question: t('export.step.select_language'),
+        options: langOptions.map((o) => ({ label: o.label })),
+        cursor: currentIdx >= 0 ? currentIdx : 0,
+        multi: false,
+      },
+    })
+  }
+
   function showIdleWithTrail(trail: { description: string; summary?: string }[], phase: ExportPanelState['phase']) {
     setPanelState({ phase, planningTrail: [], trail, activeZone: { type: 'idle' } })
   }
@@ -260,10 +290,15 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       showNameStoryInput(selectedSouls.length, worldItem?.display_name || selectedWorld)
       return
     }
-    if (uiStep === 'selecting-output') {
+    if (uiStep === 'selecting-language') {
       setUiStep('story-direction')
       const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
       showStoryDirectionInput(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName)
+      return
+    }
+    if (uiStep === 'selecting-output') {
+      setUiStep('selecting-language')
+      setTimeout(() => showLanguageSelector(), 0)
       return
     }
 
@@ -355,9 +390,9 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       setStoryDirection(value) // may be empty
       setTextInputActive(false)
       setTextInputError(undefined)
-      setUiStep('selecting-output')
-      const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
-      showOutputSelector(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName, value)
+      // Show language selection
+      setUiStep('selecting-language')
+      setTimeout(() => showLanguageSelector(), 0)
       return
     }
   }, [uiStep, availableWorlds, selectedWorld, selectedSouls.length, storyName])
@@ -423,6 +458,16 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
           return prev
         }
 
+        if (uiStep === 'selecting-language') {
+          const langMap: SupportedLanguage[] = ['zh', 'en', 'ja'] // must match showLanguageSelector order
+          const selectedLang = langMap[activeZone.cursor] ?? 'zh'
+          setExportLanguage(selectedLang)
+          setUiStep('selecting-output')
+          const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
+          setTimeout(() => showOutputSelector(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName, storyDirection), 0)
+          return prev
+        }
+
         if (uiStep === 'selecting-output') {
           // Map label back to output option
           const options = outputOptionsRef.current
@@ -476,7 +521,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       for (const soulName of souls) {
         const soulDir = path.join(os.homedir(), '.soulkiller', 'souls', soulName)
         const manifest = readManifest(soulDir)
-        if (!manifest) throw new Error(`无法读取 soul: ${soulName}`)
+        if (!manifest) throw new Error(t('export.err.cannot_read_soul', { name: soulName }))
         const files = readSoulFiles(soulDir)
 
         const behaviorsDir = path.join(soulDir, 'soul', 'behaviors')
@@ -503,7 +548,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       }
 
       const worldManifest = loadWorld(worldName)
-      if (!worldManifest) throw new Error(`无法读取 world: ${worldName}`)
+      if (!worldManifest) throw new Error(t('export.err.cannot_read_world', { name: worldName }))
       const entries = loadAllEntries(worldName)
       const worldData: WorldFullData = {
         name: worldName,
@@ -523,6 +568,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         storyName: name,
         storyDirection: direction.trim().length > 0 ? direction.trim() : undefined,
         outputBaseDir: outBaseDir,
+        exportLanguage,
       }
 
       setUiStep('running')
@@ -535,7 +581,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
 
       const config = loadConfig()
       if (!config) {
-        showError('配置未初始化')
+        showError(t('export.err.config_not_initialized'))
         return
       }
 
@@ -577,7 +623,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         <Box marginTop={1}>
           <TextInput
             prompt=""
-            placeholder="按 Enter 返回"
+            placeholder={t('export.hint.press_enter_to_return')}
             onSubmit={onComplete}
             onEscape={onComplete}
           />
@@ -587,7 +633,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         <Box marginTop={1}>
           <TextInput
             prompt=""
-            placeholder="按 Enter 返回"
+            placeholder={t('export.hint.press_enter_to_return')}
             onSubmit={onCancel}
             onEscape={onCancel}
           />

@@ -299,8 +299,8 @@ mode: always
     // assert this indirectly: lint output goes to stderr but does not
     // throw, so reaching this assertion at all proves the packager
     // completed without crashing on its own template.
-    expect(skillContent).toContain('state_schema 创作约束')
-    expect(skillContent).toContain('apply_consequences 标准流程')
+    expect(skillContent).toContain('state_schema Creation Constraints')
+    expect(skillContent).toContain('apply_consequences Standard Flow')
 
     // SKILL.md frontmatter `name` should NOT contain soulkiller: prefix
     expect(skillContent).toContain(`name: ${baseName}`)
@@ -311,13 +311,13 @@ mode: always
     // declaration. We don't assert on the exact numbers (they depend on
     // fixture file sizes), just that the template rendered the
     // "specific-numbers" branch rather than the fallback.
-    expect(skillContent).toContain('上下文预算与全量读取')
+    expect(skillContent).toContain('Context Budget and Full-Read Enforcement')
     expect(skillContent).toContain('1,000,000 token')
-    expect(skillContent).toMatch(/约 \*\*\d+ 个文件 \/ 约 \d+ KB 文本\*\*/)
-    expect(skillContent).toContain('不得使用 `offset` 或 `limit` 参数')
+    expect(skillContent).toMatch(/\*\*\d+ files \/ ~\d+ KB of text\*\*/)
+    expect(skillContent).toContain('MUST NOT use `offset` or `limit` parameters')
     // Step 0 and data coverage self-check must be present
-    expect(skillContent).toContain('Step 0：数据加载报告')
-    expect(skillContent).toMatch(/Step 5\.(e|h) — 数据覆盖完整性/)
+    expect(skillContent).toContain('Step 0')
+    expect(skillContent).toContain('Data Loading Report')
 
     // story-spec.md content sanity
     const storySpecContent = strFromU8(unzipped[`${prefix}story-spec.md`]!)

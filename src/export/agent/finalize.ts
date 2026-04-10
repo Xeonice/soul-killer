@@ -65,7 +65,7 @@ export async function finalizeAndPackage(
     logger.error(`${tag} finalize_export failed:`, errMsg)
     onProgress({ type: 'tool_end', tool: 'finalize_export', result_summary: `error: ${errMsg}` })
     agentLog.toolInternal(`FATAL: finalize failed: ${errMsg}`)
-    onProgress({ type: 'error', error: `打包失败：${errMsg}\n查看详细日志：${agentLog.filePath}` })
+    onProgress({ type: 'error', error: `Packaging failed: ${errMsg}\nSee detailed log: ${agentLog.filePath}` })
     return false
   }
 }

@@ -36,7 +36,7 @@ type ActiveZoneState =
   | { type: 'tool'; tool: string; args?: Record<string, unknown> }
   | { type: 'select'; question: string; options: AskUserOption[]; cursor: number; multi?: boolean; selected?: number[] }
   | { type: 'text_input'; question: string; value: string; items: string[] }
-  | { type: 'plan_review'; plan: ExportPlan }
+  | { type: 'plan_review'; plan: ExportPlan; storyDirection?: string; exportLanguage?: string }
   | { type: 'packaging'; steps: { name: string; status: 'pending' | 'running' | 'done' }[] }
   | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name?: string }
   | { type: 'error'; error: string }
@@ -276,7 +276,7 @@ export function ExportProtocolPanel({
               {activeZone.items.length > 0 && (
                 <>
                   <Text> </Text>
-                  <Text color={DIM}>  已输入:</Text>
+                  <Text color={DIM}>{t('export_panel.input_label')}</Text>
                   {activeZone.items.map((item, i) => (
                     <Text key={i} color={DIM}>    {i + 1}. {item}</Text>
                   ))}
@@ -287,17 +287,24 @@ export function ExportProtocolPanel({
         )
 
       case 'plan_review': {
-        const { plan } = activeZone
+        const { plan, storyDirection, exportLanguage: planLang } = activeZone
         const roleLabel: Record<string, string> = {
           protagonist: 'P',
           deuteragonist: 'D',
           antagonist: 'A',
         }
+        const langLabel: Record<string, string> = { zh: '中文', en: 'English', ja: '日本語' }
         return (
           <Box flexDirection="column" marginLeft={2}>
             <Text color={ACCENT}>  ▓ {t('export.plan_review_title')}</Text>
             <Text> </Text>
             <Box flexDirection="column" borderStyle="single" borderColor={DARK} paddingX={1}>
+              {storyDirection && storyDirection.trim().length > 0 && (
+                <Text color={DIM}>  {t('export.step.story_direction')}: <Text color={PRIMARY}>{storyDirection}</Text></Text>
+              )}
+              {planLang && (
+                <Text color={DIM}>  {t('export.step.select_language')}: <Text color={PRIMARY}>{langLabel[planLang] ?? planLang} ({planLang})</Text></Text>
+              )}
               <Text color={DIM}>  {t('export.plan_genre')}: <Text color={PRIMARY}>{plan.genre_direction}</Text></Text>
               <Text color={DIM}>  {t('export.plan_tone')}: <Text color={PRIMARY}>{plan.tone_direction}</Text></Text>
               <Text color={DIM}>  {t('export.plan_axes')}: <Text color={PRIMARY}>{plan.shared_axes.join(' / ')}</Text></Text>
@@ -568,13 +575,13 @@ export function reducePanelEvent(
       return {
         ...state,
         phase: 'plan_review',
-        activeZone: { type: 'plan_review', plan: event.plan },
+        activeZone: { type: 'plan_review', plan: event.plan, storyDirection: event.storyDirection, exportLanguage: event.exportLanguage },
       }
 
     case 'plan_confirmed': {
       // Move plan summary to planningTrail and reset for execution phase
       const planSummary = state.activeZone.type === 'plan_review'
-        ? `${state.activeZone.plan.characters.length} 角色 · ${state.activeZone.plan.shared_axes.join('/')}`
+        ? t('export_panel.plan_summary', { count: String(state.activeZone.plan.characters.length), axes: state.activeZone.plan.shared_axes.join('/') })
         : undefined
       return {
         ...state,

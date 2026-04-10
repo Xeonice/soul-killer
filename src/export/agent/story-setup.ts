@@ -11,25 +11,38 @@ import { STORY_SETUP_PROMPT, buildStorySetupPrompt } from './prompts.js'
 import { runAgentLoop } from './agent-loop.js'
 import { logger } from '../../infra/utils/logger.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
+import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 
 export function makeStorySetupTools(
   builder: ExportBuilder,
   onProgress: OnExportProgress,
   askUser: AskUserHandler,
   completionTracker: { proseStyleSet: boolean },
+  exportLanguage: 'zh' | 'en' | 'ja' = 'zh',
 ) {
   return {
     ask_user: tool({
-      description: '兜底: 仅在分析中发现数据严重不足时使用，向用户提出问题。正常路径不要使用。',
+      description: 'Fallback: only use when analysis reveals critically insufficient data. Do not use in normal flow.',
       inputSchema: z.object({
-        question: z.string().describe('要问用户的问题'),
+        question: z.string().describe('The question to ask the user'),
         options: z.array(z.object({
           label: z.string(),
           description: z.string().optional(),
-        })).optional().describe('选项列表'),
-        allow_free_input: z.boolean().optional().describe('是否允许自由文本输入'),
-        multi_select: z.boolean().optional().describe('是否允许多选'),
+        })).optional().describe('Option list'),
+        allow_free_input: z.boolean().optional().describe('Whether to allow free text input'),
+        multi_select: z.boolean().optional().describe('Whether to allow multi-select'),
       }),
+      inputExamples: [{
+        input: {
+          question: 'The character data seems insufficient. How would you like to proceed?',
+          options: [
+            { label: 'Continue with available data', description: 'Use what we have' },
+            { label: 'Cancel export', description: 'Stop and add more data first' },
+          ],
+          allow_free_input: false,
+          multi_select: false,
+        },
+      }],
       execute: async ({ question, options, allow_free_input, multi_select }) => {
         onProgress({ type: 'ask_user_start', question, options, allow_free_input, multi_select })
         const answer = await askUser(question, options, allow_free_input, multi_select)
@@ -39,21 +52,35 @@ export function makeStorySetupTools(
     }),
 
     set_story_metadata: tool({
-      description: '设定故事整体框架（genre / tone / constraints / acts_options / default_acts）。这是分阶段工作流的第一步。',
+      description: 'Set story-level framework (genre / tone / constraints / acts_options / default_acts). This is the first step of the staged workflow.',
+      strict: true,
       inputSchema: z.object({
-        genre: z.string().describe('故事类型，如 "都市奇幻 / 心理剧"'),
-        tone: z.string().describe('反映角色组合独特性的基调，禁用通用词'),
-        constraints: z.array(z.string()).describe('约束列表，至少一条 tradeoff 约束'),
-        acts_options_csv: z.string().describe('2-3 个长度预设，格式：acts:label_zh:rounds_total:endings_count，用竖线分隔。例: "3:短篇:24-36:4|5:中篇:40-60:5|7:长篇:56-84:6"'),
-        default_acts: z.number().describe('推荐默认值，必须等于 acts_options 中某项的 acts'),
+        genre: z.string().describe('Story genre, e.g. "urban fantasy / psychological drama"'),
+        tone: z.string().describe('Tone reflecting the unique character combination; avoid generic words'),
+        constraints: z.array(z.string()).describe('Constraint list, must include at least one tradeoff constraint'),
+        acts_options_csv: z.string().describe('2-3 length presets, format: acts:label:rounds_total:endings_count, pipe-separated. E.g. "3:short:24-36:4|5:medium:40-60:5|7:long:56-84:6"'),
+        default_acts: z.number().describe('Recommended default, must equal one of the acts values in acts_options'),
       }),
+      inputExamples: [{
+        input: {
+          genre: 'urban fantasy / psychological drama',
+          tone: 'The fragile bond between a fallen knight and a child of prophecy — honor corroded by compromise, innocence weaponized by fate',
+          constraints: [
+            'Every choice must create differentiated affinity impact across characters',
+            'The protagonist must face at least one irreversible betrayal per act',
+            'No character may achieve their stated goal without sacrificing another',
+          ],
+          acts_options_csv: '3:short:24-36:4|5:medium:40-60:5|7:long:56-84:6',
+          default_acts: 5,
+        },
+      }],
       execute: async ({ genre, tone, constraints, acts_options_csv, default_acts }) => {
         try {
           onProgress({ type: 'tool_start', tool: 'set_story_metadata' })
           // Parse acts_options_csv into ActOption[]
           const acts_options: ActOption[] = acts_options_csv.split('|').map((entry) => {
             const parts = entry.trim().split(':')
-            if (parts.length !== 4) throw new Error(`acts_options 格式错误，每项需要 4 个字段 (acts:label_zh:rounds_total:endings_count)，得到: "${entry}"`)
+            if (parts.length !== 4) throw new Error(`acts_options format error: each entry needs 4 fields (acts:label:rounds_total:endings_count), got: "${entry}"`)
             return {
               acts: Number(parts[0]),
               label_zh: parts[1],
@@ -75,30 +102,30 @@ export function makeStorySetupTools(
 
     set_story_state: tool({
       description:
-        '锁定故事层级的状态词汇表：2 个故事级共享好感轴（另一个 bond 是平台固定的）+ 关键事件 flags 列表。\n' +
-        '必须在 set_story_metadata 之后、任何 add_character 之前调用，整个 export 只调用一次。\n' +
+        'Lock in the story-level state vocabulary: 2 story-level shared affinity axes (bond is platform-fixed) + key event flags list.\n' +
+        'Must be called after set_story_metadata and before any add_character. Called exactly once per export.\n' +
         '\n' +
-        '## shared_axes_custom（恰好 2 个）\n' +
-        '选择最能反映这个故事核心关系动力学的 2 个维度。它们会成为所有角色的共享好感轴。\n' +
-        '约定：\n' +
-        '- 名字必须 snake_case（如 "trust" / "loyalty" / "rivalry" / "allegiance"）\n' +
-        '- 不允许 "bond"（已由平台固定）\n' +
-        '- 两个名字必须不同\n' +
-        '- 推荐语义上正交（如 trust + rivalry 彼此独立，而不是 trust + loyalty 相关）\n' +
+        '## shared_axes_custom (exactly 2)\n' +
+        'Choose 2 dimensions that best reflect the core relationship dynamics of this story. They become shared affinity axes for all characters.\n' +
+        'Rules:\n' +
+        '- Names must be snake_case (e.g. "trust" / "loyalty" / "rivalry" / "allegiance")\n' +
+        '- "bond" is not allowed (platform-fixed)\n' +
+        '- The two names must be different\n' +
+        '- Recommend semantically orthogonal (e.g. trust + rivalry are independent, not trust + loyalty which correlate)\n' +
         '\n' +
-        '## flags（5-8 个关键事件标记）\n' +
-        '从你预期的 ending 反推需要的 flags：列出这个故事会经历的核心分叉点。每个 flag 是一个 bool，在某个 scene 被触发为 true。\n' +
-        '例：[met_johnny, accepted_arasaka, witnessed_truth, chose_rebellion, saber_vanished]\n' +
+        '## flags (5-8 key event markers)\n' +
+        'Reverse-engineer flags from your expected endings: list the core branching points the story will go through. Each flag is a bool triggered to true in a scene.\n' +
+        'E.g.: [met_johnny, accepted_arasaka, witnessed_truth, chose_rebellion, saber_vanished]\n' +
         '\n' +
-        '规则：\n' +
-        '- 名字必须 snake_case，desc 必须非空（给 Phase 1 LLM 作为触发判断的参考）\n' +
-        '- 初始值几乎总是 false（true 用于"故事开始前已发生的前置条件"）\n' +
-        '- 数量建议 5-8；超过 8 会触发 warning 但不阻塞\n' +
-        '- **Phase 1 LLM 不能创造新 flag**，只能引用这里声明的 flag 名。所以这一步必须把故事会用到的所有关键标记列全',
+        'Rules:\n' +
+        '- Names must be snake_case, desc must be non-empty (used by Phase 1 LLM as trigger guidance)\n' +
+        '- Initial value is almost always false (true for "preconditions that existed before the story began")\n' +
+        '- Recommended 5-8; exceeding 8 triggers a warning but does not block\n' +
+        '- **Phase 1 LLM cannot create new flags** — it can only reference flag names declared here. This step must enumerate all key markers the story will use',
       inputSchema: z.object({
-        shared_axis_1: z.string().describe('第 1 个非 bond 共享轴名，snake_case。例: "trust"'),
-        shared_axis_2: z.string().describe('第 2 个非 bond 共享轴名，snake_case，与第 1 个不同。例: "rivalry"'),
-        flags_csv: z.string().describe('flag 列表，格式：name:desc:initial(true/false)，用竖线分隔。例: "met_johnny:玩家首次遇到Johnny:false|chose_rebellion:玩家选择反抗:false"'),
+        shared_axis_1: z.string().describe('First non-bond shared axis name, snake_case. E.g. "trust"'),
+        shared_axis_2: z.string().describe('Second non-bond shared axis name, snake_case, different from the first. E.g. "rivalry"'),
+        flags_csv: z.string().describe('Flag list, format: name:desc:initial(true/false), pipe-separated. E.g. "met_johnny:Player first meets Johnny:false|chose_rebellion:Player chooses rebellion:false"'),
       }),
       execute: async ({ shared_axis_1, shared_axis_2, flags_csv }) => {
         try {
@@ -108,7 +135,7 @@ export function makeStorySetupTools(
           // Parse flags_csv into StoryStateFlag[]
           const flags: StoryStateFlag[] = flags_csv.split('|').map((entry) => {
             const parts = entry.trim().split(':')
-            if (parts.length < 3) throw new Error(`flags 格式错误，每项需要 3 个字段 (name:desc:initial)，得到: "${entry}"`)
+            if (parts.length < 3) throw new Error(`flags format error: each entry needs 3 fields (name:desc:initial), got: "${entry}"`)
             const name = parts[0]
             const initial = parts[parts.length - 1] === 'true'
             // desc may contain colons, so join middle parts
@@ -130,88 +157,92 @@ export function makeStorySetupTools(
     }),
 
     set_prose_style: tool({
+      strict: true,
       description:
-        '锁定本故事的**叙事风格锚点**：target_language / voice_anchor / forbidden_patterns / ip_specific。\n' +
-        '必须在 set_story_state 之后、任何 add_character 之前调用，整个 export 只调用一次。\n' +
-        '目的：杜绝所有 Phase 1/2 产出的中文文本中的翻译腔。\n' +
+        'Lock in the **narrative style anchor** for this story: target_language / voice_anchor / forbidden_patterns / ip_specific.\n' +
+        'Must be called after set_story_state and before any add_character. Called exactly once per export.\n' +
+        'Purpose: eliminate translatese from all Phase 1/2 generated text.\n' +
         '\n' +
-        '## 决策原则\n' +
-        '你刚读完了 world manifest 和每个角色的 style.md/identity.md。现在要为这个故事决定一份可操作的 prose style。\n' +
-        '这不是"抽象审美"；是把**具体反模式**挑出来供下游 LLM 对照。\n' +
+        '## Decision Principle\n' +
+        'You have just read the world manifest and each character\'s style.md/identity.md. Now decide an actionable prose style for this story.\n' +
+        'This is not "abstract aesthetics" — it\'s about identifying **concrete anti-patterns** for downstream LLMs to check against.\n' +
         '\n' +
         '## target_language\n' +
-        '第一版只支持 "zh"。\n' +
+        'The target language for this export (zh / en / ja).\n' +
         '\n' +
-        '## voice_anchor（至少 20 字）\n' +
-        '一句话描述本故事的叙事语气。**必须含具体 IP 类型词**（如 "type-moon 系日翻中视觉小说"、"古典章回白话"、"赛博朋克黑帮港式白话"、"现代都市口语")。\n' +
-        '反例：「fantasy novel」「应该克制、庄重」（太抽象，不可执行）\n' +
-        '正例：「type-moon 系日系视觉小说的中文官方译本风格。短句为主，旁白克制，保留日语停顿感但不保留日语语法」\n' +
+        '## voice_anchor (at least 20 characters)\n' +
+        'A single sentence describing the narrative voice of this story. **Must contain specific IP type keywords** (e.g. "Type-Moon visual novel official translation style", "classical Chinese chapter novel vernacular", "cyberpunk noir Hong Kong vernacular", "modern urban colloquial").\n' +
+        'Bad examples: "fantasy novel", "should be restrained, solemn" (too abstract, not actionable)\n' +
+        'Good examples: "Type-Moon Japanese visual novel official translation style. Short sentences, restrained narration, preserving Japanese pacing without Japanese grammar"\n' +
         '\n' +
-        '## forbidden_patterns（至少 3 条）\n' +
-        '从下方"通用中文翻译腔反例库"中挑出与本故事最相关的条目；可以改写 bad/good 内容以贴合本故事的世界观（保留 id 和 reason）。\n' +
-        '也可以追加故事特异的反例（自行编写 id/bad/good/reason 四字段）。\n' +
-        '每条的 bad 和 good 必须是真实可对比的中文段落，不是抽象描述。\n' +
+        '## forbidden_patterns (at least 3)\n' +
+        'Pick entries most relevant to this story from the "universal translatese anti-pattern library" below; you may rewrite bad/good content to fit this story\'s worldview (keep id and reason).\n' +
+        'You may also add story-specific anti-patterns (write your own id/bad/good/reason).\n' +
+        'Each entry\'s bad and good must be real comparable prose paragraphs, not abstract descriptions.\n' +
         '\n' +
-        '## ip_specific（至少 3 条，必须具体）\n' +
-        '为本故事/IP 现编的规则 bullet。**必须是具体可执行的规则**，而不是抽象方向。\n' +
-        '至少覆盖：1 条术语保留 / 1 条称谓或敬语 / 1 条比喻或意象池约束\n' +
-        '反例：「保持日系感」「应该克制」「注意氛围」\n' +
-        '正例：「宝具/Servant/Master 保留英文不意译」「樱 → 樱小姐（非"小樱"）」「比喻从"月光/雪/灯笼/石阶"池选词，不用西式钢铁或玻璃」\n' +
+        '## ip_specific (at least 3, must be concrete)\n' +
+        'Rules written specifically for this story/IP. **Must be concrete, actionable rules**, not abstract directions.\n' +
+        'Must cover at least: 1 terminology preservation rule / 1 honorific or title rule / 1 metaphor or imagery pool constraint\n' +
         '\n' +
-        '## character_voice_summary（可选）\n' +
-        '当某个角色的 style.md 含 > 30% 非中文内容（典型：fsn 角色的日文引文），为该角色提供一份中文克制书面摘要（≤ 200 字）。\n' +
-        '摘要应复述 1-2 句该角色的标志性台词作为锚点。\n' +
-        '其他情况省略该字段即可。\n' +
+        '## character_voice_summary (optional)\n' +
+        'When a character\'s style.md contains > 30% non-native-language content (e.g. Japanese quotes in FSN characters for a Chinese export), provide a restrained summary (≤ 200 chars) in the target language.\n' +
+        'The summary should paraphrase 1-2 iconic lines as voice anchors.\n' +
+        'Omit this field for characters whose style.md is already in the target language.\n' +
         '\n' +
-        '## 通用中文翻译腔反例库（IP-agnostic，作为 forbidden_patterns 的选择池和启发）\n' +
+        '## Universal Translatese Anti-Pattern Library (IP-agnostic, as selection pool and inspiration for forbidden_patterns)\n' +
         '\n' +
-        formatPatternsForToolDescription(),
+        formatPatternsForToolDescription(exportLanguage),
       inputSchema: z.object({
         target_language: z
-          .literal('zh')
-          .describe('目标语言，第一版只支持 zh'),
+          .enum(['zh', 'en', 'ja'])
+          .describe('Target language: "zh", "en", or "ja"'),
         voice_anchor: z
           .string()
           .min(20)
-          .describe('一句话描述本故事叙事语气，必须含具体 IP 类型词'),
-        forbidden_patterns_csv: z
-          .string()
-          .describe('至少 3 条，格式：id;;bad;;good;;reason，用 ||| 分隔条目。用 ;; 分隔字段（因为 bad/good 内容可能含逗号冒号）'),
-        ip_specific: z
-          .array(z.string())
-          .min(3)
-          .describe('至少 3 条故事/IP 特异的具体规则'),
-        voice_summary_entries: z
-          .string()
-          .optional()
-          .describe('可选。格式：角色名::摘要文本，多个用 ||| 分隔。例: "間桐桜::温柔克制的敬语..."'),
+          .describe('One sentence describing narrative voice, must contain specific IP type keywords'),
+        forbidden_patterns: z.array(z.object({
+          id: z.string().describe('snake_case identifier, e.g. "degree_clause"'),
+          bad: z.string().describe('Bad example: a prose paragraph with translatese'),
+          good: z.string().describe('Good example: the same content in natural prose'),
+          reason: z.string().describe('Why the bad example is translatese'),
+        })).min(3).describe('At least 3 anti-translatese pattern entries'),
+        ip_specific: z.array(z.string()).min(3).describe('At least 3 concrete story/IP-specific rules'),
+        voice_summaries: z.array(z.object({
+          character_name: z.string(),
+          summary: z.string().describe('Restrained summary in target language, ≤ 200 chars, with 1-2 iconic lines'),
+        })).optional().describe('Voice summaries for characters whose style.md has > 30% non-target-language content'),
       }),
+      inputExamples: [{
+        input: {
+          target_language: 'zh',
+          voice_anchor: 'Type-Moon visual novel official Chinese translation style. Short sentences, restrained narration, preserving Japanese pacing without Japanese grammar',
+          forbidden_patterns: [
+            { id: 'degree_clause', bad: 'She tightened her grip to the point where her nails dug into your clothes.', good: 'She tightened her grip. Her nails dug into your clothes.', reason: 'Literal translation of English "to the degree that" clause' },
+            { id: 'possessive_chain', bad: 'My Berserker. My Heracles. My... only friend.', good: 'Berserker. Heracles. ...my only friend.', reason: 'English possessive repetition is unnatural in Chinese' },
+            { id: 'abstract_noun', bad: 'Her voice had no inflection when she said "friend."', good: 'Her voice was flat as a lake when she said "friend."', reason: 'Chinese prefers concrete imagery over abstract negation' },
+          ],
+          ip_specific: [
+            'Noble Phantasm/Servant/Master must be kept in English, never translated',
+            'Sakura → Ms. Sakura (not "Little Sakura"); Shirou → Emiya',
+            'Metaphors must draw from moon/snow/lantern/stone-steps imagery pool, not Western steel or glass',
+          ],
+        },
+      }],
       execute: async ({
         target_language,
         voice_anchor,
-        forbidden_patterns_csv,
+        forbidden_patterns,
         ip_specific,
-        voice_summary_entries,
+        voice_summaries,
       }) => {
         try {
           onProgress({ type: 'tool_start', tool: 'set_prose_style' })
-          // Parse forbidden_patterns_csv into ProseStyleForbiddenPattern[]
-          const forbidden_patterns: ProseStyleForbiddenPattern[] = forbidden_patterns_csv.split('|||').map((entry) => {
-            const parts = entry.trim().split(';;')
-            if (parts.length !== 4) throw new Error(`forbidden_patterns 格式错误，每项需要 4 个字段 (id;;bad;;good;;reason)，得到: "${entry.trim()}"`)
-            return { id: parts[0].trim(), bad: parts[1].trim(), good: parts[2].trim(), reason: parts[3].trim() }
-          })
-          if (forbidden_patterns.length < 3) throw new Error('forbidden_patterns 必须至少 3 条')
-          // Parse voice_summary_entries into Record<string, string>
+          // Build character_voice_summary from structured array
           let character_voice_summary: Record<string, string> | undefined
-          if (voice_summary_entries && voice_summary_entries.trim().length > 0) {
+          if (voice_summaries && voice_summaries.length > 0) {
             character_voice_summary = {}
-            for (const entry of voice_summary_entries.split('|||')) {
-              const sepIdx = entry.indexOf('::')
-              if (sepIdx < 0) throw new Error(`voice_summary_entries 格式错误，缺少 :: 分隔符: "${entry.trim()}"`)
-              const charName = entry.slice(0, sepIdx).trim()
-              const summary = entry.slice(sepIdx + 2).trim()
-              character_voice_summary[charName] = summary
+            for (const vs of voice_summaries) {
+              character_voice_summary[vs.character_name] = vs.summary
             }
           }
           builder.setProseStyle({
@@ -262,7 +293,7 @@ export async function runStorySetup(
   const tag = '[export-story-setup]'
 
   const completionTracker = { proseStyleSet: false }
-  const tools = makeStorySetupTools(builder, onProgress, askUser, completionTracker)
+  const tools = makeStorySetupTools(builder, onProgress, askUser, completionTracker, preSelected.exportLanguage)
 
   const STORY_SETUP_STEP_CAP = 8 // 3 normal + 5 buffer
 
@@ -274,6 +305,7 @@ export async function runStorySetup(
     temperature: 0,
     providerOptions: providerOpts,
     stopWhen: [stepCountIs(STORY_SETUP_STEP_CAP), () => completionTracker.proseStyleSet],
+    experimental_repairToolCall: createArrayArgRepair(),
   })
 
   const prompt = buildStorySetupPrompt(plan, preSelected)
@@ -290,11 +322,11 @@ export async function runStorySetup(
 
     if (!completionTracker.proseStyleSet) {
       const detail = result.llmError
-        ? `${result.llmError}。`
+        ? `${result.llmError}.`
         : result.aborted
-          ? 'Story Setup 超时（90秒无响应）。'
-          : `Story Setup 在 ${result.stepCount} 步内未完成（未调用 set_prose_style）。`
-      const errorMsg = `故事设置失败：${detail}\n查看详细日志：${agentLog.filePath}`
+          ? 'Story Setup timed out (90s no response).'
+          : `Story Setup did not complete within ${result.stepCount} steps (set_prose_style was not called).`
+      const errorMsg = `Story setup failed: ${detail}\nSee detailed log: ${agentLog.filePath}`
       logger.warn(`${tag} ${errorMsg}`)
       onProgress({ type: 'error', error: errorMsg })
       return false

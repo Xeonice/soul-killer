@@ -37,6 +37,12 @@ export function createSupplementSearchTool(
       dimensionName: z.string().describe('The dimension to supplement'),
       keywords: z.array(z.string()).describe('Search keywords (2-4 items, each a short phrase). Example: ["曹魏", "政治制度"] or ["Battle of Chibi", "tactics"]'),
     }),
+    inputExamples: [{
+      input: {
+        dimensionName: 'history',
+        keywords: ['Battle of Chibi', 'tactics', 'naval warfare'],
+      },
+    }],
     execute: async ({ dimensionName, keywords }) => {
       const query = keywords.join(' ')
       const count = supplementCounts.get(dimensionName) ?? 0

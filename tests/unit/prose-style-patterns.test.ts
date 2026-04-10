@@ -51,11 +51,11 @@ describe('ZH_TRANSLATESE_PATTERNS', () => {
 })
 
 describe('formatPatternsForToolDescription', () => {
-  it('renders each pattern with ✗ / ✓ / 理由 labels', () => {
+  it('renders each pattern with ✗ / ✓ / Reason labels', () => {
     const out = formatPatternsForToolDescription()
-    expect(out).toContain('✗ 反例：')
-    expect(out).toContain('✓ 正例：')
-    expect(out).toContain('理由：')
+    expect(out).toContain('✗ Bad:')
+    expect(out).toContain('✓ Good:')
+    expect(out).toContain('Reason:')
   })
 
   it('includes the id for every pattern', () => {

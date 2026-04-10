@@ -132,7 +132,7 @@ export interface StoryState {
  *   primary voice anchor for the named character.
  */
 export interface ProseStyle {
-  target_language: 'zh'
+  target_language: 'zh' | 'en' | 'ja'
   voice_anchor: string
   forbidden_patterns: ProseStyleForbiddenPattern[]
   ip_specific: string[]
@@ -207,67 +207,67 @@ function formatCharactersBlock(characters: CharacterSpec[]): string {
 }
 
 function buildMultiCharacterRules(characters: CharacterSpec[]): string {
-  const charNames = characters.map((c) => c.name).join('、')
+  const charNames = characters.map((c) => c.name).join(', ')
   const protagonist = characters.find((c) => c.role === 'protagonist')?.name ?? characters[0]?.name ?? ''
 
   return `
-## 多角色编排（Cast）
+## Multi-Character Cast
 
-本剧本包含 ${characters.length} 个核心角色：${charNames}。
+This script features ${characters.length} core characters: ${charNames}.
 
-### 角色定位
+### Character Roles
 
 ${characters.map((c) => {
-  const roleLabel = c.role === 'protagonist' ? '主角'
-    : c.role === 'deuteragonist' ? '次主角/对位角色'
-    : c.role === 'antagonist' ? '对立角色'
-    : '配角'
+  const roleLabel = c.role === 'protagonist' ? 'Protagonist'
+    : c.role === 'deuteragonist' ? 'Deuteragonist'
+    : c.role === 'antagonist' ? 'Antagonist'
+    : 'Supporting'
   const axes = c.axes.map((a) => `${a.name}(${a.english})`).join(' / ')
-  const appearsLine = c.appears_from && c.appears_from !== 'act_1' ? `从 ${c.appears_from} 开始登场` : '全程出场'
-  const dynamicsLine = c.dynamics_note ? `\n  - 动态: ${c.dynamics_note}` : ''
+  const appearsLine = c.appears_from && c.appears_from !== 'act_1' ? `Appears from ${c.appears_from}` : 'Present throughout'
+  const dynamicsLine = c.dynamics_note ? `\n  - Dynamics: ${c.dynamics_note}` : ''
   return `- **${c.name}** [${roleLabel}]
-  - 好感轴: ${axes}
-  - 出场: ${appearsLine}${dynamicsLine}`
+  - Affinity axes: ${axes}
+  - Appearance: ${appearsLine}${dynamicsLine}`
 }).join('\n')}
 
-### Cast 调度规则
+### Cast Scheduling Rules
 
-每个场景必须显式标注 cast（在场角色），不在场角色不参与该场景对话，其好感轴不受该场景选项影响。
+Every scene must explicitly annotate its cast (characters present). Characters not in the cast do not participate in that scene's dialogue, and their affinity axes are not affected by that scene's choices.
 
 \`\`\`
-[scene: 场景ID]
+[scene: scene_id]
 
 [narration]
-旁白...
+Narration text...
 
 [cast]
 - ${protagonist}: { mood: ..., stance: ... }
-- {其他在场角色}: { mood: ..., stance: ... }
+- {other_present_character}: { mood: ..., stance: ... }
 
 [dialogue]
 ${protagonist}: "..."
-{其他角色}: "..."
-（旁白可穿插）
+{other_character}: "..."
+(narration may be interspersed)
 
 [choices]
-- "选项文字" -> scene:{下一场景} | ${protagonist}.${characters[0]?.axes[0]?.english ?? 'trust'} +2, {其他角色}.{轴} +/- N
+- "Choice text" -> scene:{next_scene} | ${protagonist}.${characters[0]?.axes[0]?.english ?? 'trust'} +2, {other_character}.{axis} +/- N
 - ...
 \`\`\`
 
-### 选项 Tradeoff 约束（重要）
+### Choice Tradeoff Constraints (Important)
 
-- 每个选项必须对**不同角色产生差异化好感影响**（一个上升另一个下降，或不同强度）
-- **禁止**所有选项对所有角色产生相同方向的影响（这是无意义选项）
-- 至少有一个选项要让 protagonist 和 deuteragonist 之间产生张力
-- 配角好感影响幅度通常小于主要角色
+- Each choice must produce **differentiated affinity effects across characters** (one goes up while another goes down, or different magnitudes)
+- **It is forbidden** for all choices to affect all characters in the same direction (such choices are meaningless)
+- At least one choice must create tension between the protagonist and deuteragonist
+- Supporting characters' affinity changes should generally be smaller than those of main characters
 
-### 角色出场时机
+### Character Appearance Timing
 
 ${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').length > 0
   ? characters.filter((c) => c.appears_from && c.appears_from !== 'act_1')
-      .map((c) => `- ${c.name}: 从 ${c.appears_from} 开始登场，首次出场必须有自然引入`)
+      .map((c) => `- ${c.name}: Appears from ${c.appears_from} onward; first appearance must have a natural introduction`)
       .join('\n')
-  : '所有角色全程出场。'}
+  : 'All characters are present throughout the story.'}
 `
 }
 
@@ -309,7 +309,7 @@ function buildMultiCharacterStateSystem(
     for (const axis of sharedAxes) {
       const initial = overrides[axis] ?? 5
       schemaExampleLines.push(`  "affinity.${slug}.${axis}":`)
-      schemaExampleLines.push(`    desc: "${c.name} 的${axis}（共享轴）"`)
+      schemaExampleLines.push(`    desc: "${c.name} ${axis} (shared axis)"`)
       schemaExampleLines.push(`    type: int`)
       schemaExampleLines.push(`    range: [0, 10]`)
       schemaExampleLines.push(`    default: ${initial}`)
@@ -317,7 +317,7 @@ function buildMultiCharacterStateSystem(
     // Specific axes
     for (const a of c.axes) {
       schemaExampleLines.push(`  "affinity.${slug}.${a.english}":`)
-      schemaExampleLines.push(`    desc: "${c.name} — ${a.name}（特异轴）"`)
+      schemaExampleLines.push(`    desc: "${c.name} — ${a.name} (specific axis)"`)
       schemaExampleLines.push(`    type: int`)
       schemaExampleLines.push(`    range: [0, 10]`)
       schemaExampleLines.push(`    default: ${a.initial}`)
@@ -340,69 +340,69 @@ function buildMultiCharacterStateSystem(
       return `\`${axis}\`=${initial}${mark}`
     }).join(', ')
     const specificParts = c.axes.length === 0
-      ? '(无特异轴)'
+      ? '(none)'
       : c.axes.map((a) => `\`${a.english}\`(${a.name})=${a.initial}`).join(', ')
-    return `- **${c.name}** (slug: \`${slug}\`)\n  - 共享轴 initial: ${sharedParts}\n  - 特异轴: ${specificParts}`
+    return `- **${c.name}** (slug: \`${slug}\`)\n  - Shared axes initial: ${sharedParts}\n  - Specific axes: ${specificParts}`
   }).join('\n')
 
   const flagsListing = flagsList.length === 0
-    ? '(本故事未通过 set_story_state 声明 flags — 本字段应由 export agent 填写)'
+    ? '(No flags declared via set_story_state for this story — this field should be filled in by the export agent)'
     : flagsList.map((f) => `- \`flags.${f.name}\` — ${f.desc} (initial: ${f.initial})`).join('\n')
 
   return `
-## 状态系统（多角色，三层结构）
+## State System (Multi-Character, Three-Layer Structure)
 
-剧本所有运行时状态字段必须在 \`script.yaml\` 顶部的 \`state_schema\` 块中**显式声明**——key 是带引号的字面字符串，含 type / range / default / desc。详细约束见 SKILL.md 的「state_schema 创作约束」节。
+All runtime state fields must be **explicitly declared** in the \`state_schema\` block at the top of \`script.yaml\` — each key is a quoted literal string with type / range / default / desc. See the "state_schema authoring constraints" section in SKILL.md for detailed rules.
 
-**重要**: schema key **必须使用 ASCII slug**（小写字母 / 数字 / 连字符 / 下划线）作为角色命名空间，不允许 CJK 字符。每个角色对应的 slug 见 SKILL.md 顶部的「角色路径映射」表。
+**Important**: Schema keys **must use ASCII slugs** (lowercase letters / digits / hyphens / underscores) as the character namespace. CJK characters are not allowed. See the "Character Path Mapping" table at the top of SKILL.md for each character's slug.
 
-状态分**三层**：**共享 axes**（所有角色都有）、**角色特异 axes**（每角色 0-2 个）、**flags**（故事级预定义）。
+State is organized into **three layers**: **shared axes** (every character has them), **character-specific axes** (0-2 per character), and **flags** (story-level, predefined).
 
-### Layer 1: 共享 axes（每个角色必须全部 3 个）
+### Layer 1: Shared Axes (all 3 required per character)
 
-本故事的共享 axes 是 \`${sharedAxes.join(' / ')}\`，其中 \`bond\` 是平台固定、另外 2 个由 export agent 在 \`set_story_state\` 时声明。
-每个角色**必须**有完整的 3 个共享 axes 字段，**没有 opt-out**。共享 axes 用于 ending DSL 的跨角色聚合（\`all_chars\` / \`any_char\`）。
+This story's shared axes are \`${sharedAxes.join(' / ')}\`, where \`bond\` is platform-fixed and the other 2 are declared by the export agent via \`set_story_state\`.
+Every character **must** have all 3 shared axis fields — **no opt-out**. Shared axes are used for cross-character aggregation in the ending DSL (\`all_chars\` / \`any_char\`).
 
-### Layer 2: 角色特异 axes（每角色 0-2 个）
+### Layer 2: Character-Specific Axes (0-2 per character)
 
-特异 axes 是该角色独有的情感 / 成长维度，纯 flavor，不参与跨角色聚合，但仍可在 ending condition 中作为该角色专属分支条件。
+Specific axes represent emotional or growth dimensions unique to a character. They are purely for flavor and do not participate in cross-character aggregation, but can still be used in ending conditions as character-exclusive branching criteria.
 
-### Layer 3: Flags（故事级预定义）
+### Layer 3: Flags (story-level, predefined)
 
-关键事件 flags 在 \`set_story_state\` 时**一次性声明**。**Phase 1 LLM 不能创造新 flag**，只能引用本节列出的 flag 名。
+Key event flags are declared **once** in \`set_story_state\`. **Phase 1 LLM cannot create new flags** — it may only reference flag names listed in this section.
 
-本故事声明的 flags：
+Flags declared for this story:
 
 ${flagsListing}
 
-### 各角色 state 设置
+### Per-Character State Configuration
 
 ${charactersListingLines}
 
-★ 标记表示该共享轴的 initial 被 per-character 覆盖（shared_initial_overrides）。
+The ★ marker indicates that the shared axis's initial value has been overridden per-character (shared_initial_overrides).
 
-### state_schema 示例（本故事 — 由 Phase 1 LLM 在 script.yaml 中逐字复制）
+### state_schema Example (this story — Phase 1 LLM must copy verbatim into script.yaml)
 
 \`\`\`yaml
 state_schema:
 ${schemaExampleLines.join('\n')}
 \`\`\`
 
-### 选项状态影响（consequences）
+### Choice State Effects (consequences)
 
-每个 \`choice.consequences\` **必须**只引用 schema 中已声明的字段，且 key 必须**逐字符复制**。一个选项可以同时影响多个角色的共享轴、特异轴，以及 flags。
+Each \`choice.consequences\` **must** only reference fields declared in the schema, and keys must be **copied character-for-character**. A single choice can affect multiple characters' shared axes, specific axes, and flags simultaneously.
 
 \`\`\`yaml
 choices:
-  - text: "选项文字"
+  - text: "Choice text"
     consequences:
-      "affinity.${sampleCharA}.bond": -2                # 共享轴 delta
-      "affinity.${sampleCharB}.${sampleSharedAxis}": +1  # 另一角色另一共享轴
-      "flags.${sampleFlagName}": true                    # 故事级 flag 触发
+      "affinity.${sampleCharA}.bond": -2                # shared axis delta
+      "affinity.${sampleCharB}.${sampleSharedAxis}": +1  # another character, another shared axis
+      "flags.${sampleFlagName}": true                    # story-level flag trigger
     next: "scene-next"
 \`\`\`
 
-不同选项必须对**不同角色**产生差异化好感影响（这是 story-spec 的硬约束）。
+Different choices must produce **differentiated affinity effects across characters** (this is a hard constraint of story-spec).
 `
 }
 
@@ -426,35 +426,35 @@ function buildMultiCharacterEnding(
   })()
 
   return `
-## 结局判定（多角色组合，结构化 DSL）
+## Ending Evaluation (Multi-Character Combination, Structured DSL)
 
-至少 ${minEndings} 个不同结局（取决于运行时所选幕数），由多角色好感轴的组合 + 关键事件标记决定。
+At least ${minEndings} distinct endings (depending on the number of acts selected at runtime), determined by the combination of multi-character affinity axes + key event flags.
 
-每个结局的 \`condition\` 字段**必须**用结构化 DSL（不接受自然语言字符串表达式）。
-详细语法见 SKILL.md 的「endings condition 结构化 DSL」节。
+Each ending's \`condition\` field **must** use the structured DSL (natural language string expressions are not accepted).
+See the "endings condition structured DSL" section in SKILL.md for detailed syntax.
 
-按 endings 数组顺序遍历，第一个 \`evaluate(condition) === true\` 的 ending 触发。
-**最后一个结局必须** \`condition: default\` 兜底。
+Endings are evaluated in array order; the first ending where \`evaluate(condition) === true\` is triggered.
+**The last ending must** use \`condition: default\` as the fallthrough.
 
-DSL 中引用的所有 \`affinity.<slug>.<axis>\` key 必须使用角色的 ASCII slug（见 SKILL.md 顶部「角色路径映射」表），不允许 CJK。
+All \`affinity.<slug>.<axis>\` keys referenced in the DSL must use the character's ASCII slug (see the "Character Path Mapping" table at the top of SKILL.md). CJK characters are not allowed.
 
-### 可用 DSL 节点
+### Available DSL Nodes
 
-- **比较节点**: \`{ key, op, value }\` — 引用任意 schema 字段（共享/特异轴、flags、custom）
-- **布尔组合**: \`all_of: [...]\` / \`any_of: [...]\` / \`not: {...}\`
-- **跨角色聚合**（仅对**共享轴**有效）:
-  - \`all_chars: { axis, op, value, except? }\` — 所有角色（去掉 except 列表）该共享轴都满足条件
-  - \`any_char: { axis, op, value, except? }\` — 至少一个角色（去掉 except 列表）该共享轴满足条件
-- **兜底**: \`condition: default\`
+- **Comparison node**: \`{ key, op, value }\` — references any schema field (shared/specific axes, flags, custom)
+- **Boolean combinators**: \`all_of: [...]\` / \`any_of: [...]\` / \`not: {...}\`
+- **Cross-character aggregation** (only valid for **shared axes**):
+  - \`all_chars: { axis, op, value, except? }\` — all characters (excluding the except list) satisfy the condition on this shared axis
+  - \`any_char: { axis, op, value, except? }\` — at least one character (excluding the except list) satisfies the condition on this shared axis
+- **Fallthrough**: \`condition: default\`
 
-**重要**: \`all_chars\` / \`any_char\` 的 \`axis\` 只能引用**共享轴**（\`bond\` 或 story_state.shared_axes_custom 里的 2 个），**不能**引用角色特异轴（特异轴各角色不同名，不能跨角色聚合）。
+**Important**: The \`axis\` in \`all_chars\` / \`any_char\` may only reference **shared axes** (\`bond\` or the 2 axes in story_state.shared_axes_custom). It **cannot** reference character-specific axes (specific axes have different names per character and cannot be aggregated across characters).
 
-格式示例（在 script.yaml 中）：
+Format example (in script.yaml):
 \`\`\`yaml
 endings:
-  # 示例 1: 全体接纳 —— 用 all_chars 聚合所有角色的共享轴
+  # Example 1: Universal acceptance — using all_chars to aggregate shared axes across all characters
   - id: "ending-unity"
-    title: "众志成城"
+    title: "United We Stand"
     condition:
       all_of:
         - all_chars: { axis: "bond", op: ">=", value: 7, except: ["${villainSlug}"] }
@@ -462,9 +462,9 @@ endings:
     body: |
       ...
 
-  # 示例 2: 双角色对立 —— ${displayA} 得分高而 ${displayB} 彻底敌对
+  # Example 2: Dual-character opposition — ${displayA} scores high while ${displayB} becomes fully hostile
   - id: "ending-${slugA}-route"
-    title: "${displayA} 专属结局"
+    title: "${displayA} Exclusive Ending"
     condition:
       all_of:
         - { key: "affinity.${slugA}.bond", op: ">=", value: 8 }${specificAxisA ? `
@@ -473,41 +473,41 @@ endings:
     body: |
       ...
 
-  # 示例 3: 任一角色达成觉悟 —— 用 any_char
+  # Example 3: Any character achieves enlightenment — using any_char
   - id: "ending-breakthrough"
-    title: "至少一人觉悟"
+    title: "At Least One Awakens"
     condition:
       any_char: { axis: "${sampleSharedAxis}", op: ">=", value: 9 }
     body: |
       ...
 
   - id: "ending-default"
-    title: "默认结局"
+    title: "Default Ending"
     condition: default
     body: |
       ...
 \`\`\`
 
-### 结局设计指引
+### Ending Design Guidelines
 
-- 不同结局应该反映**不同角色组合**的最终状态
-- 至少要有：
-  - 1 个偏向 protagonist 的结局
-  - 1 个偏向 deuteragonist 的结局
-  - 1 个所有角色都达到高好感的"完美"结局
-  - 1 个默认/失败结局
-- 结局之间必须有明显的情感差异
+- Different endings should reflect the **final state of different character combinations**
+- At minimum, include:
+  - 1 ending favoring the protagonist
+  - 1 ending favoring the deuteragonist
+  - 1 "perfect" ending where all characters reach high affinity
+  - 1 default/failure ending
+- Endings must have distinct emotional tones
 
-## 结局图鉴展示
+## Ending Gallery Display
 
-到达结局时按以下顺序展示：
+When an ending is reached, present the following in order:
 
-### 1. 结局演绎
-结局旁白 + 在场角色的完整演绎（与普通场景格式一致）。
+### 1. Ending Narration
+Ending narration + full portrayal of present characters (same format as regular scenes).
 
-### 2. 旅程回顾
+### 2. Journey Recap
 
-按角色分组展示每个角色的好感轴最终值：
+Display each character's final affinity axis values, grouped by character:
 
 \`\`\`
 ${characters.map((c) => {
@@ -516,39 +516,39 @@ ${characters.map((c) => {
 }).join('\n')}
 \`\`\`
 
-进度条格式：\`'█'.repeat(value) + '░'.repeat(10-value)\`
+Progress bar format: \`'█'.repeat(value) + '░'.repeat(10-value)\`
 
-### 3. 关键事件标记
+### 3. Key Event Flags
 
 \`\`\`
-{事件名} ✓  (已触发)
-{事件名} ✗  (未触发)
+{event_name} ✓  (triggered)
+{event_name} ✗  (not triggered)
 \`\`\`
 
-### 4. 结局图鉴（所有结局）
+### 4. Ending Gallery (All Endings)
 
-列出**所有**结局，每个包含：
-- 标题（达成的标 ★，未达成标 ☆）
-- 触发条件概述（如"需要诸葛亮信任 ≥ 7 且分享了秘密"）
-- 一句预览文字（该结局开头第一句话）
+List **all** endings, each containing:
+- Title (achieved endings marked with ★, unachieved with ☆)
+- Trigger condition summary (e.g., "Requires character_a.trust >= 7 and shared the secret")
+- One preview line (the first sentence of that ending)
 
-格式示例：
+Format example:
 \`\`\`
-★ 星落五丈原 (已达成)
-  "你守到了最后..."
+★ Stars Fall at Wuzhang Plains (Achieved)
+  "You held on until the very end..."
 
-☆ 卧龙凤雏 (未达成)
-  条件: 诸葛亮.bond ≥ 8 AND 黄月英.warmth ≥ 8
-  "如果你更早认识她..."
+☆ Sleeping Dragon and Fledgling Phoenix (Not Achieved)
+  Condition: character_a.bond >= 8 AND character_b.warmth >= 8
+  "If only you had met her sooner..."
 \`\`\`
 
-### 5. 重玩选项
+### 5. Replay Options
 
-使用 AskUserQuestion 提供：
-- "从头再来" — **复用当前剧本**，重置 affinity 和 flags 到剧本声明的 \`initial_state\`，清空当前 slot 的 state.yaml，从 Phase 2 第一场景重新开始；不重新进入 Phase 0/1，不重新生成剧本
-- "结束故事" — 故事完结
+Use AskUserQuestion to provide:
+- "Start Over" — **reuse the current script**, reset affinity and flags to the script's declared \`initial_state\`, clear the current slot's state.yaml, restart from Phase 2's first scene; does not re-enter Phase 0/1 or regenerate the script
+- "End Story" — story concludes
 
-如需玩全新剧本，请结束故事后重启 skill，在 Phase -1 菜单选择「生成新剧本」。
+To play a completely new script, end the story and restart the skill, then select "Generate New Script" from the Phase -1 menu.
 `
 }
 
@@ -559,57 +559,57 @@ function buildSingleCharacterStateSystem(storyState?: StoryState): string {
   const flagsList = storyState?.flags ?? []
 
   const flagsListing = flagsList.length === 0
-    ? '(本故事未通过 set_story_state 声明 flags — 本字段应由 export agent 填写)'
+    ? '(No flags declared via set_story_state for this story — this field should be filled in by the export agent)'
     : flagsList.map((f) => `- \`flags.${f.name}\` — ${f.desc} (initial: ${f.initial})`).join('\n')
 
   return `
-## 状态系统（单角色，三层结构）
+## State System (Single Character, Three-Layer Structure)
 
-剧本所有运行时状态字段必须在 \`script.yaml\` 顶部的 \`state_schema\` 块中**显式声明**——key、type、default、desc。详细约束见 SKILL.md 的「state_schema 创作约束」节。
+All runtime state fields must be **explicitly declared** in the \`state_schema\` block at the top of \`script.yaml\` — each key with type, default, and desc. See the "state_schema authoring constraints" section in SKILL.md for detailed rules.
 
-状态分**三层**：**共享 axes**、**角色特异 axes**、**flags**。单角色模式下只有一个角色但仍按三层结构组织，以便与多角色模式行为一致。
+State is organized into **three layers**: **shared axes**, **character-specific axes**, and **flags**. In single-character mode there is only one character, but the three-layer structure is still used for consistency with multi-character mode.
 
-### Layer 1: 共享 axes（3 个）
+### Layer 1: Shared Axes (3 total)
 
-本故事的共享 axes 是 \`${sharedAxes.join(' / ')}\`，其中 \`bond\` 是平台固定、另外 2 个由 export agent 在 \`set_story_state\` 时声明。schema 中 key 形态：\`"affinity.<slug>.<axis>"\`。
+This story's shared axes are \`${sharedAxes.join(' / ')}\`, where \`bond\` is platform-fixed and the other 2 are declared by the export agent via \`set_story_state\`. Schema key format: \`"affinity.<slug>.<axis>"\`.
 
-### Layer 2: 角色特异 axes（0-2 个）
+### Layer 2: Character-Specific Axes (0-2 total)
 
-该主角独有的情感 / 成长维度，纯 flavor，不参与跨角色聚合（单角色模式下没有跨角色概念），但仍可进 ending condition。
+Emotional or growth dimensions unique to the protagonist. Purely for flavor; they do not participate in cross-character aggregation (not applicable in single-character mode), but can still be used in ending conditions.
 
-### Layer 3: Flags（故事级预定义）
+### Layer 3: Flags (story-level, predefined)
 
-关键事件 flags 在 \`set_story_state\` 时**一次性声明**。**Phase 1 LLM 不能创造新 flag**。
+Key event flags are declared **once** in \`set_story_state\`. **Phase 1 LLM cannot create new flags**.
 
-本故事声明的 flags：
+Flags declared for this story:
 
 ${flagsListing}
 
-### 选项状态影响（consequences）
+### Choice State Effects (consequences)
 
-每个场景的 \`choices[*].consequences\` **必须**只引用 \`state_schema\` 中已声明的字段，且 key 必须从 schema **逐字符复制**。
-- \`int\` 字段的 value 是 **delta**（加减），如 \`"affinity.<slug>.bond": -2\`
-- \`bool\` 字段的 value 是**绝对覆盖**，如 \`"flags.<name>": true\`
+Each scene's \`choices[*].consequences\` **must** only reference fields declared in the \`state_schema\`, and keys must be **copied character-for-character** from the schema.
+- \`int\` field values are **deltas** (add/subtract), e.g., \`"affinity.<slug>.bond": -2\`
+- \`bool\` field values are **absolute overwrites**, e.g., \`"flags.<name>": true\`
 
-不同选项应该对状态产生不同方向的影响，避免所有选项都加同一个轴。
+Different choices should produce effects in different directions; avoid having all choices increase the same axis.
 `
 }
 
 function buildSingleCharacterEnding(): string {
   return `
-## 结局判定（结构化 DSL）
+## Ending Evaluation (Structured DSL)
 
-每个结局的 \`condition\` 字段**必须**用结构化 DSL（不接受自然语言字符串表达式）。
-详细语法见 SKILL.md 的「endings condition 结构化 DSL」节。
+Each ending's \`condition\` field **must** use the structured DSL (natural language string expressions are not accepted).
+See the "endings condition structured DSL" section in SKILL.md for detailed syntax.
 
-按 endings 数组顺序遍历，第一个 \`evaluate(condition) === true\` 的 ending 触发。
-**最后一个结局必须** \`condition: default\` 兜底。
+Endings are evaluated in array order; the first ending where \`evaluate(condition) === true\` is triggered.
+**The last ending must** use \`condition: default\` as the fallthrough.
 
-格式示例（在 script.yaml 中）：
+Format example (in script.yaml):
 \`\`\`yaml
 endings:
   - id: "ending-trust-route"
-    title: "信任结局"
+    title: "Trust Ending"
     condition:
       all_of:
         - { key: "axes.trust", op: ">=", value: 7 }
@@ -618,33 +618,33 @@ endings:
       ...
 
   - id: "ending-understanding"
-    title: "理解结局"
+    title: "Understanding Ending"
     condition:
       { key: "axes.understanding", op: ">=", value: 7 }
     body: |
       ...
 
   - id: "ending-default"
-    title: "默认结局"
+    title: "Default Ending"
     condition: default
     body: |
       ...
 \`\`\`
 
-## 结局展示
+## Ending Display
 
-每个结局必须包含：
-1. 结局旁白和角色演绎（与普通场景格式一致）
-2. 旅程回顾数据：列出最终的数值轴值和触发的事件标记
-3. 所有其他结局的预览：标题 + 触发条件概述 + 一句预览文字
+Each ending must include:
+1. Ending narration and character portrayal (same format as regular scenes)
+2. Journey recap data: list final numeric axis values and triggered event flags
+3. Preview of all other endings: title + trigger condition summary + one preview line
 
-## 重玩选项
+## Replay Options
 
-使用 AskUserQuestion 提供：
-- "从头再来" — **复用当前剧本**，重置 axes 和 flags 到剧本声明的 \`initial_state\`，清空当前 slot 的 state.yaml，从 Phase 2 第一场景重新开始；不重新进入 Phase 0/1，不重新生成剧本
-- "结束故事" — 故事完结
+Use AskUserQuestion to provide:
+- "Start Over" — **reuse the current script**, reset axes and flags to the script's declared \`initial_state\`, clear the current slot's state.yaml, restart from Phase 2's first scene; does not re-enter Phase 0/1 or regenerate the script
+- "End Story" — story concludes
 
-如需玩全新剧本，请结束故事后重启 skill，在 Phase -1 菜单选择「生成新剧本」。
+To play a completely new script, end the story and restart the skill, then select "Generate New Script" from the Phase -1 menu.
 `
 }
 
@@ -656,8 +656,8 @@ function formatActOptionsBlock(options: ActOption[]): string {
 
 function formatActOptionsSummary(options: ActOption[], defaultActs: number): string {
   return options.map((o) => {
-    const marker = o.acts === defaultActs ? ' [推荐]' : ''
-    return `- **${o.label_zh}** (${o.acts} 幕，${o.rounds_total} 轮，${o.endings_count} 结局)${marker}`
+    const marker = o.acts === defaultActs ? ' [Recommended]' : ''
+    return `- **${o.label_zh}** (${o.acts} acts, ${o.rounds_total} rounds, ${o.endings_count} endings)${marker}`
   }).join('\n')
 }
 
@@ -702,7 +702,7 @@ function formatStoryStateSection(storyState: StoryState): string {
         const escapedDesc = f.desc.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
         return `  - name: ${f.name}\n    desc: "${escapedDesc}"\n    initial: ${f.initial}`
       }).join('\n')
-  return `\n## Story State\n\n本块由 export agent 在 \`set_story_state\` 时声明。Phase 1 LLM 在写 script.yaml 的 state_schema 时**必须**严格复用这里的 flag 列表（key: \`flags.<name>\`），不能增删或改名；Phase -1 加载时会做一致性验证。\n\n\`\`\`yaml\n${axesLine}\n${flagsLines}\n\`\`\`\n`
+  return `\n## Story State\n\nThis block is declared by the export agent via \`set_story_state\`. When Phase 1 LLM writes the state_schema in script.yaml, it **must** strictly reuse the flag list here (key: \`flags.<name>\`) — no additions, deletions, or renames are allowed. Phase -1 performs consistency validation on load.\n\n\`\`\`yaml\n${axesLine}\n${flagsLines}\n\`\`\`\n`
 }
 
 /**
@@ -742,7 +742,7 @@ function formatProseStyleSection(proseStyle: ProseStyle): string {
           .join('\n')
       : ''
 
-  return `\n## 叙事风格锚点\n\n本块由 export agent 在 \`set_prose_style\` 时声明。Phase 1 写 \`narration\`/\`dialogue\` 和 Phase 2 即兴演绎时**必须**遵守 forbidden_patterns 作为硬约束；ip_specific 是本故事的术语和称谓规范；character_voice_summary（如有）是对应角色的中文声音锚点，优先级高于 style.md 中可能存在的非中文引文。\n\n\`\`\`yaml\ntarget_language: ${proseStyle.target_language}\nvoice_anchor: "${escapeYaml(proseStyle.voice_anchor)}"\nforbidden_patterns:\n${forbiddenYaml}\nip_specific:\n${ipSpecificYaml}${voiceSummaryYaml}\n\`\`\`\n`
+  return `\n## Prose Style Anchor\n\nThis block is declared by the export agent via \`set_prose_style\`. Phase 1 when writing \`narration\`/\`dialogue\` and Phase 2 during improvised narration **must** obey forbidden_patterns as hard constraints; ip_specific contains terminology and form-of-address conventions for this story; character_voice_summary (if present) is the Chinese voice anchor for that character, taking precedence over any non-Chinese quotations in style.md.\n\n\`\`\`yaml\ntarget_language: ${proseStyle.target_language}\nvoice_anchor: "${escapeYaml(proseStyle.voice_anchor)}"\nforbidden_patterns:\n${forbiddenYaml}\nip_specific:\n${ipSpecificYaml}${voiceSummaryYaml}\n\`\`\`\n`
 }
 
 /**
@@ -761,7 +761,7 @@ function formatProseStyleFallbackSection(): string {
         `    reason: "${p.reason.replace(/"/g, '\\"')}"`,
     )
     .join('\n')
-  return `\n## 叙事风格锚点（fallback）\n\n本故事未通过 \`set_prose_style\` 声明叙事风格锚点（legacy archive）。Phase 1/2 LLM 使用以下通用中文写作约束作为 fallback：所有产出的中文文本必须避免下列通用翻译腔模式。\n\n\`\`\`yaml\ntarget_language: zh\nvoice_anchor: "通用克制书面中文，避免英文/日文句法的字面投影"\nforbidden_patterns:\n${fallbackYaml}\n\`\`\`\n`
+  return `\n## Prose Style Anchor (Fallback)\n\nThis story did not declare a prose style anchor via \`set_prose_style\` (legacy archive). Phase 1/2 LLM uses the following universal Chinese writing constraints as a fallback: all generated Chinese text must avoid these common translatese patterns.\n\n\`\`\`yaml\ntarget_language: zh\nvoice_anchor: "Restrained written Chinese, avoiding literal syntactic projections from English/Japanese"\nforbidden_patterns:\n${fallbackYaml}\n\`\`\`\n`
 }
 
 export function generateStorySpec(config: StorySpecConfig): string {
@@ -775,7 +775,7 @@ export function generateStorySpec(config: StorySpecConfig): string {
     : 4
 
   const constraintsBlock = constraints.length > 0
-    ? `\n## 额外约束\n\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
+    ? `\n## Additional Constraints\n\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
     : ''
 
   const charactersFrontmatter = characters && characters.length > 0
@@ -788,9 +788,9 @@ export function generateStorySpec(config: StorySpecConfig): string {
     ? formatUserDirectionBlock(user_direction.trim())
     : ''
 
-  const storyIdentityBlock = `\n# 故事身份
+  const storyIdentityBlock = `\n# Story Identity
 
-- **故事名**: ${story_name}${user_direction && user_direction.trim().length > 0 ? `\n- **用户原始意图**:\n\n> ${user_direction.trim().split('\n').join('\n> ')}\n` : ''}
+- **Story Name**: ${story_name}${user_direction && user_direction.trim().length > 0 ? `\n- **User's Original Intent**:\n\n> ${user_direction.trim().split('\n').join('\n> ')}\n` : ''}
 `
 
   const castSection = isMultiCharacter ? buildMultiCharacterRules(characters!) : ''
@@ -806,7 +806,7 @@ export function generateStorySpec(config: StorySpecConfig): string {
   // missing (legacy path) we emit an empty placeholder.
   const storyStateSection = story_state
     ? formatStoryStateSection(story_state)
-    : '\n## Story State\n\n(本故事未通过 set_story_state 声明。Phase -1 加载验证会把此视为 legacy，请重新 export。)\n'
+    : '\n## Story State\n\n(This story was not declared via set_story_state. Phase -1 load validation will treat this as legacy — please re-export.)\n'
 
   // Machine-parseable prose_style block. New exports always have prose_style
   // because ExportBuilder.build() throws without it. The fallback branch
@@ -824,78 +824,78 @@ tone: ${tone}${actOptionsFrontmatter}${charactersFrontmatter}---
 ${storyIdentityBlock}
 # Seeds
 
-此处由 Skill 运行时 Phase 0 收集的用户 seeds 动态填充。
-如果用户选择"让命运来决定"，则此段为空，完全随机生成。
+This section is dynamically populated with user seeds collected during Skill runtime Phase 0.
+If the user selects "Let fate decide", this section is left empty and generation is fully random.
 
-# 故事长度（运行时选择）
+# Story Length (Selected at Runtime)
 
-故事长度由用户在 Phase 0 选择，可选项：
+Story length is chosen by the user during Phase 0. Available options:
 
 ${formatActOptionsSummary(acts_options, default_acts)}
 
-引擎在用户选择后，将所选项的 acts 写入 \`state.chosen_acts\`，rounds_total 写入 \`state.rounds_budget\`，endings_count 写入 \`state.target_endings_count\`。后续所有结构性指标都以这些 runtime 值为准。
+After the user's selection, the engine writes the chosen option's acts to \`state.chosen_acts\`, rounds_total to \`state.rounds_budget\`, and endings_count to \`state.target_endings_count\`. All subsequent structural metrics are based on these runtime values.
 
-## appears_from 截断规则
+## appears_from Truncation Rule
 
-如果某角色的 \`appears_from\` 大于用户所选 \`chosen_acts\`：
-- 截断到最后一幕（act_{chosen_acts}）首次出场
-- 不报错，自然引入
+If a character's \`appears_from\` exceeds the user's selected \`chosen_acts\`:
+- Truncate to first appearance in the final act (act_{chosen_acts})
+- No error; introduce naturally
 
-# 剧本生成规约
+# Script Generation Rules
 
-## 结构要求
+## Structural Requirements
 
-- 幕数: 用户在 Phase 0 选择的 \`state.chosen_acts\`，每幕 2-4 个场景
-- 结局数: 至少 \`state.target_endings_count\` 个
-- 总交互轮数: \`state.rounds_budget\`
-- 每个场景结尾必须有 2-3 个选项
+- Number of acts: the user's Phase 0 selection via \`state.chosen_acts\`, with 2-4 scenes per act
+- Number of endings: at least \`state.target_endings_count\`
+- Total interaction rounds: \`state.rounds_budget\`
+- Each scene must end with 2-3 choices
 
-## 场景格式
+## Scene Format
 
-每个场景必须包含：
+Each scene must contain:
 
 \`\`\`
 [narration]
-第二人称沉浸式旁白，描述环境、氛围、角色状态。
+Second-person immersive narration describing the environment, atmosphere, and character states.
 
-[character: {角色名}]
-state: 角色当前的情绪/身体状态
-attitude: 对用户的态度
-key_info: 本场景必须透露的关键信息
-tone: 对话的情绪基调
+[character: {character_name}]
+state: the character's current emotional/physical state
+attitude: attitude toward the user
+key_info: key information this scene must reveal
+tone: emotional tone of the dialogue
 
 [choices]
-- "选项文字" -> scene:{下一场景ID} | {状态影响}
-- "选项文字" -> scene:{下一场景ID} | {状态影响}
+- "Choice text" -> scene:{next_scene_id} | {state effects}
+- "Choice text" -> scene:{next_scene_id} | {state effects}
 \`\`\`
 
-状态影响格式示例：\`trust +1, understanding +2\` 或 \`shared_secret = true\`
+State effect format examples: \`trust +1, understanding +2\` or \`shared_secret = true\`
 
-## 叙事约束
+## Narrative Constraints
 
-- 类型为「${genre}」，整体风格为「${tone}」
-- 开场必须自然引入角色与用户的相遇
-- 选项必须产生实质性的剧情分歧，不能殊途同归
-- 结局之间要有明显的情感差异
-- 世界观元素要自然融入场景，不要说教式展示
+- Genre is "${genre}", overall tone is "${tone}"
+- The opening must naturally introduce the encounter between the character and the user
+- Choices must produce substantive plot divergence — no converging to the same outcome
+- Endings must have distinct emotional tones
+- Worldbuilding elements should be woven naturally into scenes, not presented didactically
 
-## 角色约束
+## Character Constraints
 
-- 角色行为必须符合 souls/{角色名}/identity.md 中的人格描述
-- 说话方式必须符合 souls/{角色名}/style.md
-- 角色不会无条件信任用户，信任需要通过选择建立
+- Character behavior must align with the personality described in souls/{character_name}/identity.md
+- Speech patterns must conform to souls/{character_name}/style.md
+- Characters do not unconditionally trust the user; trust must be built through choices
 ${storyStateSection}${proseStyleSection}${castSection}${stateSection}${endingSection}
-## 幕间过渡
+## Act Transitions
 
-- 每次 Act 切换必须有过渡旁白（总结上一幕情绪余韵）
-- 过渡后附带一个反思性选择（不影响剧情走向，影响下一幕情绪入口）
+- Every act transition must have transitional narration (summarizing the emotional aftermath of the previous act)
+- Transitions should include a reflective choice (does not affect plot direction, but influences the emotional entry point of the next act)
 
-## 禁止
+## Prohibited
 
-- 不要生成超过 \`state.chosen_acts × 5\` 个场景（运行时上限）
-- 不要生成单选项场景（死路）
-- 不要在前 \`floor(state.chosen_acts / 2)\` 幕就出现结局分支
-- 不要让角色主动打破第四面墙
-- 静态参考: 最长剧本不超过 ${maxActs * 5} 个场景
+- Do not generate more than \`state.chosen_acts × 5\` scenes (runtime ceiling)
+- Do not generate single-choice scenes (dead ends)
+- Do not introduce ending branches before the first \`floor(state.chosen_acts / 2)\` acts
+- Do not let characters break the fourth wall
+- Static reference: the longest script must not exceed ${maxActs * 5} scenes
 ${constraintsBlock}`
 }

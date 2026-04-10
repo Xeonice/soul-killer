@@ -8,6 +8,8 @@ import type { SoulChunk } from '../../infra/ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 import { withExacto, getProviderOptions } from '../../infra/llm/client.js'
+import { t } from '../../infra/i18n/index.js'
+import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 import { logger } from '../../infra/utils/logger.js'
 
 // ========== Article Index (for sessionDir path) ==========
@@ -143,7 +145,7 @@ You may ONLY use information that you obtain through tool calls (sampleChunks / 
 - Adding facts (relationships, abilities, backstory, quotes) that don't appear in the source data
 - Even if you "know" the canonical version of this character is different from what the source says, the source wins
 
-If the source data is sparse, write a SHORTER profile rather than padding with invented or remembered content. A short, accurate profile is far better than a long profile poisoned with hallucinated details — downstream features (multi-soul export, Phase 2 runtime演绎) depend on the source-only invariant being intact.
+If the source data is sparse, write a SHORTER profile rather than padding with invented or remembered content. A short, accurate profile is far better than a long profile poisoned with hallucinated details — ${t('distill.runtime_note')}
 
 ## Output Files
 
@@ -185,9 +187,9 @@ Example structure:
 ${hasRelations
   ? `- **MANDATORY**: You MUST create a \`relationships\` behavior file. The research data contains relations dimension content — this file is REQUIRED for downstream multi-character export to work.
 - The relationships file MUST be structured by character pairs:
-  - Each related character gets its own \`## 与{角色名}的关系\` (or equivalent in source language) section
-  - Each section MUST contain: relationship type (宿敌/君臣/同盟/师徒/夫妻/...), interaction patterns, emotional dynamics
-  - Use the character's common name (便于跨 soul 交叉匹配)`
+  - Each related character gets its own \`## ${t('distill.relations_section_header', { name: '{character_name}' })}\` section
+  - Each section MUST contain: relationship type (${t('distill.relations_types')}/...), interaction patterns, emotional dynamics
+  - ${t('distill.relations_name_note')}`
   : '- Create a **relationships** behavior file when relation data is available, describing key relationships and how the character\'s attitude changes with different people'}
 - Each behavior file should focus on ONE distinct pattern (e.g., "honor-code", "combat-style", "leadership", "relationships")
 
@@ -379,6 +381,17 @@ export async function distillSoul(
         content: z.string().describe('What they say'),
       })).describe('The conversation exchange'),
     }),
+    inputExamples: [{
+      input: {
+        scenario: 'greeting',
+        messages: [
+          { role: 'user', content: 'Hello, nice to meet you.' },
+          { role: 'character', content: 'Greetings. I trust you have business here.' },
+          { role: 'user', content: 'I was hoping we could talk.' },
+          { role: 'character', content: 'Very well. Speak.' },
+        ],
+      },
+    }],
     execute: async ({ scenario, messages }) => {
       const slug = scenario.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '')
       const lines = messages.map((m) =>
@@ -541,6 +554,7 @@ export async function distillSoul(
       stepCountIs(MAX_STEPS),
       hasToolCall('finalize'),
     ],
+    experimental_repairToolCall: createArrayArgRepair(),
     prepareStep: async ({ stepNumber, steps }) => {
       // Enforce relationships.md when relations data is available
       if (hasRelations) {

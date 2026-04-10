@@ -57,7 +57,7 @@ export async function runExportAgent(
 
   // ─── Phase 2: Plan confirmation ────────────────────────────────────
   onProgress({ type: 'phase', phase: 'plan_review' })
-  onProgress({ type: 'plan_ready', plan })
+  onProgress({ type: 'plan_ready', plan, storyDirection: preSelected.storyDirection, exportLanguage: preSelected.exportLanguage })
 
   // Wait for user to confirm the plan via the UI's Enter/Esc interaction.
   // The panel renders a plan_review zone; Enter triggers onPlanConfirm,
@@ -69,7 +69,7 @@ export async function runExportAgent(
     logger.info(`${tag} User cancelled after plan review`)
     agentLog.toolInternal('User cancelled after plan review')
     agentLog.close()
-    onProgress({ type: 'error', error: '用户取消了导出' })
+    onProgress({ type: 'error', error: 'User cancelled export' })
     return
   }
 

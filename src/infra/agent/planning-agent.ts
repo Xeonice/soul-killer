@@ -1,9 +1,10 @@
 import { generateText, type LanguageModel } from 'ai'
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import type { DimensionDef, DimensionPlan } from './dimension-framework.js'
-import { SOUL_DIMENSION_TEMPLATES } from '../../soul/capture/soul-dimensions.js'
-import { WORLD_DIMENSION_TEMPLATES } from '../../world/capture/world-dimensions.js'
+import { getLocalizedSoulDimensions } from '../../soul/capture/soul-dimensions.js'
+import { getLocalizedWorldDimensions } from '../../world/capture/world-dimensions.js'
 import { logger } from '../utils/logger.js'
+import { getLocale, t } from '../i18n/index.js'
 
 const MIN_TOTAL_DIMENSIONS = 6
 const MAX_TOTAL_DIMENSIONS = 15
@@ -186,7 +187,7 @@ function applyPlan(result: PlanningResult): DimensionDef[] {
     distillTarget: (['background', 'rule', 'lore', 'atmosphere'].includes(dim.distillTarget ?? '') ? dim.distillTarget : 'lore') as any,
     qualityCriteria: Array.isArray(dim.qualityCriteria) && dim.qualityCriteria.length > 0
       ? dim.qualityCriteria
-      : ['包含与该维度直接相关的具体信息', '有深度分析而非表面描述'],
+      : [t('planning.fallback_criteria.relevant'), t('planning.fallback_criteria.depth')],
     minArticles: typeof dim.minArticles === 'number' ? dim.minArticles : (dim.priority === 'required' ? 3 : 2),
   }))
 
@@ -238,7 +239,7 @@ export async function runPlanningAgent(
   origin?: string,
   providerOptions?: SharedV3ProviderOptions,
 ): Promise<DimensionPlan> {
-  const templateDims = type === 'soul' ? SOUL_DIMENSION_TEMPLATES : WORLD_DIMENSION_TEMPLATES
+  const templateDims = type === 'soul' ? getLocalizedSoulDimensions() : getLocalizedWorldDimensions()
   const prompt = buildPlanningPrompt(type, templateDims, name, hint, preSearchResults, classification)
 
   // Surface the configured model id in error messages so users can tell
@@ -272,9 +273,7 @@ export async function runPlanningAgent(
     // model and pointing at structured-output stability as the likely cause.
     if (timedOut) {
       throw new Error(
-        `Planning Agent 超时（${PLANNING_TIMEOUT_MS / 1000}s 无响应）：` +
-          `模型 ${modelId} 未在时限内返回结构化 JSON。` +
-          `建议换一个对 structured output 更稳定的模型（例如 deepseek/deepseek-v3.2、qwen/qwen3.6-plus 或 anthropic/claude-sonnet-4.5）。`
+        t('planning.timeout', { seconds: String(PLANNING_TIMEOUT_MS / 1000), model: modelId })
       )
     }
     throw err

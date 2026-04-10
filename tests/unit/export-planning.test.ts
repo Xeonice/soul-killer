@@ -69,7 +69,7 @@ describe('validatePlan', () => {
   it('rejects duplicate shared_axes', () => {
     const plan = validPlan()
     plan.shared_axes = ['trust', 'trust']
-    expect(validatePlan(plan, preSelectedSouls)).toContain('相同')
+    expect(validatePlan(plan, preSelectedSouls)).toContain('different')
   })
 
   it('rejects empty flags', () => {

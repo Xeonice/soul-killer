@@ -7,6 +7,7 @@ import { PLANNING_SYSTEM_PROMPT, buildPlanningPrompt } from './prompts.js'
 import { runAgentLoop } from './agent-loop.js'
 import { logger } from '../../infra/utils/logger.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
+import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 
 // --- Planning Agent ---
 
@@ -29,48 +30,48 @@ export function validatePlan(
   preSelectedSouls: string[],
 ): string | null {
   // 1. genre_direction / tone_direction / prose_direction non-empty
-  if (!plan.genre_direction?.trim()) return 'genre_direction 不能为空'
-  if (!plan.tone_direction?.trim()) return 'tone_direction 不能为空'
-  if (!plan.prose_direction?.trim()) return 'prose_direction 不能为空'
+  if (!plan.genre_direction?.trim()) return 'genre_direction must not be empty'
+  if (!plan.tone_direction?.trim()) return 'tone_direction must not be empty'
+  if (!plan.prose_direction?.trim()) return 'prose_direction must not be empty'
 
   // 2. shared_axes: exactly 2, snake_case
   if (!Array.isArray(plan.shared_axes) || plan.shared_axes.length !== 2) {
-    return 'shared_axes 必须恰好 2 个'
+    return 'shared_axes must be exactly 2'
   }
   for (const axis of plan.shared_axes) {
-    if (!SNAKE_CASE_RE.test(axis)) return `shared_axes "${axis}" 不是 snake_case`
+    if (!SNAKE_CASE_RE.test(axis)) return `shared_axes "${axis}" is not snake_case`
   }
   if (plan.shared_axes[0] === plan.shared_axes[1]) {
-    return 'shared_axes 的两个轴名不能相同'
+    return 'shared_axes must have two different names'
   }
 
   // 3. flags: non-empty, snake_case
   if (!Array.isArray(plan.flags) || plan.flags.length === 0) {
-    return 'flags 不能为空'
+    return 'flags must not be empty'
   }
   for (const flag of plan.flags) {
-    if (!SNAKE_CASE_RE.test(flag)) return `flag "${flag}" 不是 snake_case`
+    if (!SNAKE_CASE_RE.test(flag)) return `flag "${flag}" is not snake_case`
   }
 
   // 4. characters: coverage check
   if (!Array.isArray(plan.characters) || plan.characters.length === 0) {
-    return 'characters 不能为空'
+    return 'characters must not be empty'
   }
   const planNames = new Set(plan.characters.map((c) => c.name))
   const preSelectedSet = new Set(preSelectedSouls)
   const missing = preSelectedSouls.filter((n) => !planNames.has(n))
   const extra = plan.characters.filter((c) => !preSelectedSet.has(c.name)).map((c) => c.name)
-  if (missing.length > 0) return `plan 缺少角色: ${missing.join(', ')}`
-  if (extra.length > 0) return `plan 包含未预选的角色: ${extra.join(', ')}`
+  if (missing.length > 0) return `plan is missing characters: ${missing.join(', ')}`
+  if (extra.length > 0) return `plan contains unselected characters: ${extra.join(', ')}`
 
   // 5. at least 1 protagonist
   const hasProtagonist = plan.characters.some((c) => c.role === 'protagonist')
-  if (!hasProtagonist) return '至少需要 1 个 protagonist'
+  if (!hasProtagonist) return 'at least 1 protagonist is required'
 
   // 6. specific_axes_direction: max 2 per character
   for (const c of plan.characters) {
     if (c.specific_axes_direction && c.specific_axes_direction.length > 2) {
-      return `角色 "${c.name}" 的 specific_axes_direction 不能超过 2 个`
+      return `character "${c.name}" specific_axes_direction must not exceed 2`
     }
   }
 
@@ -105,42 +106,52 @@ export async function runPlanningLoop(
 
   const planningTools = {
     plan_story: tool({
-      description: '设定故事层面的规划方向。这是第一步，必须在 plan_character 之前调用。',
+      description: 'Set story-level planning direction. This is the first step; must be called before plan_character.',
       inputSchema: z.object({
-        genre_direction: z.string().describe('类型大方向，如 "魔术战争 / 心理剧"'),
-        tone_direction: z.string().describe('基调大方向，反映角色组合独特性，禁用通用词'),
-        shared_axes_1: z.string().describe('第 1 个非 bond 共享轴名（snake_case）'),
-        shared_axes_2: z.string().describe('第 2 个非 bond 共享轴名（snake_case，与第 1 个不同）'),
-        flags: z.array(z.string()).describe('关键事件 flag 名列表（snake_case，5-8 个）'),
-        prose_direction: z.string().describe('叙事风格方向描述'),
+        genre_direction: z.string().describe('Genre direction, e.g. "magical warfare / psychological drama"'),
+        tone_direction: z.string().describe('Tone direction reflecting the unique character combination; avoid generic words'),
+        shared_axes_1: z.string().describe('First non-bond shared axis name (snake_case)'),
+        shared_axes_2: z.string().describe('Second non-bond shared axis name (snake_case, different from first)'),
+        flags: z.array(z.string()).describe('Key event flag name list (snake_case, 5-8 items)'),
+        prose_direction: z.string().describe('Narrative style direction description'),
       }),
+      inputExamples: [{
+        input: {
+          genre_direction: 'spy thriller / political conspiracy',
+          tone_direction: 'Gray morality game of loyalty vs betrayal — former mentor and student reunited in extremis',
+          shared_axes_1: 'loyalty_vs_survival',
+          shared_axes_2: 'freedom_vs_control',
+          flags: ['air_force_one_crash', 'truth_revealed', 'final_confrontation', 'extraction_attempt', 'fate_decided'],
+          prose_direction: 'Cold-realism cyberpunk noir, multi-perspective with sharp dialogue',
+        },
+      }],
       execute: async ({ genre_direction, tone_direction, shared_axes_1, shared_axes_2, flags, prose_direction }) => {
         onProgress({ type: 'tool_start', tool: 'plan_story' })
         // Validate
         if (!genre_direction.trim()) {
-          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: genre_direction 不能为空' })
-          return { error: 'genre_direction 不能为空' }
+          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: genre_direction must not be empty' })
+          return { error: 'genre_direction must not be empty' }
         }
         if (!tone_direction.trim()) {
-          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: tone_direction 不能为空' })
-          return { error: 'tone_direction 不能为空' }
+          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: tone_direction must not be empty' })
+          return { error: 'tone_direction must not be empty' }
         }
         if (!SNAKE_CASE_RE.test(shared_axes_1) || !SNAKE_CASE_RE.test(shared_axes_2)) {
-          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: shared_axes 必须是 snake_case' })
-          return { error: 'shared_axes 必须是 snake_case' }
+          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: shared_axes must be snake_case' })
+          return { error: 'shared_axes must be snake_case' }
         }
         if (shared_axes_1 === shared_axes_2) {
-          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: 两个共享轴不能相同' })
-          return { error: '两个共享轴不能相同' }
+          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: the two shared axes must be different' })
+          return { error: 'the two shared axes must be different' }
         }
         if (flags.length === 0) {
-          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: flags 不能为空' })
-          return { error: 'flags 不能为空' }
+          onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: 'error: flags must not be empty' })
+          return { error: 'flags must not be empty' }
         }
         for (const f of flags) {
           if (!SNAKE_CASE_RE.test(f)) {
-            onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: `error: flag "${f}" 不是 snake_case` })
-            return { error: `flag "${f}" 不是 snake_case` }
+            onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: `error: flag "${f}" is not snake_case` })
+            return { error: `flag "${f}" is not snake_case` }
           }
         }
         planBuilder.story = {
@@ -157,27 +168,27 @@ export async function runPlanningLoop(
     }),
 
     plan_character: tool({
-      description: '为一个角色设定规划方向。每个角色调用一次。必须先调用 plan_story。',
+      description: 'Set planning direction for one character. Call once per character. plan_story must be called first.',
       inputSchema: z.object({
-        name: z.string().describe('Soul 名称（必须匹配预选列表）'),
+        name: z.string().describe('Soul name (must match the pre-selected list)'),
         role: z.enum(['protagonist', 'deuteragonist', 'antagonist']),
-        specific_axes_direction: z.string().describe('特异轴方向（自然语言），如 "荣誉感 / 自我价值感"。无特异轴留空字符串'),
-        needs_voice_summary: z.boolean().describe('style.md 含 > 30% 非中文时为 true'),
-        appears_from: z.number().optional().describe('从第几幕出场'),
+        specific_axes_direction: z.string().describe('Specific axes direction (natural language), e.g. "sense of honor / self-worth". Empty string if no specific axes'),
+        needs_voice_summary: z.boolean().describe('Set to true when style.md contains > 30% non-Chinese text'),
+        appears_from: z.number().optional().describe('Act number from which the character appears'),
       }),
       execute: async ({ name, role, specific_axes_direction, needs_voice_summary, appears_from }) => {
         onProgress({ type: 'tool_start', tool: 'plan_character', args: { name } })
         if (!planBuilder.story) {
-          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: 'error: 先调用 plan_story' })
-          return { error: '必须先调用 plan_story' }
+          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: 'error: call plan_story first' })
+          return { error: 'plan_story must be called first' }
         }
         if (!preSelected.souls.includes(name)) {
-          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: `error: "${name}" 不在预选列表` })
-          return { error: `"${name}" 不在预选列表中` }
+          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: `error: "${name}" not in pre-selected list` })
+          return { error: `"${name}" is not in the pre-selected list` }
         }
         if (planBuilder.characters.some((c) => c.name === name)) {
-          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: `error: "${name}" 已添加` })
-          return { error: `"${name}" 已添加过` }
+          onProgress({ type: 'tool_end', tool: 'plan_character', result_summary: `error: "${name}" already added` })
+          return { error: `"${name}" has already been added` }
         }
         const axes = specific_axes_direction.trim()
           ? specific_axes_direction.split(/[\/、，,]/).map((s) => s.trim()).filter(Boolean).slice(0, 2)
@@ -191,27 +202,27 @@ export async function runPlanningLoop(
     }),
 
     finalize_plan: tool({
-      description: '完成规划。所有角色都 plan_character 后调用。校验完整性并组装 plan。',
+      description: 'Finalize the plan. Call after plan_character has been called for all characters. Validates completeness and assembles the plan.',
       inputSchema: z.object({}),
       execute: async () => {
         onProgress({ type: 'tool_start', tool: 'finalize_plan' })
         if (!planBuilder.story) {
-          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: 'error: 未调用 plan_story' })
-          return { error: '未调用 plan_story' }
+          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: 'error: plan_story was not called' })
+          return { error: 'plan_story was not called' }
         }
         // Check coverage
         const missing = preSelected.souls.filter((s) => !planBuilder.characters.some((c) => c.name === s))
         if (missing.length > 0) {
-          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: `error: 缺少角色 ${missing.join(', ')}` })
-          return { error: `缺少角色: ${missing.join(', ')}` }
+          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: `error: missing characters ${missing.join(', ')}` })
+          return { error: `missing characters: ${missing.join(', ')}` }
         }
         if (!planBuilder.characters.some((c) => c.role === 'protagonist')) {
-          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: 'error: 至少需要 1 个 protagonist' })
-          return { error: '至少需要 1 个 protagonist' }
+          onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: 'error: at least 1 protagonist is required' })
+          return { error: 'at least 1 protagonist is required' }
         }
         planBuilder.finalized = true
         const protagonist = planBuilder.characters.find((c) => c.role === 'protagonist')
-        const summary = `${planBuilder.characters.length} 角色, protagonist: ${protagonist?.name ?? '?'}`
+        const summary = `${planBuilder.characters.length} characters, protagonist: ${protagonist?.name ?? '?'}`
         onProgress({ type: 'tool_end', tool: 'finalize_plan', result_summary: summary })
         return { ok: true, summary }
       },
@@ -229,6 +240,7 @@ export async function runPlanningLoop(
       temperature: 0,
       providerOptions: providerOpts,
       stopWhen: [stepCountIs(stepCap), () => planBuilder.finalized],
+      experimental_repairToolCall: createArrayArgRepair(),
     })
 
     const initialPrompt = buildPlanningPrompt(preSelected)
@@ -244,9 +256,9 @@ export async function runPlanningLoop(
 
     if (!planBuilder.finalized || !planBuilder.story) {
       const detail = result.llmError
-        ? `${result.llmError}。可能是 prompt 过大超出模型 context limit，或 API 端错误。`
-        : `Planning Agent 在 ${result.stepCount} 步内未能完成规划。`
-      const errorMsg = `规划失败：${detail}\n查看详细日志：${agentLog.filePath}`
+        ? `${result.llmError}. Possibly the prompt exceeded the model context limit, or an API-side error occurred.`
+        : `Planning Agent failed to complete within ${result.stepCount} steps.`
+      const errorMsg = `Planning failed: ${detail}\nSee detailed log: ${agentLog.filePath}`
       logger.warn(`${tag} ${errorMsg}`)
       onProgress({ type: 'error', error: errorMsg })
       return null
@@ -262,7 +274,7 @@ export async function runPlanningLoop(
   } catch (err) {
     const isAbort = err instanceof Error && (err.name === 'AbortError' || String(err).includes('abort'))
     const errorMsg = isAbort
-      ? '规划超时（90秒无响应）。'
+      ? 'Planning timed out (no response for 90 seconds).'
       : (err instanceof Error ? err.message : String(err))
     logger.error(`${tag} Planning error:`, errorMsg)
     onProgress({ type: 'error', error: errorMsg })

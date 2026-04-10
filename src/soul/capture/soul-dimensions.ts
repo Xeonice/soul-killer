@@ -1,5 +1,7 @@
 import type { DimensionDef, DimensionPlan as UnifiedDimensionPlan } from '../../infra/agent/dimension-framework.js'
 import { signalsToRegex } from '../../infra/agent/dimension-framework.js'
+import type { SupportedLanguage } from '../../config/schema.js'
+import { getLocale } from '../../infra/i18n/index.js'
 
 export type TargetClassification =
   | 'DIGITAL_CONSTRUCT'
@@ -112,6 +114,139 @@ export const SOUL_DIMENSION_TEMPLATES: DimensionDef[] = [
     minArticles: 2,
   },
 ]
+
+// ========== Localized display/description/qualityCriteria ==========
+
+interface LocalizedDimensionStrings {
+  display: Record<SupportedLanguage, string>
+  description: Record<SupportedLanguage, string>
+  qualityCriteria: Record<SupportedLanguage, string[]>
+}
+
+const SOUL_DIMENSION_L10N: Record<string, LocalizedDimensionStrings> = {
+  identity: {
+    display: { zh: '身份', en: 'Identity', ja: 'アイデンティティ' },
+    description: {
+      zh: '身份背景、来历、所属世界/组织',
+      en: 'Background, origin, affiliated world/organization',
+      ja: '身元・出自・所属する世界/組織',
+    },
+    qualityCriteria: {
+      zh: ['包含人物的背景、出身、经历等具体信息', '有传记性质的详细描述而非简单罗列'],
+      en: ['Contains specific background, origin, and experience details', 'Has biographical depth rather than simple enumeration'],
+      ja: ['人物の背景・出自・経歴などの具体的情報を含む', '単なる列挙ではなく伝記的な詳細記述がある'],
+    },
+  },
+  quotes: {
+    display: { zh: '语录', en: 'Quotes', ja: '語録' },
+    description: {
+      zh: '台词、语录、名言、口头禅、直接引用',
+      en: 'Dialogue lines, quotes, famous sayings, catchphrases, direct citations',
+      ja: 'セリフ・語録・名言・口癖・直接引用',
+    },
+    qualityCriteria: {
+      zh: ['包含直接引用的原话或台词', '有语境说明（谁说的、什么场景）'],
+      en: ['Contains directly quoted speech or dialogue', 'Has context (who said it, in what scene)'],
+      ja: ['直接引用された原文やセリフを含む', '文脈の説明がある（誰が、どの場面で）'],
+    },
+  },
+  expression: {
+    display: { zh: '表达', en: 'Expression', ja: '表現' },
+    description: {
+      zh: '说话风格、语气、用词偏好、修辞习惯',
+      en: 'Speech style, tone, word preferences, rhetorical habits',
+      ja: '話し方・語調・用語の好み・修辞的癖',
+    },
+    qualityCriteria: {
+      zh: ['分析说话风格、语气特征', '有具体的语言示例'],
+      en: ['Analyzes speech style and tonal characteristics', 'Includes specific language examples'],
+      ja: ['話し方や語調の特徴を分析している', '具体的な言語例がある'],
+    },
+  },
+  thoughts: {
+    display: { zh: '思想', en: 'Thoughts', ja: '思想' },
+    description: {
+      zh: '价值观、信念、立场、人生哲学',
+      en: 'Values, beliefs, stances, life philosophy',
+      ja: '価値観・信念・立場・人生哲学',
+    },
+    qualityCriteria: {
+      zh: ['阐述价值观、信念或哲学思想', '有深度分析而非表面描述'],
+      en: ['Expounds values, beliefs, or philosophical ideas', 'Has depth of analysis rather than surface description'],
+      ja: ['価値観・信念・哲学的思想を論じている', '表面的な記述ではなく深い分析がある'],
+    },
+  },
+  behavior: {
+    display: { zh: '行为', en: 'Behavior', ja: '行動' },
+    description: {
+      zh: '决策模式、面对冲突的反应、习惯性行为',
+      en: 'Decision patterns, conflict responses, habitual behavior',
+      ja: '意思決定パターン・対立時の反応・習慣的行動',
+    },
+    qualityCriteria: {
+      zh: ['描述行为模式或决策过程', '有具体事例支撑'],
+      en: ['Describes behavioral patterns or decision processes', 'Supported by concrete examples'],
+      ja: ['行動パターンや意思決定過程を記述している', '具体的な事例で裏付けされている'],
+    },
+  },
+  relations: {
+    display: { zh: '关系', en: 'Relations', ja: '関係' },
+    description: {
+      zh: '重要关系、对不同人的态度、社交风格',
+      en: 'Key relationships, attitudes toward others, social style',
+      ja: '重要な関係・他者への態度・社交スタイル',
+    },
+    qualityCriteria: {
+      zh: ['描述与他人的具体关系', '分析关系动态'],
+      en: ['Describes specific relationships with others', 'Analyzes relationship dynamics'],
+      ja: ['他者との具体的な関係を描写している', '関係性のダイナミクスを分析している'],
+    },
+  },
+  capabilities: {
+    display: { zh: '能力', en: 'Capabilities', ja: '能力' },
+    description: {
+      zh: '能力、技能、属性数值、装备、专业知识',
+      en: 'Abilities, skills, stat attributes, equipment, expertise',
+      ja: '能力・スキル・ステータス・装備・専門知識',
+    },
+    qualityCriteria: {
+      zh: ['描述具体能力或技能', '有数值或等级信息'],
+      en: ['Describes specific abilities or skills', 'Includes numerical or rank information'],
+      ja: ['具体的な能力やスキルを記述している', '数値やランク情報を含む'],
+    },
+  },
+  milestones: {
+    display: { zh: '里程碑', en: 'Milestones', ja: 'マイルストーン' },
+    description: {
+      zh: '关键事件时间线、转折点、成长阶段、标志性成就',
+      en: 'Key event timeline, turning points, growth stages, landmark achievements',
+      ja: '重要イベントのタイムライン・転換点・成長段階・画期的な成果',
+    },
+    qualityCriteria: {
+      zh: ['包含关键事件的时间线', '有因果分析'],
+      en: ['Contains a timeline of key events', 'Has causal analysis'],
+      ja: ['重要イベントのタイムラインを含む', '因果分析がある'],
+    },
+  },
+}
+
+/**
+ * Get soul dimension templates localized to the specified language.
+ * Falls back to current locale if no language specified.
+ */
+export function getLocalizedSoulDimensions(lang?: SupportedLanguage): DimensionDef[] {
+  const language = lang ?? getLocale()
+  return SOUL_DIMENSION_TEMPLATES.map((dim) => {
+    const l10n = SOUL_DIMENSION_L10N[dim.name]
+    if (!l10n) return dim
+    return {
+      ...dim,
+      display: l10n.display[language],
+      description: l10n.description[language],
+      qualityCriteria: l10n.qualityCriteria[language],
+    }
+  })
+}
 
 // ========== Backward compat alias ==========
 export const SOUL_BASE_DIMENSIONS = SOUL_DIMENSION_TEMPLATES

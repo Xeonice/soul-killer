@@ -1002,7 +1002,7 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
           <Text color={PRIMARY}>▓ Q3 — {t('create.step.tags')}：</Text>
           <TextInput
             prompt="tags:"
-            placeholder="INTJ 话少 冷幽默 技术洁癖"
+            placeholder={t('create.placeholder.tags')}
             onEscape={onCancel}
             onSubmit={handleTagsSubmit}
           />

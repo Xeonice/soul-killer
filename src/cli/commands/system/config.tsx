@@ -55,8 +55,7 @@ const CONFIG_ITEMS: ConfigItem[] = [
     labelKey: 'config.label.language',
     getValue: (c) => c.language,
     displayValue: (c) => {
-      const labels: Record<string, string> = { zh: '中文', ja: '日本語', en: 'English' }
-      return `${c.language} (${labels[c.language] ?? c.language})`
+      return `${c.language} (${t('config.lang_label.' + c.language)})`
     },
   },
   {
@@ -94,17 +93,21 @@ function getLogStats(): { fileCount: number; totalBytes: number; summary: string
   }
 }
 
-const LANGUAGE_OPTIONS: { value: SupportedLanguage; label: string }[] = [
-  { value: 'zh', label: '中文' },
-  { value: 'ja', label: '日本語' },
-  { value: 'en', label: 'English' },
-]
+function getLanguageOptions(): { value: SupportedLanguage; label: string }[] {
+  return [
+    { value: 'zh', label: t('config.lang_label.zh') },
+    { value: 'ja', label: t('config.lang_label.ja') },
+    { value: 'en', label: t('config.lang_label.en') },
+  ]
+}
 
-const SEARCH_PROVIDER_OPTIONS: { value: SearchProvider; label: string }[] = [
-  { value: 'searxng', label: 'SearXNG (本地 Docker)' },
-  { value: 'exa', label: 'Exa (API)' },
-  { value: 'tavily', label: 'Tavily (API)' },
-]
+function getSearchProviderOptions(): { value: SearchProvider; label: string }[] {
+  return [
+    { value: 'searxng', label: t('config.search.searxng_label') },
+    { value: 'exa', label: 'Exa (API)' },
+    { value: 'tavily', label: 'Tavily (API)' },
+  ]
+}
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return '****'
@@ -177,11 +180,11 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
       if (key.return) {
         const item = CONFIG_ITEMS[cursor]!
         if (item.key === 'language') {
-          const currentIdx = LANGUAGE_OPTIONS.findIndex((l) => l.value === config.language)
+          const currentIdx = getLanguageOptions().findIndex((l) => l.value === config.language)
           setSelectCursor(currentIdx >= 0 ? currentIdx : 0)
           setMode('select')
         } else if (item.key === 'search_provider') {
-          const currentIdx = SEARCH_PROVIDER_OPTIONS.findIndex((p) => p.value === (config.search?.provider ?? 'searxng'))
+          const currentIdx = getSearchProviderOptions().findIndex((p) => p.value === (config.search?.provider ?? 'searxng'))
           setSelectCursor(currentIdx >= 0 ? currentIdx : 0)
           setMode('select')
         } else if (item.key === 'animation') {
@@ -287,11 +290,11 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
     if (mode === 'select') {
       const item = CONFIG_ITEMS[cursor]!
       const optionCount = item.key === 'language'
-        ? LANGUAGE_OPTIONS.length
+        ? getLanguageOptions().length
         : item.key === 'model'
           ? RECOMMENDED_MODELS.length
           : item.key === 'search_provider'
-            ? SEARCH_PROVIDER_OPTIONS.length
+            ? getSearchProviderOptions().length
             : 2
 
       if (key.upArrow) {
@@ -308,7 +311,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
       }
       if (key.return) {
         if (item.key === 'search_provider') {
-          const selected = SEARCH_PROVIDER_OPTIONS[selectCursor]!.value
+          const selected = getSearchProviderOptions()[selectCursor]!.value
           if (selected === 'searxng') {
             // SearXNG doesn't need a key
             doSave('search_provider', selected)
@@ -327,7 +330,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
 
         let value: string
         if (item.key === 'language') {
-          value = LANGUAGE_OPTIONS[selectCursor]!.value
+          value = getLanguageOptions()[selectCursor]!.value
         } else if (item.key === 'model') {
           value = RECOMMENDED_MODELS[selectCursor]!.id
         } else {
@@ -400,7 +403,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
       {mode === 'select' && currentItem.key === 'language' && (
         <Box flexDirection="column" marginTop={1} paddingLeft={4}>
           <Text color={DIM}>  {t('config.selecting', { field: t(currentItem.labelKey) })}</Text>
-          {LANGUAGE_OPTIONS.map((opt, i) => (
+          {getLanguageOptions().map((opt, i) => (
             <Text key={opt.value}>
               <Text color={i === selectCursor ? ACCENT : DIM}>
                 {i === selectCursor ? '  ❯ ' : '    '}
@@ -434,7 +437,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
       {mode === 'select' && currentItem.key === 'search_provider' && (
         <Box flexDirection="column" marginTop={1} paddingLeft={4}>
           <Text color={DIM}>  {t('config.selecting', { field: t(currentItem.labelKey) })}</Text>
-          {SEARCH_PROVIDER_OPTIONS.map((opt, i) => (
+          {getSearchProviderOptions().map((opt, i) => (
             <Text key={opt.value}>
               <Text color={i === selectCursor ? ACCENT : DIM}>
                 {i === selectCursor ? '  ❯ ' : '    '}

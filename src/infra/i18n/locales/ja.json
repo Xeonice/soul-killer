@@ -632,5 +632,46 @@
   "unpack.conflict_hint": "↑↓ 選択  Enter 確認  Esc キャンセル",
   "unpack.item_installed": "✓ {type}: {name}",
   "unpack.item_renamed": "✓ {type}: {from} → {to}",
-  "unpack.item_skipped": "- {type}: {name} (スキップ)"
+  "unpack.item_skipped": "- {type}: {name} (スキップ)",
+
+  "distill_panel.phase.ingest": "データ取り込み",
+  "distill_panel.phase.classify": "次元分類",
+  "distill_panel.phase.cluster": "セマンティッククラスタリング",
+  "distill_panel.phase.extract": "エントリ生成",
+
+  "review.complete": "レビュー完了: {accepted}/{total} エントリが承認されました",
+  "review.no_entries": "レビューするエントリがありません",
+  "review.time_label": "  時間: {time}",
+  "review.sort_key_unreliable": "⚠️  時間が不確実：sort_keyはヒューリスティック推定です。保存前に確認してください",
+  "review.action.accept": " 承認  ",
+  "review.action.skip": " スキップ ",
+  "review.action.end": " レビュー終了",
+
+  "export.err.cannot_read_soul": "Soulを読み込めません: {name}",
+  "export.err.cannot_read_world": "Worldを読み込めません: {name}",
+  "export.err.config_not_initialized": "設定が初期化されていません",
+  "export.hint.press_enter_to_return": "Enterで戻る",
+
+  "create.placeholder.tags": "INTJ 寡黙 ドライユーモア 完璧主義",
+
+  "config.lang_label.zh": "中国語",
+  "config.lang_label.ja": "日本語",
+  "config.lang_label.en": "英語",
+  "config.search.searxng_label": "SearXNG (ローカルDocker)",
+
+  "export_panel.input_label": "  入力済み:",
+  "export_panel.plan_summary": "{count} キャラクター · {axes}",
+
+  "planning.fallback_criteria.relevant": "この次元に直接関連する具体的な情報を含む",
+  "planning.fallback_criteria.depth": "表面的な記述ではなく深い分析がある",
+  "planning.timeout": "Planning Agent タイムアウト（{seconds}秒応答なし）：モデル {model} が制限時間内に構造化JSONを返しませんでした。structured outputがより安定したモデルへの切り替えを検討してください。",
+
+  "distill.runtime_note": "下流の機能（マルチソウルエクスポート、Phase 2ランタイムレンダリング）はソースデータのみの不変性に依存しています。",
+  "distill.relations_section_header": "{name}との関係",
+  "distill.relations_types": "宿敵/君臣/同盟/師弟/夫婦",
+  "distill.relations_name_note": "キャラクターの通称を使用する（クロスソウルマッチング用）",
+
+  "capture.score_example_reason": "詳細に記述された...",
+
+  "export.step.select_language": "エクスポート言語を選択"
 }

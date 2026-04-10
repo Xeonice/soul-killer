@@ -18,6 +18,18 @@ export function createReportFindingsTool(
         sufficient: z.boolean(),
       })).describe('Quality status for each evaluated dimension'),
     }),
+    inputExamples: [{
+      input: {
+        classification: 'PUBLIC_ENTITY',
+        origin: 'Romance of the Three Kingdoms',
+        summary: 'Cao Cao was a warlord and statesman during the late Eastern Han dynasty.',
+        dimensionStatus: [
+          { dimension: 'identity', qualifiedArticles: 4, sufficient: true },
+          { dimension: 'quotes', qualifiedArticles: 3, sufficient: true },
+          { dimension: 'behavior', qualifiedArticles: 2, sufficient: true },
+        ],
+      },
+    }],
     // No execute — calling this tool stops the agent loop.
   })
 }

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Text, Box, useInput } from 'ink'
 import type { GeneratedEntry } from '../../../world/distill.js'
 import { PRIMARY, ACCENT, DIM } from '../../animation/colors.js'
+import { t } from '../../../infra/i18n/index.js'
 
 type ReviewAction = 'accept' | 'skip' | 'edit' | 'merge'
 
@@ -59,13 +60,13 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
     const acceptedCount = results.filter((r) => r.action === 'accept').length
     return (
       <Box flexDirection="column">
-        <Text color={PRIMARY}>审查完成: {acceptedCount}/{entries.length} 条目已接受</Text>
+        <Text color={PRIMARY}>{t('review.complete', { accepted: String(acceptedCount), total: String(entries.length) })}</Text>
       </Box>
     )
   }
 
   if (!current) {
-    return <Text color={DIM}>无条目可审查</Text>
+    return <Text color={DIM}>{t('review.no_entries')}</Text>
   }
 
   // Chronicle entries get an extra header row showing the time anchor and a
@@ -88,7 +89,7 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
           <Box>
             <Text color={ACCENT}>📜 Chronicle{chronicleKind ? ` · ${chronicleKind}` : ''}</Text>
             {current.meta.display_time && (
-              <Text color={DIM}>  时间: {current.meta.display_time}</Text>
+              <Text color={DIM}>{t('review.time_label', { time: current.meta.display_time })}</Text>
             )}
             {typeof current.meta.sort_key === 'number' && (
               <Text color={DIM}>  sort_key: {current.meta.sort_key}</Text>
@@ -96,7 +97,7 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
           </Box>
           {sortKeyUnreliable && (
             <Box>
-              <Text color="yellow">⚠️  时间不可靠：sort_key 由启发式推断，请校正后再保存</Text>
+              <Text color="yellow">{t('review.sort_key_unreliable')}</Text>
             </Box>
           )}
         </Box>
@@ -116,9 +117,9 @@ export function WorldDistillReview({ entries, onComplete }: WorldDistillReviewPr
       </Box>
 
       <Box>
-        <Text color={ACCENT}>(a)</Text><Text> 接受  </Text>
-        <Text color={ACCENT}>(s)</Text><Text> 跳过  </Text>
-        <Text color={ACCENT}>(q)</Text><Text> 结束审查</Text>
+        <Text color={ACCENT}>(a)</Text><Text>{t('review.action.accept')}</Text>
+        <Text color={ACCENT}>(s)</Text><Text>{t('review.action.skip')}</Text>
+        <Text color={ACCENT}>(q)</Text><Text>{t('review.action.end')}</Text>
       </Box>
     </Box>
   )

@@ -87,7 +87,7 @@ describe('generateSkillMd', () => {
     expect(result).toContain('V')
     expect(result).toContain('赛博朋克 2077')
     // Phase 0 must include length selection
-    expect(result).toContain('选择故事长度')
+    expect(result).toContain('Choose Story Length')
     expect(result).toContain('短篇')
     expect(result).toContain('state.chosen_acts')
   })
@@ -102,7 +102,7 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('状态追踪规则')
+    expect(result).toContain('State Tracking Rules')
     expect(result).toContain('axes')
     expect(result).toContain('flags')
   })
@@ -119,8 +119,8 @@ describe('generateSkillMd', () => {
 
     expect(result).toContain('capabilities.md')
     expect(result).toContain('milestones.md')
-    expect(result).toContain('能力引用规则')
-    expect(result).toContain('时间线引用规则')
+    expect(result).toContain('Capability Reference Rules')
+    expect(result).toContain('Timeline Reference Rules')
   })
 
   it('includes Phase -1 script library menu with five top-level options', () => {
@@ -133,23 +133,23 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('Phase -1: 剧本库菜单')
+    expect(result).toContain('Phase -1: Script Library Menu')
     // Post-bun-runtime migration: scripts live at runtime/scripts/*.json
     expect(result).toContain('runtime/scripts/*.json')
     expect(result).not.toContain('runtime/scripts/*.yaml')
     // Flat script list with save status + management sub-menu
-    expect(result).toContain('生成新剧本')
-    expect(result).toContain('管理剧本')
-    expect(result).toContain('重命名剧本')
-    expect(result).toContain('删除剧本')
-    expect(result).toContain('从头重玩')
+    expect(result).toContain('Generate new script')
+    expect(result).toContain('Manage scripts')
+    expect(result).toContain('Rename script')
+    expect(result).toContain('Delete script')
+    expect(result).toContain('Start from beginning')
     // state list for save enumeration
     expect(result).toContain('runtime/bin/state list')
     // Header fields that were formerly in YAML frontmatter
     expect(result).toContain('user_direction')
     expect(result).toContain('generated_at')
     // Damaged script handling
-    expect(result).toContain('损坏')
+    expect(result).toContain('corrupted')
   })
 
   it('includes Phase 1 script persistence with JSON Write instructions', () => {
@@ -163,8 +163,8 @@ describe('generateSkillMd', () => {
     })
 
     // Phase 1 must instruct Write tool usage (JSON, not YAML)
-    expect(result).toContain('剧本持久化')
-    expect(result).toContain('Write 工具')
+    expect(result).toContain('Script Persistence')
+    expect(result).toContain('Write tool')
     expect(result).toContain('runtime/scripts/script-')
     expect(result).toContain('script-<id>.json')
     expect(result).not.toContain('script-<id>.yaml')
@@ -175,12 +175,12 @@ describe('generateSkillMd', () => {
     expect(result).toContain('"user_direction"')
     expect(result).toContain('"acts"')
     // Explicit JSON format instruction
-    expect(result).toContain('JSON 格式')
-    expect(result).toContain('合法 JSON')
+    expect(result).toContain('JSON format')
+    expect(result).toContain('valid JSON')
     // Old "save in internal context" wording must be gone
     expect(result).not.toContain('剧本在你的内部上下文中保存，不要输出给用户')
     // Failure tolerance
-    expect(result).toContain('未能持久化')
+    expect(result).toContain('could not be persisted')
   })
 
   it('includes rename and delete script flows in Phase -1', () => {
@@ -194,15 +194,15 @@ describe('generateSkillMd', () => {
     })
 
     // Rename flow: now modifies top-level JSON `title` field in memory and writes back
-    expect(result).toContain('重命名剧本')
-    expect(result).toContain('顶层的 \`title\` 字段')
+    expect(result).toContain('Rename script')
+    expect(result).toContain('top-level `title` field')
     // Delete flow: confirmation + cascade delete saves
-    expect(result).toContain('删除剧本')
-    expect(result).toContain('二次确认')
-    expect(result).toContain('已删除剧本')
+    expect(result).toContain('Delete script')
+    expect(result).toContain('Confirm delete')
+    expect(result).toContain('Deleted script')
     // Corruption tolerance
-    expect(result).toContain('损坏剧本')
-    expect(result).toContain('继续解析其他文件')
+    expect(result).toContain('corrupted')
+    expect(result).toContain('Continue parsing other files')
   })
 
   it('includes per-script save system with auto + manual saves', () => {
@@ -215,7 +215,7 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('存档机制')
+    expect(result).toContain('Save System')
     expect(result).toContain('auto/')
     expect(result).toContain('manual/')
     expect(result).toContain('runtime/saves/')
@@ -224,7 +224,7 @@ describe('generateSkillMd', () => {
     // Save updates go through state apply (auto) and state save (manual)
     expect(result).toContain('runtime/bin/state apply')
     expect(result).toContain('runtime/bin/state save')
-    expect(result).toContain('💾 保存当前进度')
+    expect(result).toContain('💾 Save current progress')
     expect(result).not.toContain('Edit ${CLAUDE_SKILL_DIR}/runtime/saves')
   })
 
@@ -238,12 +238,12 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('结局判定规则')
-    expect(result).toContain('结局展示规则')
-    expect(result).toContain('旅程回顾')
-    expect(result).toContain('结局图鉴')
-    expect(result).toContain('从头再来')
-    expect(result).toContain('重玩规则')
+    expect(result).toContain('Ending Determination Rules')
+    expect(result).toContain('Ending Display Rules')
+    expect(result).toContain('Journey recap')
+    expect(result).toContain('Ending Gallery')
+    expect(result).toContain('Start over')
+    expect(result).toContain('Replay Rules')
   })
 
   it('includes state_schema creation constraints section', () => {
@@ -257,11 +257,11 @@ describe('generateSkillMd', () => {
     })
 
     // Section header + key concepts
-    expect(result).toContain('state_schema 创作约束')
+    expect(result).toContain('state_schema Creation Constraints')
     // Naming constraint mentions
     expect(result).toContain('snake_case')
-    expect(result).toContain('点号分隔命名空间')
-    expect(result).toContain('必须带引号')
+    expect(result).toContain('Dot-separated namespaces')
+    expect(result).toContain('Must be quoted')
     // Type set
     expect(result).toContain('int')
     expect(result).toContain('bool')
@@ -286,7 +286,7 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('endings condition 结构化 DSL')
+    expect(result).toContain('Endings Condition Structured DSL')
     // Existing boolean operators
     expect(result).toContain('>=')
     expect(result).toContain('all_of')
@@ -297,14 +297,14 @@ describe('generateSkillMd', () => {
     expect(result).toContain('any_char:')
     expect(result).toContain('except:')
     // Axis restriction
-    expect(result).toContain('只能是**共享轴**')
+    expect(result).toContain('only be a **shared axis**')
     // Default fallback
     expect(result).toContain('condition: default')
     // Example uses new primitives
     expect(result).toContain('"ending-unity"')
     expect(result).toContain('"ending-breakthrough"')
     // Forbid natural-language expressions
-    expect(result).toContain('不接受')
+    expect(result).toContain('not accepted')
   })
 
   it('Phase -1 delegates validation to state CLI with full error code table', () => {
@@ -335,10 +335,10 @@ describe('generateSkillMd', () => {
     expect(result).toContain('FIELD_TYPE_MISMATCH')
     expect(result).toContain('MALFORMED')
     // Error outcome labels
-    expect(result).toContain('(孤儿)')
-    expect(result).toContain('(损坏)')
-    expect(result).toContain('legacy 不可重玩')
-    // Inline prose-style six-fold validation text must be gone
+    expect(result).toContain('(orphaned)')
+    expect(result).toContain('(corrupted)')
+    expect(result).toContain('legacy, cannot replay')
+    // Inline prose-style six-fold validation text must be gone (Chinese)
     expect(result).not.toContain('**六重验证**')
     expect(result).not.toContain('**验证 1：dangling reference 检查**')
   })
@@ -354,11 +354,11 @@ describe('generateSkillMd', () => {
     })
 
     // Repair menu exists and is explicit about forbidding manual Edit/Write
-    expect(result).toContain('修复菜单')
+    expect(result).toContain('Repair Menu')
     expect(result).toContain('state rebuild')
     expect(result).toContain('state reset')
-    expect(result).toContain('绝对不要')
-    expect(result).toContain('自己手动修补 state.yaml')
+    expect(result).toContain('**Never**')
+    expect(result).toContain('manually patch state.yaml')
   })
 
   it('replay rule delegates to state reset CLI command', () => {
@@ -371,9 +371,9 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('# 重玩规则')
+    expect(result).toContain('# Replay Rules')
     expect(result).toContain('runtime/bin/state reset')
-    // The old Write-to-reset pattern must be gone from the replay rule
+    // The old Write-to-reset pattern must be gone from the replay rule (Chinese)
     expect(result).not.toContain('整体覆盖为 script 的 `initial_state`')
     expect(result).not.toContain('允许 Write 整个 state.yaml 的两个例外')
     // Note: "用 Write 工具" still appears elsewhere for Phase 1 script.json
@@ -391,7 +391,7 @@ describe('generateSkillMd', () => {
     })
 
     // Section header still exists but now dispatches to CLI
-    expect(result).toContain('apply_consequences 标准流程')
+    expect(result).toContain('apply_consequences Standard Flow')
     expect(result).toContain('runtime/bin/state apply')
     expect(result).toContain('<current-scene-id>')
     expect(result).toContain('<choice-id>')
@@ -402,13 +402,13 @@ describe('generateSkillMd', () => {
     // First-enter path uses state init
     expect(result).toContain('runtime/bin/state init')
     // Hard red line: no manual Edit/Write on state.yaml or meta.yaml
-    expect(result).toContain('状态文件直写')
-    expect(result).toContain('所有**状态写入必须通过')
+    expect(result).toContain('Direct State File Writes')
+    expect(result).toContain('**All** state writes must go through')
     // Old pseudo-code must be gone
     expect(result).not.toContain('schema_field is None')
     expect(result).not.toContain('clamp(new,')
     expect(result).not.toContain('Edit ${CLAUDE_SKILL_DIR}/runtime/saves')
-    // Old section names that depended on Edit semantics must be gone
+    // Old section names that depended on Edit semantics must be gone (Chinese)
     expect(result).not.toContain('Edit 工具的关键约束')
     expect(result).not.toContain('唯一允许 Write 整个 state.yaml 的两个时机')
   })
@@ -423,15 +423,15 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('Phase 1 创作步骤（严格按顺序）')
-    expect(result).toContain('Step 1：设计 state_schema')
-    expect(result).toContain('Step 2：写 initial_state')
-    expect(result).toContain('Step 3：写 scenes')
-    expect(result).toContain('Step 4：写 endings')
-    expect(result).toContain('Step 5：自检')
-    expect(result).toContain('Step 6：Write')
-    expect(result).toContain('Step 7：进入 Phase 2')
-    expect(result).toContain('逐字符复制')
+    expect(result).toContain('Phase 1 Creation Steps (Strict Sequential Order)')
+    expect(result).toContain('Step 1: Design state_schema')
+    expect(result).toContain('Step 2: Write initial_state')
+    expect(result).toContain('Step 3: Write scenes')
+    expect(result).toContain('Step 4: Write endings')
+    expect(result).toContain('Step 5: Self-Check')
+    expect(result).toContain('Step 6: Write')
+    expect(result).toContain('Step 7: Enter Phase 2')
+    expect(result).toContain('character-for-character')
   })
 
   it('Phase 1 instructions reference chronicle timeline and events directories', () => {
@@ -446,7 +446,7 @@ describe('generateSkillMd', () => {
 
     expect(result).toContain('world/history/timeline.md')
     expect(result).toContain('world/history/events/')
-    expect(result).toContain('编年史一致性要求')
+    expect(result).toContain('Chronicle Consistency Requirements')
     expect(result).toContain('display_time')
   })
 
@@ -463,11 +463,11 @@ describe('generateSkillMd', () => {
     // The new replay rule dispatches to state reset — the CLI handles
     // copying script.initial_state → state.yaml + resetting current_scene.
     expect(result).toContain('runtime/bin/state reset')
-    expect(result).toContain('复用当前剧本的 script')
+    expect(result).toContain('Reuses the current script')
     expect(result).toContain('initial_state')
-    expect(result).toContain('第一个场景')
-    expect(result).toContain('生成新剧本')
-    // Old behaviour must be gone
+    expect(result).toContain('first scene')
+    expect(result).toContain('Generate new script')
+    // Old behaviour must be gone (Chinese)
     expect(result).not.toContain('回到 Phase 0（重新询问 story seeds）')
     expect(result).not.toContain('重新生成全新剧本')
   })
@@ -484,11 +484,11 @@ describe('generateSkillMd', () => {
 
     // Phase 1 Step 3 must instruct LLM to read the prose_style anchor
     // before writing narration/dialogue.
-    expect(result).toContain('叙事风格锚点')
+    expect(result).toContain('Prose Style Anchor')
     expect(result).toContain('forbidden_patterns')
     expect(result).toContain('ip_specific')
     // The self-check step for prose_style must exist.
-    expect(result).toContain('prose_style 反例对照')
+    expect(result).toContain('Prose style anti-pattern verification')
   })
 
   it('Phase 2 scene rendering lists high-frequency translatese patterns to avoid', () => {
@@ -502,15 +502,15 @@ describe('generateSkillMd', () => {
     })
 
     // Phase 2 must have its own prose style constraints section.
-    expect(result).toContain('叙事风格约束')
+    expect(result).toContain('Prose Style Constraints')
     // Must call out character_voice_summary as voice anchor priority.
     expect(result).toContain('character_voice_summary')
     // The five high-frequency pattern labels must appear in the cheat sheet.
-    expect(result).toContain('度量从句')
-    expect(result).toContain('所有格排比')
-    expect(result).toContain('直译比喻')
-    expect(result).toContain('直译姿态')
-    expect(result).toContain('直译否定')
+    expect(result).toContain('Measurement clauses')
+    expect(result).toContain('Possessive parallel structures')
+    expect(result).toContain('Literal metaphor translation')
+    expect(result).toContain('Literal gesture translation')
+    expect(result).toContain('Literal negation')
   })
 
   it('Phase 1 includes context budget declaration with file count and size', () => {
@@ -526,14 +526,14 @@ describe('generateSkillMd', () => {
     })
 
     // Budget declaration header + concrete numbers
-    expect(result).toContain('上下文预算与全量读取')
+    expect(result).toContain('Context Budget and Full-Read Enforcement')
     expect(result).toContain('137')
     expect(result).toContain('420 KB')
     expect(result).toContain('1,000,000 token')
     // The hard no-pagination constraint
-    expect(result).toContain('不得使用 `offset` 或 `limit` 参数')
+    expect(result).toContain('MUST NOT use `offset` or `limit` parameters')
     // The "don't be frugal" authorization
-    expect(result).toContain('不要防御性地节省')
+    expect(result).toContain('Do not defensively conserve')
   })
 
   it('Phase 1 budget declaration uses fallback when no file count provided', () => {
@@ -548,11 +548,11 @@ describe('generateSkillMd', () => {
     })
 
     // Fallback still has the header and the no-pagination constraint
-    expect(result).toContain('上下文预算与全量读取')
-    expect(result).toContain('不得使用 `offset` 或 `limit` 参数')
-    // Fallback should NOT contain a specific file count like "约 N 个文件"
+    expect(result).toContain('Context Budget and Full-Read Enforcement')
+    expect(result).toContain('MUST NOT use `offset` or `limit` parameters')
+    // Fallback should NOT contain a specific file count like "approximately N files"
     // (the generic version doesn't claim a number)
-    expect(result).not.toMatch(/约 \d+ 个文件/)
+    expect(result).not.toMatch(/approximately \*\*\d+ files/)
   })
 
   it('Phase 1 includes Step 0 data loading report instructions', () => {
@@ -567,14 +567,14 @@ describe('generateSkillMd', () => {
       expectedTextSizeKb: 230,
     })
 
-    expect(result).toContain('Step 0：数据加载报告')
-    expect(result).toContain('# 数据加载报告')
+    expect(result).toContain('Step 0: Data Loading Report')
+    expect(result).toContain('# Data Loading Report')
     // Structured markdown table headers
-    expect(result).toContain('| 类别 | 文件 | 行数 |')
+    expect(result).toContain('| Category | File | Lines |')
     expect(result).toContain('(not present)')
     // Step 1 has the guard clause pointing back to Step 0
-    expect(result).toContain('前置条件检查')
-    expect(result).toContain('立刻停下回去做 Step 0')
+    expect(result).toContain('Precondition check')
+    expect(result).toContain('stop immediately and go back to do Step 0')
   })
 
   it('Phase 1 re-reads story-spec.md to fix Phase 0 pollution', () => {
@@ -589,10 +589,10 @@ describe('generateSkillMd', () => {
       expectedTextSizeKb: 230,
     })
 
-    expect(result).toContain('Phase 0 污染修复')
-    expect(result).toContain('重新 Read')
+    expect(result).toContain('Phase 0 Contamination Fix')
+    expect(result).toContain('re-Read')
     expect(result).toContain('story-spec.md')
-    expect(result).toContain('前 50 行')
+    expect(result).toContain('first 50 lines')
   })
 
   it('Phase 1 Step 5 includes data coverage self-check (single-character engine)', () => {
@@ -608,7 +608,7 @@ describe('generateSkillMd', () => {
     })
 
     // Single-character engine uses Step 5.e for data coverage
-    expect(result).toContain('Step 5.e — 数据覆盖完整性')
+    expect(result).toContain('Step 5.e — Data coverage completeness')
     // Sanity thresholds must be present
     expect(result).toContain('> 50')
     expect(result).toContain('> 40')
@@ -634,11 +634,11 @@ describe('generateSkillMd', () => {
     })
 
     // Multi-character engine uses Step 5.h for data coverage
-    expect(result).toContain('Step 5.h — 数据覆盖完整性')
-    // Header updated to 八重
-    expect(result).toContain('Step 5：八重自检')
+    expect(result).toContain('Step 5.h — Data coverage completeness')
+    // Header updated to Eight-Fold
+    expect(result).toContain('Step 5: Eight-Fold Self-Check')
     // Step 1 count in header updated to 8 steps (0-7)
-    expect(result).toContain('8 个步骤（Step 0 - Step 7）')
+    expect(result).toContain('8 steps (Step 0 - Step 7)')
   })
 
   it('Phase 2 forbids LLM trained-default self-pause and fourth-wall breaks', () => {
@@ -659,28 +659,28 @@ describe('generateSkillMd', () => {
     })
 
     // Category 1: control-flow self-pause
-    expect(resultMulti).toContain('控制流自暂停')
-    expect(resultMulti).toContain('要继续吗')
-    expect(resultMulti).toContain('回复过长')
-    expect(resultMulti).toContain('apply_consequences → 渲染下一场景是**同一个原子动作**')
+    expect(resultMulti).toContain('Control Flow Self-Pausing')
+    expect(resultMulti).toContain('continue?')
+    expect(resultMulti).toContain('response seems too long')
+    expect(resultMulti).toContain('apply_consequences -> render next scene is **a single atomic action**')
 
     // Category 2: progress / save exposure (fourth wall)
-    expect(resultMulti).toContain('进度/存档暴露')
-    expect(resultMulti).toContain('第三幕中段')
+    expect(resultMulti).toContain('Progress/Save Exposure')
+    expect(resultMulti).toContain('mid-Act 3')
     expect(resultMulti).toContain('scene-007')
     expect(resultMulti).toContain('auto/')
-    expect(resultMulti).toContain('故事状态更新')
+    expect(resultMulti).toContain('story state update')
 
     // Category 3: chatbot meta-narration
-    expect(resultMulti).toContain('聊天机器人式元叙述')
+    expect(resultMulti).toContain('Chatbot-Style Meta-Narration')
 
     // Category 4: option label contamination
-    expect(resultMulti).toContain('选项标签污染')
-    expect(resultMulti).toContain('友善路线')
+    expect(resultMulti).toContain('Option Label Contamination')
+    expect(resultMulti).toContain('friendly route')
 
     // "Only stop in 4 cases" clarification
-    expect(resultMulti).toContain('你只在 4 种情况下停止渲染')
-    expect(resultMulti).toContain('立即渲染下一场景')
+    expect(resultMulti).toContain('You Only Stop Rendering in 4 Situations')
+    expect(resultMulti).toContain('immediately render the next scene')
 
     // Single-character engine has the same rules
     const resultSingle = generateSkillMd({
@@ -692,10 +692,10 @@ describe('generateSkillMd', () => {
       default_acts: 3,
       // no characters → single-character engine path
     })
-    expect(resultSingle).toContain('控制流自暂停')
-    expect(resultSingle).toContain('进度/存档暴露')
-    expect(resultSingle).toContain('你只在 4 种情况下停止渲染')
-    expect(resultSingle).toContain('立即渲染下一场景')
+    expect(resultSingle).toContain('Control Flow Self-Pausing')
+    expect(resultSingle).toContain('Progress/Save Exposure')
+    expect(resultSingle).toContain('You Only Stop Rendering in 4 Situations')
+    expect(resultSingle).toContain('immediately render the next scene')
   })
 })
 
@@ -738,15 +738,15 @@ describe('generateStorySpec', () => {
       constraints: [],
     })
 
-    expect(result).toContain('状态系统')
-    // Three-layer structure replaces "数值轴 / 关键事件标记" heading
-    expect(result).toContain('三层结构')
-    expect(result).toContain('共享 axes')
-    expect(result).toContain('特异 axes')
+    expect(result).toContain('State System')
+    // Three-layer structure replaces old heading
+    expect(result).toContain('Three-Layer Structure')
+    expect(result).toContain('Shared Axes')
+    expect(result).toContain('Character-Specific Axes')
     expect(result).toContain('Flags')
     // Endings still discussed
-    expect(result).toContain('结局判定')
-    expect(result).toContain('默认结局')
+    expect(result).toContain('Ending Evaluation')
+    expect(result).toContain('Default Ending')
   })
 
   it('omits constraints block when empty', () => {
@@ -759,7 +759,7 @@ describe('generateStorySpec', () => {
       constraints: [],
     })
 
-    expect(result).not.toContain('额外约束')
+    expect(result).not.toContain('Additional Constraints')
   })
 
   it('state system uses three-layer structure and DSL endings', () => {
@@ -772,14 +772,14 @@ describe('generateStorySpec', () => {
       constraints: [],
     })
 
-    // Three-layer reference (replaces the old "state_schema 范式" label)
-    expect(result).toContain('三层结构')
-    expect(result).toContain('Layer 1: 共享 axes')
-    expect(result).toContain('Layer 2: 角色特异 axes')
+    // Three-layer reference (replaces the old label)
+    expect(result).toContain('Three-Layer Structure')
+    expect(result).toContain('Layer 1: Shared Axes')
+    expect(result).toContain('Layer 2: Character-Specific Axes')
     expect(result).toContain('Layer 3: Flags')
-    expect(result).toContain('逐字符复制')
+    expect(result).toContain('character-for-character')
     // Endings DSL — structured
-    expect(result).toContain('结构化 DSL')
+    expect(result).toContain('Structured DSL')
     expect(result).toContain('all_of')
     expect(result).toContain('condition: default')
     // No old free-text condition syntax
@@ -796,10 +796,10 @@ describe('generateStorySpec', () => {
       constraints: [],
     })
 
-    expect(result).toContain('复用当前剧本')
+    expect(result).toContain('reuse the current script')
     expect(result).toContain('initial_state')
-    expect(result).toContain('Phase 2 第一场景')
-    expect(result).toContain('生成新剧本')
+    expect(result).toContain('Phase 2\'s first scene')
+    expect(result).toContain('Generate New Script')
     expect(result).not.toMatch(/回到 Phase 0/)
   })
 
@@ -827,7 +827,7 @@ describe('generateStorySpec', () => {
     expect(result).toContain('- name: truth_revealed')
     expect(result).toContain('initial: false')
     // Legacy placeholder must NOT be present when story_state is provided
-    expect(result).not.toContain('未通过 set_story_state')
+    expect(result).not.toContain('was not declared via set_story_state')
   })
 
   it('emits legacy placeholder in story_state section when not provided', () => {
@@ -841,7 +841,7 @@ describe('generateStorySpec', () => {
     })
 
     expect(result).toContain('## Story State')
-    expect(result).toContain('未通过 set_story_state 声明')
+    expect(result).toContain('was not declared via set_story_state')
   })
 
   it('multi-character state system renders three layers with story_state shared axes', () => {
@@ -874,7 +874,7 @@ describe('generateStorySpec', () => {
     })
 
     // Multi-char three-layer header
-    expect(result).toContain('三层结构')
+    expect(result).toContain('Three-Layer Structure')
     // Shared axes listed with the story_state names
     expect(result).toContain('bond / trust / rivalry')
     // Each character shows shared axis initial (kotomine's overrides)
@@ -900,10 +900,10 @@ describe('generateStorySpec', () => {
     })
 
     // Default option should be marked as recommended
-    expect(result).toContain('**中篇** (5 幕，40-60 轮，5 结局) [推荐]')
+    expect(result).toContain('**中篇** (5 acts, 40-60 rounds, 5 endings) [Recommended]')
     // Non-default should NOT have the marker
-    expect(result).toContain('**短篇** (3 幕，24-36 轮，4 结局)')
-    expect(result).not.toContain('**短篇** (3 幕，24-36 轮，4 结局) [推荐]')
+    expect(result).toContain('**短篇** (3 acts, 24-36 rounds, 4 endings)')
+    expect(result).not.toContain('**短篇** (3 acts, 24-36 rounds, 4 endings) [Recommended]')
   })
 
   it('emits prose_style section with voice_anchor / forbidden_patterns / ip_specific when provided', () => {
@@ -949,7 +949,7 @@ describe('generateStorySpec', () => {
     })
 
     // Section header
-    expect(result).toContain('## 叙事风格锚点')
+    expect(result).toContain('## Prose Style Anchor')
     // Scalar fields
     expect(result).toContain('target_language: zh')
     expect(result).toContain('type-moon 系日翻中')
@@ -965,7 +965,7 @@ describe('generateStorySpec', () => {
     expect(result).toContain('character_voice_summary:')
     expect(result).toContain('sakura:')
     // Fallback marker should NOT appear
-    expect(result).not.toContain('（fallback）')
+    expect(result).not.toContain('(Fallback)')
   })
 
   it('emits prose_style fallback section when prose_style is missing', () => {
@@ -978,12 +978,12 @@ describe('generateStorySpec', () => {
       constraints: [],
     })
 
-    expect(result).toContain('## 叙事风格锚点（fallback）')
+    expect(result).toContain('## Prose Style Anchor (Fallback)')
     // Fallback inlines the top 5 highest-frequency forbidden patterns.
     expect(result).toContain('id: degree_clause')
     expect(result).toContain('id: gaze_level')
     // Generic voice anchor message
-    expect(result).toContain('通用克制书面中文')
+    expect(result).toContain('Restrained written Chinese')
   })
 
   it('forbidden_patterns yaml in prose_style section escapes embedded quotes', () => {

@@ -8,6 +8,7 @@ import { ExportBuilder } from './types.js'
 import { CHARACTER_PROMPT, buildCharacterPrompt } from './prompts.js'
 import { runAgentLoop } from './agent-loop.js'
 import { logger } from '../../infra/utils/logger.js'
+import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 
 export function makeCharacterTools(
@@ -146,6 +147,7 @@ export async function runCharacterLoop(
       temperature: 0,
       providerOptions: providerOpts,
       stopWhen: [stepCountIs(CHARACTER_STEP_CAP), () => charTracker.axesSet],
+      experimental_repairToolCall: createArrayArgRepair(),
     })
 
     const prompt = buildCharacterPrompt(plan, charPlan, soulData, sharedAxes)

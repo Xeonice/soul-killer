@@ -6,6 +6,8 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { SoulkillerConfig } from '../../config/schema.js'
 import type { CaptureStrategy, CaptureResult, OnProgress } from './capture-strategy.js'
 import type { DimensionPlan } from './dimension-framework.js'
+import { t } from '../i18n/index.js'
+import { createArrayArgRepair } from '../utils/repair-tool-call.js'
 import { createEvaluationTools } from './tools/index.js'
 import type { DimensionScore, ArticleScore } from './tools/evaluate-dimension.js'
 import { readDimensionCache } from './tools/evaluate-dimension.js'
@@ -193,7 +195,7 @@ Scoring guide:
 4 = Good — detailed and relevant
 5 = Excellent — comprehensive, authoritative
 
-Output JSON array only: [{"index": 0, "score": 4, "reason": "详细描述了..."}, ...]`,
+Output JSON array only: [{"index": 0, "score": 4, "reason": "${t('capture.score_example_reason')}"}, ...]`,
             prompt: articleList.slice(0, 8000),
             temperature: 0,
           })
@@ -554,6 +556,7 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
       stepCountIs(maxSteps),
       hasToolCall('reportFindings'),
     ],
+    experimental_repairToolCall: createArrayArgRepair(),
     prepareStep: async ({ stepNumber }) => {
       // After enough steps for all dimensions, force reportFindings
       if (stepNumber >= dimCount + 3 || stepNumber >= maxSteps - 2) {

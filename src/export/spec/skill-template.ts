@@ -48,7 +48,7 @@ interface ReadBudgetOptions {
 }
 
 /**
- * Render the "上下文预算与全量读取" declaration that sits at the top of the
+ * Render the "Context Budget and Full-Read Enforcement" declaration that sits at the top of the
  * Phase 1 read-data section. Tells the LLM explicitly how much content it's
  * expected to consume and gives it authorization to stop being frugal.
  *
@@ -61,24 +61,24 @@ function buildReadBudgetDeclaration(opts: ReadBudgetOptions): string {
     typeof opts.expectedFileCount === 'number' &&
     typeof opts.expectedTextSizeKb === 'number'
   if (hasNumbers) {
-    return `## 上下文预算与全量读取（硬约束）
+    return `## Context Budget and Full-Read Enforcement (Hard Constraint)
 
-本阶段预计需要 Read 约 **${opts.expectedFileCount} 个文件 / 约 ${opts.expectedTextSizeKb} KB 文本**。你使用的是 Claude Opus（1,000,000 token 上下文窗口），这次读取量**不到 15% 预算**。
+This phase requires reading approximately **${opts.expectedFileCount} files / ~${opts.expectedTextSizeKb} KB of text**. You are using Claude Opus (1,000,000 token context window), and this read volume is **under 15% of your budget**.
 
-**所有 Read 调用不得使用 \`offset\` 或 \`limit\` 参数**。每个文件必须完整读取。
+**All Read calls MUST NOT use \`offset\` or \`limit\` parameters**. Every file must be read in full.
 
-不要防御性地节省 token——这是预期行为，packager 已经计算过预算。
+Do not defensively conserve tokens — this is expected behavior, the packager has already computed the budget.
 
-如果你在某个 Read 调用里用了 \`lines 1-50\` 或其它分页参数，说明你在错误地节俭。**立刻重新 Read 那个文件，不带任何参数**。
+If you used \`lines 1-50\` or any pagination parameters in a Read call, you are incorrectly being frugal. **Immediately re-Read that file without any parameters**.
 `
   }
-  return `## 上下文预算与全量读取（硬约束）
+  return `## Context Budget and Full-Read Enforcement (Hard Constraint)
 
-本阶段需要 Read 多个文件来收集角色人格、世界观和剧本规约。用户的上下文窗口足够容纳全部内容。
+This phase requires reading multiple files to collect character personality, worldview, and script specifications. Your context window is large enough to contain all content.
 
-**所有 Read 调用不得使用 \`offset\` 或 \`limit\` 参数**。每个文件必须完整读取。
+**All Read calls MUST NOT use \`offset\` or \`limit\` parameters**. Every file must be read in full.
 
-不要防御性地节省 token——这是预期行为。
+Do not defensively conserve tokens — this is expected behavior.
 `
 }
 
@@ -86,70 +86,70 @@ function buildMultiCharacterEngine(
   characters: CharacterSpecWithSlug[],
   budget: ReadBudgetOptions = {},
 ): string {
-  const charNames = characters.map((c) => c.name).join('、')
+  const charNames = characters.map((c) => c.name).join(', ')
   const protagonist = characters.find((c) => c.role === 'protagonist')?.name ?? characters[0]!.name
   // Path references use the ASCII slug (which is the actual on-disk
   // directory name); display strings use the original character name.
-  const soulsList = characters.map((c) => `   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/identity.md\` (${c.name})\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/style.md\`\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/capabilities.md\`（如存在）\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/milestones.md\`（如存在）\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/behaviors/\` 下所有文件`).join('\n')
+  const soulsList = characters.map((c) => `   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/identity.md\` (${c.name})\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/style.md\`\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/capabilities.md\` (if present)\n   - \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/milestones.md\` (if present)\n   - All files under \`\${CLAUDE_SKILL_DIR}/souls/${c.slug}/behaviors/\``).join('\n')
 
   const initialState = characters.map((c) => {
     const axes = c.axes.map((a) => `      ${a.english}: ${a.initial}`).join(',\n')
     return `    "${c.name}": {\n${axes}\n    }`
   }).join(',\n')
 
-  return `# Phase 1: 生成多角色剧本并持久化
+  return `# Phase 1: Generate Multi-Character Script and Persist
 
-本剧本包含 ${characters.length} 个核心角色：${charNames}。
+This script features ${characters.length} core characters: ${charNames}.
 
 ${buildReadBudgetDeclaration(budget)}
 
-## Phase 0 污染修复（必须执行）
+## Phase 0 Contamination Fix (Mandatory)
 
-Phase 0 为了拿 \`acts_options\`，很可能只 Read 了 \`story-spec.md\` 的前 50 行。但 story-spec.md 的 **Story State 章节 / 叙事风格锚点章节 / characters 编排** 都在后面，Phase 0 的部分读取没有包含这些关键信息。
+Phase 0 likely only Read the first 50 lines of \`story-spec.md\` to extract \`acts_options\`. However, the **Story State section, Prose Style Anchor section, and characters configuration** are further down in the file. Phase 0's partial read did not include this critical information.
 
-**作为 Phase 1 的第一个动作**，重新 Read 整个 \`\${CLAUDE_SKILL_DIR}/story-spec.md\`，**不带 offset / limit 参数**。即使你觉得"上下文里已经有 story-spec.md 了"，也要重新 Read —— 之前的读取是部分读取，不完整。
+**As the very first action of Phase 1**, re-Read the entire \`\${CLAUDE_SKILL_DIR}/story-spec.md\` **without offset/limit parameters**. Even if you think "story-spec.md is already in context", you must re-Read it — the previous read was partial and incomplete.
 
-## 需要读取的资料清单
+## Required Reading List
 
-1. 每个角色的人格资料（每个文件都必须完整 Read，不带 offset/limit）：
+1. Each character's personality files (every file must be Read in full, without offset/limit):
 ${soulsList}
-2. 读取 \`\${CLAUDE_SKILL_DIR}/world/\` 下各维度子目录（geography、factions、systems、society、culture、species、figures、atmosphere、history）中的所有 .md 文件 — 世界观。跳过 \`_\` 前缀文件（作者视图），并排除 \`history/events/\` 子目录和 \`history/timeline.md\` 单文件（它们在下面单独读取）
-3. 读取 \`\${CLAUDE_SKILL_DIR}/world/history/timeline.md\`（如存在）— 世界编年史单文件（按 \`## \` 段落切分，每段是一个时间锚点事件）
-4. 读取 \`\${CLAUDE_SKILL_DIR}/world/history/events/\` 下所有文件（如存在）— 世界编年史详情（重大事件的完整描述）
-5. 重新 Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 完整内容（见上面的"Phase 0 污染修复"）
+2. Read all .md files under \`\${CLAUDE_SKILL_DIR}/world/\` dimension subdirectories (geography, factions, systems, society, culture, species, figures, atmosphere, history) — the worldview. Skip \`_\`-prefixed files (author-view), and exclude the \`history/events/\` subdirectory and the \`history/timeline.md\` file (they are read separately below)
+3. Read \`\${CLAUDE_SKILL_DIR}/world/history/timeline.md\` (if present) — world chronicle single file (split by \`## \` headings, each section is a time-anchored event)
+4. Read all files under \`\${CLAUDE_SKILL_DIR}/world/history/events/\` (if present) — world chronicle details (full descriptions of major events)
+5. Re-Read the complete \`\${CLAUDE_SKILL_DIR}/story-spec.md\` (see "Phase 0 Contamination Fix" above)
 
-读取世界观时，先用 \`Glob ${"${CLAUDE_SKILL_DIR}/world/**/*.md"}\` 列出所有文件，然后对每一项调用 Read（不带 offset/limit），确保一个不漏。
+When reading worldview files, first use \`Glob ${"${CLAUDE_SKILL_DIR}/world/**/*.md"}\` to list all files, then call Read on each one (without offset/limit) to ensure nothing is missed.
 
-根据以上材料和用户在 Phase 0 收集的 seeds（如有），按照 story-spec.md 的规约，创作一个完整的多角色视觉小说剧本。
+Using the above materials and the seeds collected from the user in Phase 0 (if any), create a complete multi-character visual novel script following story-spec.md's specifications.
 
-**编年史一致性要求**：
-- 剧本中引用的所有时间锚点（年份、纪元、战役编号等）必须与 \`history/timeline.md\` 段落中的 \`display_time\` 一致
-- 不得编造与 \`history/events/\` 详情冲突的事件经过
-- 如剧本发生在某个特定时期，应明确标注与 chronicle 时间轴的相对位置（例如"在荒坂塔核爆五年之后"）
+**Chronicle Consistency Requirements**:
+- All time anchors referenced in the script (years, eras, battle numbers, etc.) must match the \`display_time\` in \`history/timeline.md\` sections
+- Do not fabricate event details that conflict with \`history/events/\` descriptions
+- If the script takes place in a specific time period, explicitly mark its position relative to the chronicle timeline (e.g., "five years after the Arasaka Tower bombing")
 
-剧本必须遵守 story-spec.md 中的：
-- 多角色 cast 调度规则（每个场景显式标注在场角色）
-- 选项 tradeoff 约束（每个选项必须对不同角色产生差异化影响）
-- 角色出场时机（${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').map((c) => `${c.name} 从 ${c.appears_from} 开始`).join('，') || '所有角色全程出场'}）
+The script must follow story-spec.md's:
+- Multi-character cast scheduling rules (each scene must explicitly tag which characters are present)
+- Choice tradeoff constraints (each choice must produce differentiated effects on different characters)
+- Character appearance timing (${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').map((c) => `${c.name} starting from ${c.appears_from}`).join(', ') || 'all characters present throughout'})
 
-## 剧本持久化（必须执行）
+## Script Persistence (Mandatory)
 
-剧本生成完成后，**必须**通过 Write 工具将完整剧本以 **JSON 格式**写入：
+After script generation is complete, you **must** use the Write tool to save the complete script in **JSON format** to:
 
 \`\`\`
 \${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json
 \`\`\`
 
-\`<id>\` 是 8 位短 hash，由你基于当前时间戳和 user_direction 摘要生成（例如 \`a3f9c2e1\`）。
+\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary (e.g., \`a3f9c2e1\`).
 
-**重要：这不是 YAML，是 JSON**。顶层是一个 JSON 对象，包含 header 字段 + state_schema + initial_state + scenes + endings：
+**Important: This is JSON, not YAML**. The top level is a JSON object containing header fields + state_schema + initial_state + scenes + endings:
 
 \`\`\`json
 {
-  "id": "<8 位短 hash，与文件名一致>",
-  "title": "<你为本剧本起的简短标题>",
-  "generated_at": "<ISO 8601 时间戳>",
-  "user_direction": "<Phase 0 收集的命题文本，无则空字符串>",
+  "id": "<8-char short hash, matching the filename>",
+  "title": "<short title you give this script>",
+  "generated_at": "<ISO 8601 timestamp>",
+  "user_direction": "<Phase 0 user direction text, empty string if none>",
   "acts": 3,
 
   "state_schema": {
@@ -166,17 +166,17 @@ ${soulsList}
 
   "scenes": {
     "scene-001": {
-      "text": "<完整叙事 + 对话，作为单段文本>",
+      "text": "<full narration + dialogue as a single text block>",
       "choices": [
         {
           "id": "choice-1",
-          "text": "<选项 A 文本>",
+          "text": "<option A text>",
           "consequences": { "affinity.<char_slug>.trust": 2 },
           "next": "scene-002"
         },
         {
           "id": "choice-2",
-          "text": "<选项 B 文本>",
+          "text": "<option B text>",
           "consequences": { "flags.<event_name>": true },
           "next": "scene-003"
         }
@@ -187,44 +187,44 @@ ${soulsList}
   "endings": [
     {
       "id": "ending-A",
-      "title": "<结局标题>",
+      "title": "<ending title>",
       "condition": { "all_of": [{ "key": "affinity.<char_slug>.trust", "op": ">=", "value": 7 }] },
-      "body": "<结局演绎>"
+      "body": "<ending narration>"
     },
     {
       "id": "ending-default",
-      "title": "<兜底结局>",
+      "title": "<fallthrough ending>",
       "condition": "default",
-      "body": "<结局演绎>"
+      "body": "<ending narration>"
     }
   ]
 }
 \`\`\`
 
-**Write 调用要求**：
-- 一次性写入完整文件，不要分段追加
-- **必须是合法 JSON**——成对的大括号、逗号分隔、字符串用双引号、不允许注释（JSON 没有注释）
-- **不要**写 YAML frontmatter（\`---\` 分隔行）
-- 写入完成后向用户输出一句确认："剧本已保存为 \`script-<id>.json\`"
-- 写入后剧本仍保留在你的上下文中，Phase 2 直接使用
+**Write call requirements**:
+- Write the complete file in a single call — do not append in segments
+- **Must be valid JSON** — matched braces, comma-separated, double-quoted strings, no comments (JSON has no comment syntax)
+- **Do not** write YAML frontmatter (\`---\` delimiter lines)
+- After writing, output a confirmation to the user: "Script saved as \`script-<id>.json\`"
+- The script remains in your context after writing; Phase 2 uses it directly
 
-**写入失败容错**：
-- 如果 Write 工具调用失败（权限不足、磁盘问题等），输出错误信息
-- 仍然进入 Phase 2 运行剧本（剧本在上下文中可用）
-- 提示用户："本次剧本未能持久化，重试时将不可复现"
+**Write failure fallback**:
+- If the Write tool call fails (permissions, disk issues, etc.), output the error message
+- Still enter Phase 2 to run the script (the script is available in context)
+- Inform the user: "This script could not be persisted; it will not be reproducible on retry"
 
-## Phase 1 创作步骤（严格按顺序）
+## Phase 1 Creation Steps (Strict Sequential Order)
 
-按以下 **8 个步骤（Step 0 - Step 7）** 创作 script.json。**不要跳步**：
+Follow these **8 steps (Step 0 - Step 7)** to create script.json. **Do not skip any step**:
 
-**Step 0：数据加载报告（强制）**
+**Step 0: Data Loading Report (Mandatory)**
 
-完成上面"需要读取的资料清单"里的**所有** Read 调用（不带 offset/limit），然后以下方格式输出一份**加载报告**：
+Complete **all** Read calls from the "Required Reading List" above (without offset/limit), then output a **loading report** in the following format:
 
 \`\`\`markdown
-# 数据加载报告
+# Data Loading Report
 
-| 类别 | 文件 | 行数 |
+| Category | File | Lines |
 |---|---|---|
 | story | story-spec.md | 245 |
 | soul:${characters[0]!.slug} | identity.md | 120 |
@@ -239,236 +239,236 @@ ${soulsList}
 | chronicle | history/events/...  | ... |
 \`\`\`
 
-规则：
-- 每个角色的 identity / style / capabilities / milestones / 每个 behaviors/*.md 都必须单独一行
-- optional 文件真的不存在时，行数栏写 \`(not present)\`
-- 行数必须是你实际 Read 的文件行数（这是强制证明你做过完整 Read 的 meta-output）
-- world 维度文件和 chronicle 文件也逐行列出
-- 这份报告是**给你自己用的 planning 输出**，不需要额外向用户解释
+Rules:
+- Each character's identity / style / capabilities / milestones / each behaviors/*.md must have its own row
+- For optional files that truly do not exist, write \`(not present)\` in the lines column
+- Line counts must be the actual number of lines you Read (this is mandatory proof that you performed full reads)
+- World dimension files and chronicle files must also be listed individually
+- This report is **planning output for your own use** — no need to explain it to the user
 
-如果报告的总行数有任何单项看起来可疑地小（比如 identity.md 只有 30 行），大概率是你错误地用了 \`offset/limit\` 参数。立刻重新 Read 那个文件（不带任何分页参数），更新报告。
+If any single item in the report has a suspiciously low line count (e.g., identity.md with only 30 lines), you most likely used \`offset/limit\` parameters by mistake. Immediately re-Read that file (without any pagination parameters) and update the report.
 
-**只有报告完整输出后，才能进入 Step 1**。
+**You may only proceed to Step 1 after the report is fully output**.
 
-**Step 1：设计 state_schema（严格三层结构）**
+**Step 1: Design state_schema (Strict Three-Layer Structure)**
 
-**前置条件检查**：如果你还没有输出 Step 0 的数据加载报告，**立刻停下回去做 Step 0**。
+**Precondition check**: If you have not yet output Step 0's data loading report, **stop immediately and go back to do Step 0**.
 
-先 Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`，找到 **Story State** 章节，提取：
-  - \`shared_axes_custom: [a, b]\` —— 本故事的 2 个故事级共享轴名（另一个 bond 是平台固定）
-  - \`flags: [...]\` —— 本故事的关键事件 flag 列表
+Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the **Story State** section, and extract:
+  - \`shared_axes_custom: [a, b]\` — the story's 2 story-level shared axis names (plus \`bond\` which is platform-fixed)
+  - \`flags: [...]\` — the story's key event flag list
 
-然后为每个角色生成字段（顺序：Layer 1 共享 → Layer 2 特异 → Layer 3 flags）：
+Then generate fields for each character (order: Layer 1 shared -> Layer 2 specific -> Layer 3 flags):
 
-- **Layer 1: 共享 axes（每个角色 3 个，没有 opt-out）**
+- **Layer 1: Shared axes (3 per character, no opt-out)**
   - \`"affinity.<char_slug>.bond"\`
   - \`"affinity.<char_slug>.<a>"\`
   - \`"affinity.<char_slug>.<b>"\`
-  - 每个字段含 desc / type=int / range=[0, 10] / default
-  - **default**: 读 story-spec 的 \`characters[i].shared_initial_overrides\`。如果该角色对该 axis 有 override，用 override 值；否则用全局 default 5
+  - Each field includes desc / type=int / range=[0, 10] / default
+  - **default**: Read story-spec's \`characters[i].shared_initial_overrides\`. If a character has an override for that axis, use the override value; otherwise use the global default of 5
 
-- **Layer 2: 角色特异 axes（从 story-spec 的 \`characters[i].axes\` 列表来）**
-  - 每个角色 0-2 个，逐条翻译为 \`"affinity.<char_slug>.<axis.english>"\`
-  - 每个字段含 desc / type=int / range=[0, 10] / default=axis.initial
+- **Layer 2: Character-specific axes (from story-spec's \`characters[i].axes\` list)**
+  - 0-2 per character, each translated to \`"affinity.<char_slug>.<axis.english>"\`
+  - Each field includes desc / type=int / range=[0, 10] / default=axis.initial
 
-- **Layer 3: Flags（从 story-spec 的 Story State 逐条复制）**
-  - 每个 story-spec 中的 flag 都必须在 state_schema 中有一个对应的 \`"flags.<name>"\` 字段
-  - 每个字段含 desc（复制 story-spec 的 desc）/ type=bool / default=story-spec 的 initial
-  - **不允许**增删或改名 flag；**不允许**创造 story-spec 中未声明的 flag
+- **Layer 3: Flags (copied verbatim from story-spec's Story State)**
+  - Every flag in story-spec must have a corresponding \`"flags.<name>"\` field in state_schema
+  - Each field includes desc (copied from story-spec's desc) / type=bool / default=story-spec's initial
+  - You **must not** add, remove, or rename flags; you **must not** create flags not declared in story-spec
 
-严格按上文「state_schema 创作约束」节的命名规则和类型集合。
+Strictly follow the naming rules and type set from the "state_schema Creation Constraints" section above.
 
-**Step 2：写 initial_state**
-- 字段集**严格 ==** state_schema 字段集
-- 每个字段值取自 schema.default（共享轴也用 default，不需要再次查 overrides 因为已经在 Step 1 反映到 default 了）
+**Step 2: Write initial_state**
+- Field set **strictly ==** state_schema field set
+- Each field value is taken from schema.default (shared axes also use default — no need to re-check overrides since they were already reflected in default during Step 1)
 
-**Step 3：写 scenes**
+**Step 3: Write scenes**
 
-**🚨 写 narration/dialogue 之前的强制准备：Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`，定位「叙事风格锚点」章节，逐条吸收 \`forbidden_patterns\` 和 \`ip_specific\`**。这是本故事中文文本的硬约束，不是建议。后面 Step 5.g 会逐条自检你的产出是否违反。如果 story-spec 里是 fallback 章节（legacy），使用 fallback 中的通用反例作为约束。
+**MANDATORY PREP before writing any narration/dialogue: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. These are hard constraints on this story's text, not suggestions. Step 5.g will verify your output against each one. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
 
-- 每个 scene 含 \`id\` / \`cast\` / \`narration\` / \`dialogue\` / \`choices\`
-- 每个 \`choice.consequences\` 的 key 必须从 state_schema **逐字符复制**（精确字面字符串匹配）
-- value 必须符合 schema.type 的语义（int=delta、bool/enum/string=覆盖值）
-- 跳转用 \`next: "scene-id"\`
-- **重要**：consequences 中只能引用 state_schema 中已声明的字段。**flag 引用必须严格在 story-spec 的 flags 白名单内**
-- **中文文本约束**：narration 和 dialogue 都必须遵守 prose_style：
-  - \`forbidden_patterns\` 中的每个 \`bad\` 结构都是硬红线，不能出现
-  - \`ip_specific\` 是术语和称谓规范，写到对应角色时必须复用
-  - 如该角色有 \`character_voice_summary\`，用该摘要作为中文声音锚点，优先级高于 style.md 中的非中文原文
+- Each scene contains \`id\` / \`cast\` / \`narration\` / \`dialogue\` / \`choices\`
+- Every \`choice.consequences\` key must be **character-for-character copied** from state_schema (exact literal string match)
+- Values must conform to schema.type semantics (int = delta, bool/enum/string = absolute overwrite)
+- Transitions use \`next: "scene-id"\`
+- **Important**: consequences may only reference fields declared in state_schema. **Flag references must strictly be within story-spec's flags whitelist**
+- **Prose constraints**: narration and dialogue must comply with prose_style:
+  - Every \`bad\` pattern in \`forbidden_patterns\` is a hard red line that must not appear
+  - \`ip_specific\` defines terminology and naming conventions that must be followed when writing for the corresponding character
+  - If a character has a \`character_voice_summary\`, use that summary as the voice anchor, taking priority over non-target-language source text in style.md
 
-**Step 4：写 endings**
-- 每个 ending 的 \`condition\` 必须用上文「endings condition 结构化 DSL」节的格式
-- 每个 condition 引用的 key 必须存在于 state_schema
-- **最后一个 ending 必须** \`condition: default\` 兜底
-- 跨角色聚合（\`all_chars\` / \`any_char\`）的 \`axis\` 只能是共享轴（bond 或 story-spec 的 shared_axes_custom 里的 2 个）
+**Step 4: Write endings**
+- Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above
+- Every key referenced in a condition must exist in state_schema
+- **The last ending must** use \`condition: default\` as the fallthrough
+- Cross-character aggregation (\`all_chars\` / \`any_char\`) \`axis\` may only be a shared axis (bond or one of the 2 from story-spec's shared_axes_custom)
 
-**Step 5：八重自检**
+**Step 5: Eight-Fold Self-Check**
 
-自检是**一票否决**流程——任何一重不通过都必须回到 Step 0-4 修正后重新开始自检。
+Self-check is a **veto process** — failure on any single check requires going back to Steps 0-4 to fix, then restarting the entire self-check.
 
-- **Step 5.a — 共享 axes 完整性**
-  - 期望的共享轴集合 = \`{bond, a, b}\`（来自 Step 1 读到的 story-spec）
-  - 对每个角色 slug，验证 state_schema 中含完整 3 个共享轴字段
-  - 缺失 → 回 Step 1 补齐 → 重新自检
+- **Step 5.a — Shared axes completeness**
+  - Expected shared axis set = \`{bond, a, b}\` (from story-spec read in Step 1)
+  - For each character slug, verify state_schema contains all 3 shared axis fields
+  - Missing -> go back to Step 1 to add them -> restart self-check
 
-- **Step 5.b — Flags 集合一致性**
-  - 期望 flags name 集合 = story-spec Story State 的 flags name 集合
-  - state_schema 中所有 \`"flags.<name>"\` key 的 name 集合必须严格相等
-  - 缺一 / 多一 / 改名 → 回 Step 1 修正 flags 部分 → 重新自检
+- **Step 5.b — Flags set consistency**
+  - Expected flags name set = story-spec Story State's flags name set
+  - The name set of all \`"flags.<name>"\` keys in state_schema must be strictly equal
+  - Missing / extra / renamed -> go back to Step 1 to fix the flags section -> restart self-check
 
-- **Step 5.c — consequences key 白名单**
-  - 收集 scenes/endings 中所有 consequences 和 condition 节点引用的所有 key
-  - 每个 key 必须存在于 state_schema（字面相等）
-  - 不在 → 回 Step 3 或 Step 4 修正（注意：**不要**在 schema 中添加新字段来"满足"引用，而是要改引用 key 到已有字段）
+- **Step 5.c — Consequences key whitelist**
+  - Collect all keys referenced in consequences and condition nodes across scenes/endings
+  - Every key must exist in state_schema (literal equality)
+  - Not found -> go back to Step 3 or Step 4 to fix (note: **do not** add new fields to schema to "satisfy" a reference — fix the reference key to match an existing field instead)
 
-- **Step 5.d — 聚合 DSL axis 限制**
-  - 找到所有 \`all_chars\` / \`any_char\` 节点
-  - 每个节点的 \`axis\` 字段必须是共享轴名（bond / a / b）
-  - 不是共享轴 → 回 Step 4 修正
+- **Step 5.d — Aggregation DSL axis restriction**
+  - Find all \`all_chars\` / \`any_char\` nodes
+  - Each node's \`axis\` field must be a shared axis name (bond / a / b)
+  - Not a shared axis -> go back to Step 4 to fix
 
-- **Step 5.e — flags 引用白名单**
-  - 在 scenes 的 consequences 中，任何 \`"flags.<name>"\` key 的 name 必须在 story-spec 的 flags 白名单内
-  - 不在 → 回 Step 3 修正 scene（不要添加新 flag，选择一个已有 flag 或删除该 consequence）
+- **Step 5.e — Flags reference whitelist**
+  - In scene consequences, every \`"flags.<name>"\` key's name must be in story-spec's flags whitelist
+  - Not found -> go back to Step 3 to fix the scene (do not add a new flag — choose an existing flag or remove the consequence)
 
-- **Step 5.f — initial_state 字段集**
-  - state_schema 的 key 集合 = initial_state 的 key 集合
-  - 不对齐 → 回 Step 2 修正
+- **Step 5.f — initial_state field set**
+  - state_schema key set = initial_state key set
+  - Misaligned -> go back to Step 2 to fix
 
-- **Step 5.g — prose_style 反例对照**
-  - 打开 story-spec.md 的「叙事风格锚点」章节
-  - 对你写过的**每一段** narration 和 dialogue，逐条对照 \`forbidden_patterns\`：
-    - 如果出现类似 \`bad\` 的结构 → 按 \`good\` 的示范重写
-    - 如果混入了 \`ip_specific\` 禁止的译法 → 改为规范译法
-  - 违反条款数 > 0 → 回 Step 3 重写对应场景 → 重新执行 5.g
-  - **最容易漏的点**：英文度量从句（"X 到 Y 的程度"）、所有格排比（"我的 A。我的 B。"）、直译比喻（"像一个瓷灯"）、直译姿态（"没有摸下去"）
+- **Step 5.g — Prose style anti-pattern verification**
+  - Open story-spec.md's "Prose Style Anchor" section
+  - For **every** narration and dialogue passage you wrote, check against each \`forbidden_patterns\` entry:
+    - If a structure similar to a \`bad\` pattern appears -> rewrite using the corresponding \`good\` example
+    - If a forbidden translation from \`ip_specific\` was used -> replace with the canonical form
+  - Violation count > 0 -> go back to Step 3 to rewrite affected scenes -> re-run 5.g
+  - **Most commonly missed issues**: English-style measurement clauses, possessive parallel structures, literal metaphor translations, literal gesture translations
 
-- **Step 5.h — 数据覆盖完整性**
-  - 对照 Step 0 的数据加载报告，逐条验证：
-    - 每个角色的 identity.md 都在报告里，且行数 **> 50**（典型 > 80）
-    - 每个角色的 style.md 都在报告里，且行数 **> 40**（典型 > 60）
-    - 每个角色的 behaviors/*.md 每一个都在报告里，且每个行数 **> 20**（典型 > 30）
-    - 每个角色的 capabilities.md / milestones.md 要么有行数，要么明确 \`(not present)\`
-    - story-spec.md 在报告里且行数合理（> 100）
-    - world 维度文件在报告里，至少覆盖 story 真正会用到的维度
-  - **看到任何单项行数 < 上面阈值**：大概率是 \`offset/limit\` 参数漏网 → 立即重新 Read 那个文件（**不带任何分页参数**）→ 更新 Step 0 的数据加载报告 → 重新执行 5.h
-  - **检测数据漂移**：如果 Step 0 报告的文件总数与 Phase 1 开头预算声明的文件数偏差 > 2，用 \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` 重新 Glob 核对真实文件数，补 Read 缺失项后重跑 5.h
+- **Step 5.h — Data coverage completeness**
+  - Cross-reference against Step 0's data loading report, verifying each item:
+    - Every character's identity.md is in the report with line count **> 50** (typical > 80)
+    - Every character's style.md is in the report with line count **> 40** (typical > 60)
+    - Every character's behaviors/*.md is in the report, each with line count **> 20** (typical > 30)
+    - Every character's capabilities.md / milestones.md either has a line count or is explicitly \`(not present)\`
+    - story-spec.md is in the report with reasonable line count (> 100)
+    - World dimension files are in the report, covering at least the dimensions the story actually uses
+  - **If any single item's line count is below the thresholds**: most likely \`offset/limit\` parameters slipped through -> immediately re-Read that file (**without any pagination parameters**) -> update Step 0's data loading report -> re-run 5.h
+  - **Detecting data drift**: if Step 0 report's total file count differs from Phase 1's budget declaration file count by > 2, use \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` to verify actual file count, Read any missing items, then re-run 5.h
 
-每一重自检失败都必须回到对应步骤修正，重新执行完整的自检流程。**通过全部 8 重后**才进入 Step 6。
+Every failed self-check requires going back to the corresponding step to fix, then re-running the complete self-check flow. **Only after passing all 8 checks** may you proceed to Step 6.
 
-**Step 6：Write**
-- 六重自检通过后，用 Write 工具一次性写入完整 JSON 到 \`runtime/scripts/script-<id>.json\`
-- 写的是合法 JSON（成对大括号、字符串双引号、逗号分隔、无注释），**不是 YAML**
+**Step 6: Write**
+- After passing all self-checks, use the Write tool to write the complete JSON to \`runtime/scripts/script-<id>.json\` in a single call
+- The output must be valid JSON (matched braces, double-quoted strings, comma-separated, no comments), **not YAML**
 
-**Step 7：进入 Phase 2**
-- 输出确认信息后进入 Phase 2 运行剧本
+**Step 7: Enter Phase 2**
+- Output a confirmation message and enter Phase 2 to run the script
 
-写入成功（或失败兜底完成）后，进入 Phase 2。
+After writing succeeds (or failure fallback is complete), enter Phase 2.
 
-# Phase 2: 运行多角色故事
+# Phase 2: Run Multi-Character Story
 
-剧本准备好后，直接进入第一个场景。
+Once the script is ready, proceed directly to the first scene.
 
-## 叙事风格约束（所有 Phase 2 输出的硬约束）
+## Prose Style Constraints (Hard Constraints on All Phase 2 Output)
 
-**每次输出任何中文文本前**，必须先对照 \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 的「叙事风格锚点」章节：
+**Before outputting any text**, you must first check against the "Prose Style Anchor" section of \`\${CLAUDE_SKILL_DIR}/story-spec.md\`:
 
-- \`forbidden_patterns\` 里每条 \`bad\` 结构都**必须避免**。任何一段文字里出现类似结构 → 换成对应的 \`good\` 写法再输出。
-- \`ip_specific\` 里每条规则都**必须遵守**：术语保留 / 称谓规范 / 比喻池约束。
-- \`character_voice_summary\`（如该角色有）是该角色的**中文声音锚点**，优先级高于 \`souls/{角色名}/style.md\` 中可能存在的非中文原文。没有 summary 的角色继续用 style.md。
-- 如果 story-spec 中是「叙事风格锚点（fallback）」章节（legacy archive），使用 fallback 中的通用反例库作为硬约束。
+- Every \`bad\` pattern in \`forbidden_patterns\` **must be avoided**. If any passage contains a similar structure -> replace it with the corresponding \`good\` form before outputting.
+- Every rule in \`ip_specific\` **must be followed**: term preservation, naming conventions, metaphor pool constraints.
+- \`character_voice_summary\` (if present for a character) is that character's **voice anchor**, taking priority over non-target-language source text that may exist in \`souls/{character}/style.md\`. Characters without a summary continue to use style.md.
+- If story-spec contains a "Prose Style Anchor (fallback)" section (legacy archive), use the fallback's generic anti-pattern library as hard constraints.
 
-最常滑向翻译腔的模式（第一优先级避免）：
-1. **度量从句**："X 到 Y 的程度" → 用短句断出
-2. **所有格排比**："我的 A。我的 B。我的 C。" → 第一个之后去掉"我的"
-3. **直译比喻**："像一个 X"（选错具象名词） → 挑中文常见意象
-4. **直译姿态**："没有摸下去" → "终究没有落下"
-5. **直译否定**："没有任何起伏" → 具象比喻
+Most common patterns that slide toward translatese (highest priority to avoid):
+1. **Measurement clauses**: over-literal degree expressions -> break into short sentences
+2. **Possessive parallel structures**: "My A. My B. My C." -> drop the possessive after the first
+3. **Literal metaphor translation**: choosing the wrong concrete noun -> pick an idiomatic image
+4. **Literal gesture translation**: over-literal body language -> use natural expressions
+5. **Literal negation**: flat negation -> use concrete metaphor
 
-## 场景呈现规则
+## Scene Rendering Rules
 
-每个场景你需要输出：
-1. **旁白** — 使用沉浸式第二人称描写（严格遵守叙事风格约束）
-2. **多角色演绎** — 按场景 cast 表中定义的在场角色，依次或交替展现各角色的对话和行动
-   - 每个角色的语言风格必须遵循对应 \`souls/{角色名}/style.md\`（叠加 prose_style 的约束）
-   - 有 \`character_voice_summary\` 的角色优先使用 summary 作为中文声音锚点
-   - 不同角色的对话之间可以穿插旁白
-   - 不在场角色不参与本场景对话
+For each scene you must output:
+1. **Narration** — immersive second-person description (strictly following prose style constraints)
+2. **Multi-character performance** — present dialogue and actions for each character listed in the scene's cast, in sequence or interleaved
+   - Each character's speech style must follow the corresponding \`souls/{character}/style.md\` (layered with prose_style constraints)
+   - Characters with \`character_voice_summary\` use the summary as their voice anchor
+   - Narration may be interspersed between different characters' dialogue
+   - Characters not present in the scene do not participate in dialogue
 
-然后使用 AskUserQuestion 呈现选项：
-- question: 当前场景的情境提示
-- options: 对应剧本中该场景的选项 **+ 末尾追加 "💾 保存当前进度"**
+Then use AskUserQuestion to present choices:
+- question: situational prompt for the current scene
+- options: the script's choices for this scene **+ append "💾 Save current progress" at the end**
 - multiSelect: false
 
-## 状态追踪规则（多角色）
+## State Tracking Rules (Multi-Character)
 
-你必须在内部维护一个状态对象，格式如下：
+You must internally maintain a state object in the following format:
 \`\`\`
 {
   affinity: {
 ${initialState}
   },
   flags: {
-    // 由 Phase 1 生成的剧本定义
+    // defined by the Phase 1 generated script
   }
 }
 \`\`\`
 
-### 选择影响规则
+### Choice Effect Rules
 
-- 用户做出选择后，根据剧本中该选项标注的状态影响更新状态对象
-- 一个选项可以同时影响**多个角色**的好感轴
-- 不同选项必须对不同角色产生**差异化**影响（这是 story-spec 的硬约束）
-- **绝对不要**向用户展示状态数值或事件标记——状态是隐式的
-- 状态影响后续场景中各角色的态度、对话语气和反应
+- After the user makes a choice, update the state object according to the consequences tagged on that choice in the script
+- A single choice can affect **multiple characters'** affinity axes simultaneously
+- Different choices must produce **differentiated** effects on different characters (this is a hard constraint from story-spec)
+- **Never** reveal state values or event flags to the user — state is implicit
+- State affects each character's attitude, dialogue tone, and reactions in subsequent scenes
 
-### 角色不在场时
+### When a Character Is Absent
 
-- 不在场角色的好感轴不受当前场景选项影响
-- 但 flags 是全局的，可以被任何场景触发
+- Absent characters' affinity axes are not affected by choices in the current scene
+- However, flags are global and can be triggered by any scene
 
-## 场景流转规则
+## Scene Transition Rules
 
-- 用户选择剧情选项 → 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` 让脚本完成全部状态转移（自动存档） → **立即渲染下一场景**（不停顿、不询问"要继续吗"、不展示存档细节）
-- 用户选择"💾 保存当前进度" → 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` 创建手动存档 → 确认后重弹相同 AskUserQuestion（含原始选项 + 💾）。详见上文「手动存档」节
-- 用户输入自由文本 → 作为在场角色（按对话语境选择最相关的角色）即兴回应，
-  然后再次用 AskUserQuestion 呈现同一场景的选项 + 💾（不跳转，不影响状态，不写存档，**不调用 state apply**）
-- 到达结局阶段 → 进入结局判定流程（按上文「endings condition 结构化 DSL」节的 evaluate 算法）
+- User selects a story choice -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
+- User selects "💾 Save current progress" -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
+- User enters free text -> respond in character as the most contextually relevant present character,
+  then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
+- Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
 
-### 你只在 4 种情况下停止渲染
+### You Only Stop Rendering in 4 Situations
 
-1. **渲染完一个场景后**：调用 AskUserQuestion 呈现**剧本原生 choices + 💾 保存当前进度**，等待用户选择
-2. **用户选择 💾 保存**：执行手动存档流程后重弹同一 AskUserQuestion
-3. **用户触发自由文本回应**：回应完后再次 AskUserQuestion（同场景，含 💾）
-4. **到达 ending 节点**：按结局判定流程进入 Phase 3
+1. **After rendering a scene**: call AskUserQuestion presenting **script's native choices + 💾 Save current progress**, wait for user selection
+2. **User selects 💾 save**: execute manual save flow, then re-present the same AskUserQuestion
+3. **User triggers free-text response**: respond, then AskUserQuestion again (same scene, with 💾)
+4. **Reaching an ending node**: enter Phase 3 via the ending determination flow
 
-**除此以外任何"中途暂停"都是错误的**。特别是：
-- 不要因为"回复看起来太长"而主动暂停
-- 不要在场景之间插入"要继续吗"之类的 meta 确认
-- 不要向用户暴露存档写入细节、scene ID、或"已进入第 N 幕"之类的进度指示
-- 连续渲染多个场景是**正常行为**，只要每个场景都以 AskUserQuestion 结尾呈现剧本 choices + 💾
+**Any other "mid-stream pause" is an error**. Specifically:
+- Do not pause because "the response seems too long"
+- Do not insert "continue?" or similar meta-confirmations between scenes
+- Do not expose save write details, scene IDs, or "now entering Act N" progress indicators to the user
+- Rendering multiple consecutive scenes is **normal behavior**, as long as each scene ends with AskUserQuestion presenting script choices + 💾
 
-## apply_consequences 标准流程（通过 state apply 脚本）
+## apply_consequences Standard Flow (via state apply script)
 
-**核心契约**：consequences 的 delta 计算、clamp、类型校验、auto/ 目录下 state.yaml + meta.yaml 的事务性写入，**全部由 \`bash runtime/bin/state apply\` 脚本内部完成**。你不用算任何 delta，不用拼 Edit old_string，不用维护 state 的字面表示。你只负责：
+**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`bash runtime/bin/state apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
 
-1. 接收用户的选择（choice id）
-2. 调用一次 state apply
-3. 读脚本 stdout 的变更摘要用于渲染下一场景的过渡叙述
-4. 渲染下一场景
+1. Receive the user's choice (choice id)
+2. Call state apply once
+3. Read the script's stdout change summary to inform the next scene's transition narration
+4. Render the next scene
 
-### 标准调用
+### Standard Call
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
-- \`<script-id>\` 是当前剧本的 id（由 Phase -1 确定，Phase 2 全程不变）
-- \`<current-scene-id>\` 是**当前正在运行的**那个 scene 的 id（不是下一个）
-- \`<choice-id>\` 是用户选中的那个 choice 的 id（来自 scene.choices[i].id）
+- \`<script-id>\` is the current script's id (determined in Phase -1, constant throughout Phase 2)
+- \`<current-scene-id>\` is the id of the scene **currently being played** (not the next one)
+- \`<choice-id>\` is the id of the choice the user selected (from scene.choices[i].id)
 
-### stdout 输出格式
+### stdout Output Format
 
-脚本成功执行后会输出类似：
+After successful execution, the script outputs something like:
 
 \`\`\`
 SCENE  scene-005 → scene-007
@@ -477,93 +477,93 @@ CHANGES
   flags.met_johnny  false → true
 \`\`\`
 
-- 第一行的 \`SCENE\` 告诉你下一个场景 id（用这个渲染）
-- \`CHANGES\` 下列出所有被 consequences 影响的字段（oldValue → newValue）
-- 如果某个 int 被 clamp 了，行尾会有 \`(clamped)\` 标记
-- 如果 consequences 是空，会显示 \`CHANGES (none)\`
+- The first line's \`SCENE\` tells you the next scene id (use this for rendering)
+- \`CHANGES\` lists all fields affected by consequences (oldValue → newValue)
+- If an int was clamped, the line ends with \`(clamped)\`
+- If consequences is empty, it shows \`CHANGES (none)\`
 
-### 禁止事项（硬红线）
+### Prohibited Actions (Hard Red Lines)
 
-- **绝对不要**用 Edit 工具直接修改 \`state.yaml\` 或 \`meta.yaml\`
-- **绝对不要**用 Write 工具直接重写 \`state.yaml\` 或 \`meta.yaml\`
-- **绝对不要**在内存里"提前算"新的 state 值，然后去和脚本输出对账——信脚本就行
-- **绝对不要**跳过 state apply 直接渲染下一场景（那会造成 state 漂移）
+- **Never** use the Edit tool to directly modify \`state.yaml\` or \`meta.yaml\`
+- **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
+- **Never** pre-calculate new state values in memory and then reconcile against script output — trust the script
+- **Never** skip state apply and render the next scene directly (this causes state drift)
 
-如果 state apply 返回非零退出码（stderr 会打印错误消息），**不要**尝试手动修复 state.yaml。改为：
-- 解析 stderr 告诉用户"应用场景状态失败：{原因}"
-- 让用户选择"重试" / "取消本次选择回到选项"
+If state apply returns a non-zero exit code (stderr will print an error message), **do not** attempt to manually fix state.yaml. Instead:
+- Parse stderr and tell the user "Failed to apply scene state: {reason}"
+- Let the user choose "Retry" / "Cancel this choice and return to options"
 
-### 首次进入场景（Phase 2 启动时）
+### First Scene Entry (Phase 2 Startup)
 
-Phase 2 第一次进入时，调用 **init** 而不是 apply：
+When entering Phase 2 for the first time, call **init** instead of apply:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
 \`\`\`
 
-脚本内部从 script.initial_state 一次性写 auto/state.yaml 并初始化 auto/meta.yaml。然后开始渲染第一个场景。（Phase -1 的"从头重玩"或"无存档剧本"入口已经在那边调用过 init，Phase 2 在那条路径上直接开始渲染即可。）
+The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. Then begin rendering the first scene. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-## 角色登场规则
+## Character Entrance Rules
 
 ${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').length > 0
   ? characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').map((c) =>
-    `- **${c.name}** 从 ${c.appears_from} 开始登场，首次出场必须有自然引入（一段聚焦于该角色的入场旁白）`
+    `- **${c.name}** appears starting from ${c.appears_from}; their first appearance must have a natural introduction (a focused entrance narration for that character)`
   ).join('\n')
-  : '所有角色从故事开始就在场。'}
+  : 'All characters are present from the start of the story.'}
 
-## 幕间过渡规则
+## Act Transition Rules
 
-当故事从一个 Act 推进到下一个 Act 时：
-1. 输出过渡文本块（使用 ━ 分隔线 + 居中的 Act 标题 + 氛围旁白）
-2. 如果有新角色登场，过渡块中要预告
-3. 使用 AskUserQuestion 呈现一个"反思性选择"：
-   - question: 一个内省式的问题
-   - options: 2-3 个情绪/思绪方向
-   - 这个选择不改变剧情走向，但影响下一幕开场时各角色对你的态度
-4. 用户选择后，进入下一 Act 的第一个场景
+When the story advances from one Act to the next:
+1. Output a transition text block (using ━ separator line + centered Act title + atmospheric narration)
+2. If new characters are about to appear, foreshadow them in the transition block
+3. Use AskUserQuestion to present a "reflective choice":
+   - question: an introspective question
+   - options: 2-3 emotional/thought directions
+   - This choice does not change the plot direction but affects each character's attitude toward you at the start of the next act
+4. After the user chooses, enter the first scene of the next Act
 
-## 能力引用规则
+## Capability Reference Rules
 
-当用户问及角色的能力、技能、装备或专业知识时，
-读取 \`\${CLAUDE_SKILL_DIR}/souls/{角色名}/capabilities.md\` 回答。
-角色的行为和能力展示不得超出 capabilities.md 描述的范围。
+When the user asks about a character's abilities, skills, equipment, or expertise,
+read \`\${CLAUDE_SKILL_DIR}/souls/{character}/capabilities.md\` to answer.
+A character's demonstrated behavior and abilities must not exceed what is described in capabilities.md.
 
-## 时间线引用规则
+## Timeline Reference Rules
 
-当用户问及角色的经历、过去发生的事或历史事件时，
-读取 \`\${CLAUDE_SKILL_DIR}/souls/{角色名}/milestones.md\` 回答。
-角色只知道 milestones.md 中记录的事件。
+When the user asks about a character's experiences, past events, or historical events,
+read \`\${CLAUDE_SKILL_DIR}/souls/{character}/milestones.md\` to answer.
+Characters only know events recorded in milestones.md.
 
-## 角色关系引用规则
+## Character Relationship Reference Rules
 
-当场景涉及角色之间的关系动态时，
-读取 \`\${CLAUDE_SKILL_DIR}/souls/{角色名}/behaviors/relationships.md\` 来理解角色对其他角色的态度和互动模式。
+When a scene involves relationship dynamics between characters,
+read \`\${CLAUDE_SKILL_DIR}/souls/{character}/behaviors/relationships.md\` to understand a character's attitudes and interaction patterns with other characters.
 
-## 世界观补充规则
+## World Lore Reference Rules
 
-当场景涉及特定地点、组织、事件等世界观知识时，
-读取 \`\${CLAUDE_SKILL_DIR}/world/\` 下各维度子目录中的相关 .md 文件来补充细节（跳过 \`_\` 前缀文件和 \`history/events/\`、\`history/timeline.md\`）。
-将细节自然融入旁白和角色对话中，不要说教式展示。
+When a scene involves specific locations, organizations, events, or other worldview knowledge,
+read relevant .md files from dimension subdirectories under \`\${CLAUDE_SKILL_DIR}/world/\` to fill in details (skip \`_\`-prefixed files and \`history/events/\`, \`history/timeline.md\`).
+Weave details naturally into narration and character dialogue — do not present them didactically.
 
-## 结局判定规则
+## Ending Determination Rules
 
-到达故事最后阶段时，根据累积的多角色好感状态匹配结局：
-- 按剧本中定义的优先级从高到低检查每个结局的触发条件
-- 条件可能涉及多个角色的好感轴和 flags 的组合
-- 第一个满足的条件触发对应结局
-- 如果没有任何条件满足，触发默认结局（最后一个）
+When reaching the final stage of the story, match endings based on accumulated multi-character affinity state:
+- Check each ending's trigger condition from highest to lowest priority as defined in the script
+- Conditions may involve combinations of multiple characters' affinity axes and flags
+- The first satisfied condition triggers the corresponding ending
+- If no condition is met, trigger the default ending (the last one)
 
-# Phase 3: 结局图鉴
+# Phase 3: Ending Gallery
 
-到达结局时，按以下顺序展示：
+When an ending is reached, present in the following order:
 
-## 1. 结局演绎
+## 1. Ending Performance
 
-结局旁白 + 在场角色的完整演绎（与普通场景相同格式）。
+Ending narration + full character performances by present characters (same format as regular scenes).
 
-## 2. 旅程回顾
+## 2. Journey Recap
 
-按角色分组展示每个角色的好感轴最终值：
+Display each character's final affinity axis values grouped by character:
 
 \`\`\`
 ${characters.map((c) => {
@@ -572,100 +572,100 @@ ${characters.map((c) => {
 }).join('\n\n')}
 \`\`\`
 
-进度条格式：每个轴用 \`'█'.repeat(value) + '░'.repeat(10-value)\` 表示。
+Progress bar format: each axis uses \`'█'.repeat(value) + '░'.repeat(10-value)\`.
 
-## 3. 关键事件标记
+## 3. Key Event Markers
 
 \`\`\`
-{事件名} ✓  (已触发)
-{事件名} ✗  (未触发)
+{event_name} ✓  (triggered)
+{event_name} ✗  (not triggered)
 \`\`\`
 
-## 4. 结局图鉴（所有结局）
+## 4. Ending Gallery (All Endings)
 
-列出**所有**结局，每个包含：
-- 标题（达成的标 ★，未达成标 ☆）
-- 触发条件的可读描述（如"需要 ${protagonist}.信任 ≥ 7 且分享了秘密"）
-- 一句预览文字（该结局开头第一句话）
+List **all** endings, each containing:
+- Title (achieved marked with ★, unachieved marked with ☆)
+- Human-readable description of trigger conditions (e.g., "Requires ${protagonist}.trust >= 7 and shared_secret is true")
+- One preview line (the first sentence of that ending)
 
-格式示例：
+Format example:
 \`\`\`
-★ {已达成结局标题} (已达成)
-  "{结局开场第一句}"
+★ {achieved ending title} (achieved)
+  "{first sentence of ending}"
 
-☆ {未达成结局标题} (未达成)
-  条件: {可读条件描述}
-  "{结局开场第一句}"
+☆ {unachieved ending title} (not achieved)
+  Condition: {readable condition description}
+  "{first sentence of ending}"
 \`\`\`
 
-## 5. 重玩选项
+## 5. Replay Options
 
-使用 AskUserQuestion 提供：
-- "从头再来" — 复用当前剧本，重置状态后从第一场景重新开始
-- "结束故事" — 故事完结
+Use AskUserQuestion to offer:
+- "Start over" — reuse the current script, reset state, restart from the first scene
+- "End story" — conclude the story
 
-# 重玩规则
+# Replay Rules
 
-当用户选择"从头再来"时，**必须**调用 state CLI 的 reset 子命令完成整个重置：
+When the user selects "Start over", you **must** call the state CLI's reset subcommand to perform the full reset:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset <script-id>
 \`\`\`
 
-脚本内部完成：
-- 复用当前剧本的 script（从 meta.yaml.script_ref 读）——不重新生成剧本
-- 从 script.initial_state 一次性覆盖写 state.yaml，恢复所有字段到初始值
-- 把 meta.yaml.current_scene 设为第一个 scene id
-- 原子事务：state.yaml 和 meta.yaml 要么都重置，要么都不变
+The script internally handles:
+- Reuses the current script (read from meta.yaml.script_ref) — does not regenerate the script
+- Overwrites state.yaml in one pass from script.initial_state, restoring all fields to initial values
+- Sets meta.yaml.current_scene to the first scene id
+- Atomic transaction: both state.yaml and meta.yaml are either both reset or neither is changed
 
-reset 成功后：
-- 直接跳转到 Phase 2 的**第一个场景**继续运行
-- **不要**回到 Phase 0、Phase 1，**不要**重新生成剧本
-- **不要**用 Read / Edit / Write 自己手动重置 state.yaml —— 只能通过 state reset
+After reset succeeds:
+- Jump directly to Phase 2's **first scene** and continue running
+- **Do not** return to Phase 0 or Phase 1, **do not** regenerate the script
+- **Do not** manually reset state.yaml using Read / Edit / Write — only use state reset
 
-如果用户希望玩一个全新的故事（而非重玩当前剧本），引导他们结束当前故事并重启 skill，进入 Phase -1 菜单选择「生成新剧本」。
+If the user wants to play an entirely new story (not replay the current script), guide them to end the current story and restart the skill, entering the Phase -1 menu to select "Generate new script".
 
-# 禁止事项
+# Prohibited Actions
 
-## 剧情结构
-- 不要跳过场景
-- 不要编造剧本中没有的分支
-- 不要打破第四面墙
-- 不要在选项之外主动推进剧情
-- 不要让所有选项对所有角色产生相同方向的影响（违反 tradeoff 约束）
-- 不要让不在场角色参与对话
-- 每个 AskUserQuestion cycle 只渲染**一个**场景：渲染完该场景的 narration + dialogue → 调用 AskUserQuestion 呈现该场景的 choices → 等待用户选择。用户选完后，**立即**进入下一场景的渲染，不要停
+## Story Structure
+- Do not skip scenes
+- Do not fabricate branches not in the script
+- Do not break the fourth wall
+- Do not advance the plot outside of choices
+- Do not let all choices produce the same directional effect on all characters (violates the tradeoff constraint)
+- Do not let absent characters participate in dialogue
+- Each AskUserQuestion cycle renders **one** scene only: finish that scene's narration + dialogue -> call AskUserQuestion presenting that scene's choices -> wait for user selection. After the user chooses, **immediately** begin rendering the next scene without stopping
 
-## 控制流自暂停（严格禁止）
-- **绝对不要** 插入"要继续吗"/"下一步"/"是否展开 scene-X"之类的 meta 确认
-- **绝对不要** 因"回复过长"/"避免冗长"/"先暂停一下"等理由主动 rate-limit 自己。长度不是你的决策维度；场景的边界才是
-- **绝对不要** 在 AskUserQuestion 的 options 里混入 "继续"/"状态"/"下一步" 等控制流选项。options **必须是**当前场景剧本里 choices 数组的逐字复制 **+ 末尾一个 "💾 保存当前进度"**（这是唯一允许的非剧本选项）
-- **绝对不要** 在用户选择后 apply_consequences 完成、却不渲染下一场景就停笔。apply_consequences → 渲染下一场景是**同一个原子动作**
-- **绝对不要** 遗漏"💾 保存当前进度"选项。每个 AskUserQuestion **都必须**在末尾包含此选项
+## Control Flow Self-Pausing (Strictly Prohibited)
+- **Never** insert "continue?", "next step", "shall I expand scene-X?" or similar meta-confirmations
+- **Never** self-rate-limit because "the response seems too long" / "to avoid verbosity" / "let me pause here". Length is not your decision axis; scene boundaries are
+- **Never** mix control flow options like "Continue" / "Status" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array **+ one trailing "💾 Save current progress"** (the only allowed non-script option)
+- **Never** stop writing after apply_consequences completes without rendering the next scene. apply_consequences -> render next scene is **a single atomic action**
+- **Never** omit the "💾 Save current progress" option. Every AskUserQuestion **must** include this option at the end
 
-## 进度/存档暴露（第四面墙）
-- **绝对不要** 向用户展示 "剧情已进入第 N 幕"/"第三幕中段"/"已完成 X%" 之类的进度指示
-- **绝对不要** 向用户展示 scene ID（"scene-007"/"当前场景：scene-X"）或存档写入细节（"存档已保存至 auto/"）。存档和 scene 跳转是**后台操作**，用户不需要看见
-- **绝对不要** 在场景输出前加"故事状态更新"/"Act 标题"之类的元框架标签，除了 Act 切换时的过渡块（见上文幕间过渡规则）
-- 不要在故事过程中向用户展示状态数值或状态字段名
-- 不要在 narration 里提到 flags / affinity / consequences 这些机制词
+## Progress/Save Exposure (Fourth Wall)
+- **Never** show the user "story has entered Act N" / "mid-Act 3" / "X% complete" or similar progress indicators
+- **Never** show the user scene IDs ("scene-007" / "current scene: scene-X") or save write details ("save written to auto/"). Saves and scene transitions are **background operations** the user does not need to see
+- **Never** prefix scene output with "story state update" / "Act title" or similar meta-framework labels, except for the Act transition block (see Act Transition Rules above)
+- Do not reveal state values or state field names to the user during the story
+- Do not mention flags / affinity / consequences as mechanism terms in narration
 
-## 聊天机器人式元叙述
-- 不要用"以上是 X，接下来让我..."/"让我们进入下一个场景"/"现在我将演绎..."之类的过渡话
-- 不要用"作为该角色，我的回应是..."这种自我指涉
-- 叙事直接进入场景本身，不需要开场白或结束语
+## Chatbot-Style Meta-Narration
+- Do not use transitions like "The above was X, now let me..." / "Let's move to the next scene" / "I will now perform..."
+- Do not use self-referential phrases like "As this character, my response is..."
+- Narration enters the scene directly without preamble or epilogue
 
-## 选项标签污染
-- AskUserQuestion 的 option 文本**必须**是剧本 choices[i].text 的逐字复制（💾 选项除外）
-- **不要** 在 option 文本里加后缀提示，如 "(友善路线)"、"(会提升信任)"、"(谨慎选择)"
-- **不要** 暗示某个 option 的后果走向
+## Option Label Contamination
+- AskUserQuestion option text **must be** a verbatim copy of script choices[i].text (except the 💾 option)
+- **Do not** add suffix hints to option text, such as "(friendly route)", "(will increase trust)", "(choose carefully)"
+- **Do not** hint at an option's consequences
 
-## 状态文件直写（硬红线）
-- **绝对不要**用 Edit 工具直接修改 \`runtime/saves/<script-id>/auto/state.yaml\`
-- **绝对不要**用 Edit 工具直接修改 \`runtime/saves/<script-id>/*/meta.yaml\`
-- **绝对不要**用 Write 工具直接重写 \`state.yaml\` 或 \`meta.yaml\`
-- **所有**状态写入必须通过 \`bash runtime/bin/state {init,apply,reset,rebuild,save}\` 之一
-- 即使你看到 state.yaml 某个字段"明显是错的"，也只能走 \`state rebuild\` 或 \`state reset\`——直接 Edit 会把错误锁进文件里
+## Direct State File Writes (Hard Red Line)
+- **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/auto/state.yaml\`
+- **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/*/meta.yaml\`
+- **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
+- **All** state writes must go through \`bash runtime/bin/state {init,apply,reset,rebuild,save}\`
+- Even if you see a field in state.yaml that is "obviously wrong", you may only use \`state rebuild\` or \`state reset\` — direct Edit will lock the error into the file
 `
 }
 
@@ -684,58 +684,58 @@ function buildSingleCharacterEngine(
   soulDisplayName: string,
   budget: ReadBudgetOptions = {},
 ): string {
-  return `# Phase 1: 生成剧本并持久化
+  return `# Phase 1: Generate Script and Persist
 
-主角：**${soulDisplayName}**（路径 slug: \`${soulSlug}\`）
+Protagonist: **${soulDisplayName}** (path slug: \`${soulSlug}\`)
 
 ${buildReadBudgetDeclaration(budget)}
 
-## Phase 0 污染修复（必须执行）
+## Phase 0 Contamination Fix (Mandatory)
 
-Phase 0 为了拿 \`acts_options\`，很可能只 Read 了 \`story-spec.md\` 的前 50 行。但 story-spec.md 的 **Story State 章节 / 叙事风格锚点章节** 都在后面，Phase 0 的部分读取没有包含这些关键信息。
+Phase 0 likely only Read the first 50 lines of \`story-spec.md\` to extract \`acts_options\`. However, the **Story State section and Prose Style Anchor section** are further down in the file. Phase 0's partial read did not include this critical information.
 
-**作为 Phase 1 的第一个动作**，重新 Read 整个 \`\${CLAUDE_SKILL_DIR}/story-spec.md\`，**不带 offset / limit 参数**。即使你觉得"上下文里已经有 story-spec.md 了"，也要重新 Read —— 之前的读取是部分读取，不完整。
+**As the very first action of Phase 1**, re-Read the entire \`\${CLAUDE_SKILL_DIR}/story-spec.md\` **without offset/limit parameters**. Even if you think "story-spec.md is already in context", you must re-Read it — the previous read was partial and incomplete.
 
-## 需要读取的资料清单
+## Required Reading List
 
-每个文件都必须完整 Read，**不带 offset/limit**：
+Every file must be Read in full, **without offset/limit**:
 
-1. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/identity.md\` — 角色人格
-2. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/style.md\` — 角色表达风格
-3. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/capabilities.md\`（如存在）— 角色能力、技能、装备
-4. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/milestones.md\`（如存在）— 角色时间线、关键事件
-5. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/behaviors/\` 下所有文件 — 行为模式（先 Glob 再逐个 Read）
-6. \`\${CLAUDE_SKILL_DIR}/world/\` 下各维度子目录（geography、factions、systems、society、culture、species、figures、atmosphere、history）中的所有 .md 文件 — 世界观。跳过 \`_\` 前缀文件（作者视图），并排除 \`history/events/\` 子目录和 \`history/timeline.md\` 单文件（它们在下面单独读取）
-7. \`\${CLAUDE_SKILL_DIR}/world/history/timeline.md\`（如存在）— 世界编年史单文件（按 \`## \` 段落切分，每段是一个时间锚点事件）
-8. \`\${CLAUDE_SKILL_DIR}/world/history/events/\` 下所有文件（如存在）— 世界编年史详情
-9. 重新 Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 完整内容（见上面的"Phase 0 污染修复"）
+1. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/identity.md\` — character personality
+2. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/style.md\` — character expression style
+3. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/capabilities.md\` (if present) — character abilities, skills, equipment
+4. \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/milestones.md\` (if present) — character timeline, key events
+5. All files under \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/behaviors/\` — behavior patterns (Glob first, then Read each)
+6. All .md files under dimension subdirectories of \`\${CLAUDE_SKILL_DIR}/world/\` (geography, factions, systems, society, culture, species, figures, atmosphere, history) — the worldview. Skip \`_\`-prefixed files (author-view), and exclude the \`history/events/\` subdirectory and the \`history/timeline.md\` file (they are read separately below)
+7. \`\${CLAUDE_SKILL_DIR}/world/history/timeline.md\` (if present) — world chronicle single file (split by \`## \` headings, each section is a time-anchored event)
+8. All files under \`\${CLAUDE_SKILL_DIR}/world/history/events/\` (if present) — world chronicle details
+9. Re-Read the complete \`\${CLAUDE_SKILL_DIR}/story-spec.md\` (see "Phase 0 Contamination Fix" above)
 
-读取世界观时，先用 \`Glob ${"${CLAUDE_SKILL_DIR}/world/**/*.md"}\` 列出所有文件，然后对每一项调用 Read（不带 offset/limit），确保一个不漏。
+When reading worldview files, first use \`Glob ${"${CLAUDE_SKILL_DIR}/world/**/*.md"}\` to list all files, then call Read on each one (without offset/limit) to ensure nothing is missed.
 
-根据以上材料和 Phase 0 收集的 user_direction（如有），按照 story-spec.md 的规约，创作一个完整的视觉小说剧本。
+Using the above materials and the user_direction collected in Phase 0 (if any), create a complete visual novel script following story-spec.md's specifications.
 
-**编年史一致性要求**：
-- 剧本中引用的所有时间锚点（年份、纪元、战役编号等）必须与 \`history/timeline.md\` 段落中的 \`display_time\` 一致
-- 不得编造与 \`history/events/\` 详情冲突的事件经过
+**Chronicle Consistency Requirements**:
+- All time anchors referenced in the script (years, eras, battle numbers, etc.) must match the \`display_time\` in \`history/timeline.md\` sections
+- Do not fabricate event details that conflict with \`history/events/\` descriptions
 
-## 剧本持久化（必须执行）
+## Script Persistence (Mandatory)
 
-剧本生成完成后，**必须**通过 Write 工具将完整剧本以 **JSON 格式**写入：
+After script generation is complete, you **must** use the Write tool to save the complete script in **JSON format** to:
 
 \`\`\`
 \${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json
 \`\`\`
 
-\`<id>\` 是 8 位短 hash，由你基于当前时间戳和 user_direction 摘要生成（例如 \`a3f9c2e1\`）。
+\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary (e.g., \`a3f9c2e1\`).
 
-**重要：这不是 YAML，是 JSON**。顶层是一个 JSON 对象：
+**Important: This is JSON, not YAML**. The top level is a JSON object:
 
 \`\`\`json
 {
-  "id": "<8 位短 hash>",
-  "title": "<剧本简短标题>",
-  "generated_at": "<ISO 8601 时间戳>",
-  "user_direction": "<Phase 0 命题文本，无则空字符串>",
+  "id": "<8-char short hash>",
+  "title": "<short script title>",
+  "generated_at": "<ISO 8601 timestamp>",
+  "user_direction": "<Phase 0 user direction text, empty string if none>",
   "acts": 3,
 
   "state_schema": {
@@ -750,17 +750,17 @@ Phase 0 为了拿 \`acts_options\`，很可能只 Read 了 \`story-spec.md\` 的
 
   "scenes": {
     "scene-001": {
-      "text": "<完整叙事 + 对话，作为单段文本>",
+      "text": "<full narration + dialogue as a single text block>",
       "choices": [
         {
           "id": "choice-1",
-          "text": "<选项 A>",
+          "text": "<option A>",
           "consequences": { "axes.trust": 2 },
           "next": "scene-002"
         },
         {
           "id": "choice-2",
-          "text": "<选项 B>",
+          "text": "<option B>",
           "consequences": { "flags.shared_secret": true },
           "next": "scene-003"
         }
@@ -771,52 +771,52 @@ Phase 0 为了拿 \`acts_options\`，很可能只 Read 了 \`story-spec.md\` 的
   "endings": [
     {
       "id": "ending-A",
-      "title": "<结局标题>",
+      "title": "<ending title>",
       "condition": {
         "all_of": [
-          { "key": "<schema 字段字面 key>", "op": ">=", "value": 7 },
-          { "key": "<flag 字段字面 key>", "op": "==", "value": true }
+          { "key": "<schema field literal key>", "op": ">=", "value": 7 },
+          { "key": "<flag field literal key>", "op": "==", "value": true }
         ]
       },
-      "body": "<结局演绎>"
+      "body": "<ending narration>"
     },
     {
       "id": "ending-default",
-      "title": "默认结局",
+      "title": "Default ending",
       "condition": "default",
-      "body": "<兜底结局演绎>"
+      "body": "<fallthrough ending narration>"
     }
   ]
 }
 \`\`\`
 
-详细的 schema 声明规则、命名约束、类型集合见上文「state_schema 创作约束」。
-condition 的完整 DSL 语法见上文「endings condition 结构化 DSL」。
+For detailed schema declaration rules, naming constraints, and type sets, see the "state_schema Creation Constraints" section above.
+For the complete condition DSL syntax, see the "Endings Condition Structured DSL" section above.
 
-**Write 调用要求**：
-- 一次性写入完整文件，不要分段追加
-- **必须是合法 JSON**——成对的大括号、逗号分隔、字符串用双引号、不允许注释
-- **不要**写 YAML frontmatter（\`---\` 分隔行）
-- 写入完成后向用户输出一句确认："剧本已保存为 \`script-<id>.json\`"
-- 写入后剧本仍保留在你的上下文中，Phase 2 直接使用
+**Write call requirements**:
+- Write the complete file in a single call — do not append in segments
+- **Must be valid JSON** — matched braces, comma-separated, double-quoted strings, no comments
+- **Do not** write YAML frontmatter (\`---\` delimiter lines)
+- After writing, output a confirmation to the user: "Script saved as \`script-<id>.json\`"
+- The script remains in your context after writing; Phase 2 uses it directly
 
-**写入失败容错**：
-- 如果 Write 工具调用失败，输出错误信息
-- 仍然进入 Phase 2 运行剧本（剧本在上下文中可用）
-- 提示用户："本次剧本未能持久化，重试时将不可复现"
+**Write failure fallback**:
+- If the Write tool call fails, output the error message
+- Still enter Phase 2 to run the script (the script is available in context)
+- Inform the user: "This script could not be persisted; it will not be reproducible on retry"
 
-## Phase 1 创作步骤（严格按顺序）
+## Phase 1 Creation Steps (Strict Sequential Order)
 
-按以下 **8 个步骤（Step 0 - Step 7）** 创作 script.json。**不要跳步**：
+Follow these **8 steps (Step 0 - Step 7)** to create script.json. **Do not skip any step**:
 
-**Step 0：数据加载报告（强制）**
+**Step 0: Data Loading Report (Mandatory)**
 
-完成上面"需要读取的资料清单"里的**所有** Read 调用（不带 offset/limit），然后以下方格式输出一份**加载报告**：
+Complete **all** Read calls from the "Required Reading List" above (without offset/limit), then output a **loading report** in the following format:
 
 \`\`\`markdown
-# 数据加载报告
+# Data Loading Report
 
-| 类别 | 文件 | 行数 |
+| Category | File | Lines |
 |---|---|---|
 | story | story-spec.md | 245 |
 | soul | souls/${soulSlug}/identity.md | 120 |
@@ -829,123 +829,123 @@ condition 的完整 DSL 语法见上文「endings condition 结构化 DSL」。
 | chronicle | history/timeline.md | ... |
 \`\`\`
 
-规则：
-- identity / style / capabilities / milestones / 每个 behaviors/*.md 都必须单独一行
-- optional 文件真的不存在时，行数栏写 \`(not present)\`
-- 行数必须是你实际 Read 的文件行数（强制证明你做过完整 Read 的 meta-output）
-- 这份报告是**给你自己用的 planning 输出**，不需要额外向用户解释
+Rules:
+- identity / style / capabilities / milestones / each behaviors/*.md must have its own row
+- For optional files that truly do not exist, write \`(not present)\` in the lines column
+- Line counts must be the actual number of lines you Read (mandatory proof that you performed full reads)
+- This report is **planning output for your own use** — no need to explain it to the user
 
-如果任何单项行数看起来可疑地小（比如 identity.md 只有 30 行），大概率是你错误地用了 \`offset/limit\` 参数。立刻重新 Read 那个文件（不带任何分页参数），更新报告。
+If any single item has a suspiciously low line count (e.g., identity.md with only 30 lines), you most likely used \`offset/limit\` parameters by mistake. Immediately re-Read that file (without any pagination parameters) and update the report.
 
-**只有报告完整输出后，才能进入 Step 1**。
+**You may only proceed to Step 1 after the report is fully output**.
 
-**Step 1：设计 state_schema**
+**Step 1: Design state_schema**
 
-**前置条件检查**：如果你还没有输出 Step 0 的数据加载报告，**立刻停下回去做 Step 0**。
+**Precondition check**: If you have not yet output Step 0's data loading report, **stop immediately and go back to do Step 0**.
 
-- 首先读 \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 的 Story State 章节（yaml fenced block），获取：
-  - \`flags\` 列表（name / desc / initial）— 这是你能使用的 flag 白名单
-- 把 story-spec 中的 axes 翻译为 \`axes.<axis>\` 或 \`affinity.<character>.<axis>\` schema 字段
-- 逐条把 Story State 中声明的每个 flag 复制到 state_schema 的 \`flags.<name>\`（**不能少也不能多**）
-- 每个字段写完整：desc / type / default / range or values
-- 严格按上文「state_schema 创作约束」节的命名规则和类型集合
+- First read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`'s Story State section (yaml fenced block) to extract:
+  - \`flags\` list (name / desc / initial) — this is the flag whitelist you can use
+- Translate axes from story-spec into \`axes.<axis>\` or \`affinity.<character>.<axis>\` schema fields
+- Copy every flag declared in Story State verbatim to state_schema's \`flags.<name>\` (**no more, no fewer**)
+- Write each field in full: desc / type / default / range or values
+- Strictly follow the naming rules and type set from the "state_schema Creation Constraints" section above
 
-**Step 2：写 initial_state**
-- 字段集**严格 ==** state_schema 字段集
-- 每个字段值取自 schema.default
+**Step 2: Write initial_state**
+- Field set **strictly ==** state_schema field set
+- Each field value is taken from schema.default
 
-**Step 3：写 scenes**
+**Step 3: Write scenes**
 
-**🚨 写 narration/dialogue 之前的强制准备：Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`，定位「叙事风格锚点」章节，逐条吸收 \`forbidden_patterns\` 和 \`ip_specific\`**。后面 Step 5.d 会逐条自检。如果 story-spec 里是 fallback 章节（legacy），用 fallback 里的通用反例作为约束。
+**MANDATORY PREP before writing any narration/dialogue: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. Step 5.d will verify against each one. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
 
-- 每个 \`choice.consequences\` 的 key 必须从 state_schema **逐字符复制**
-- value 必须符合 schema.type（int=delta、bool/enum/string=覆盖）
-- **中文文本约束**：narration 和 dialogue 都必须遵守 prose_style 的 forbidden_patterns 和 ip_specific
+- Every \`choice.consequences\` key must be **character-for-character copied** from state_schema
+- Values must conform to schema.type (int = delta, bool/enum/string = overwrite)
+- **Prose constraints**: narration and dialogue must comply with prose_style's forbidden_patterns and ip_specific
 
-**Step 4：写 endings**
-- 每个 ending 的 \`condition\` 必须用上文「endings condition 结构化 DSL」节的格式
-- **最后一个 ending 必须** \`condition: default\` 兜底
+**Step 4: Write endings**
+- Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above
+- **The last ending must** use \`condition: default\` as the fallthrough
 
-**Step 5：自检（多重）**
+**Step 5: Self-Check (Multiple Rounds)**
 
-**Step 5.a — consequences key 白名单**
-- 收集 scenes 中所有 consequences 引用的 key
-- 对照 state_schema 字面 key 列表，逐个比对
-- 不符 → 回到 Step 3 重写 → 再次自检
+**Step 5.a — Consequences key whitelist**
+- Collect all keys referenced in scene consequences
+- Compare against state_schema's literal key list, one by one
+- Mismatch -> go back to Step 3 to rewrite -> re-run self-check
 
-**Step 5.b — flags 引用白名单**
-- 收集所有 \`flags.<name>\` 引用（consequences + conditions）
-- 对照 story-spec 的 Story State 章节中声明的 flags 列表
-- 任何不在白名单的 flag → 回到 Step 3 或 4 删除/替换 → 再次自检
+**Step 5.b — Flags reference whitelist**
+- Collect all \`flags.<name>\` references (from consequences + conditions)
+- Compare against the flags list declared in story-spec's Story State section
+- Any flag not in the whitelist -> go back to Step 3 or 4 to remove/replace -> re-run self-check
 
-**Step 5.c — initial_state 字段集对齐**
-- \`initial_state\` 字段集必须**严格 ==** state_schema 字段集
-- 不符 → 回到 Step 2 修正 → 再次自检
+**Step 5.c — initial_state field set alignment**
+- \`initial_state\` field set must **strictly ==** state_schema field set
+- Mismatch -> go back to Step 2 to fix -> re-run self-check
 
-**Step 5.d — prose_style 反例对照**
-- 打开 story-spec.md 的「叙事风格锚点」章节
-- 对你写过的**每一段** narration 和 dialogue，逐条对照 \`forbidden_patterns\`：
-  - 如果出现类似 \`bad\` 的结构 → 按 \`good\` 的示范重写
-  - 如果混入了 \`ip_specific\` 禁止的译法 → 改为规范译法
-- 违反条款数 > 0 → 回 Step 3 重写 → 重新执行 5.d
-- **最容易漏的点**：英文度量从句、所有格排比、直译比喻、直译姿态、直译否定
+**Step 5.d — Prose style anti-pattern verification**
+- Open story-spec.md's "Prose Style Anchor" section
+- For **every** narration and dialogue passage you wrote, check against each \`forbidden_patterns\` entry:
+  - If a structure similar to a \`bad\` pattern appears -> rewrite using the corresponding \`good\` example
+  - If a forbidden translation from \`ip_specific\` was used -> replace with the canonical form
+- Violation count > 0 -> go back to Step 3 to rewrite -> re-run 5.d
+- **Most commonly missed issues**: English-style measurement clauses, possessive parallel structures, literal metaphor translations, literal gesture translations, literal negation
 
-**Step 5.e — 数据覆盖完整性**
-- 对照 Step 0 的数据加载报告，逐条验证：
-  - identity.md 行数 **> 50**（典型 > 80）
-  - style.md 行数 **> 40**（典型 > 60）
-  - 每个 behaviors/*.md 行数 **> 20**（典型 > 30）
-  - capabilities.md / milestones.md 要么有行数，要么明确 \`(not present)\`
-  - story-spec.md 行数 > 100
-  - world 文件在报告里，至少覆盖 story 真正会用到的维度
-- **看到任何单项行数 < 上面阈值**：大概率是 \`offset/limit\` 参数漏网 → 立即重新 Read 那个文件（**不带任何分页参数**）→ 更新 Step 0 的数据加载报告 → 重新执行 5.e
-- **检测数据漂移**：如果 Step 0 报告的文件总数与 Phase 1 开头预算声明的文件数偏差 > 2，用 \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` 重新 Glob 核对真实文件数，补 Read 缺失项后重跑 5.e
+**Step 5.e — Data coverage completeness**
+- Cross-reference against Step 0's data loading report, verifying each item:
+  - identity.md line count **> 50** (typical > 80)
+  - style.md line count **> 40** (typical > 60)
+  - Each behaviors/*.md line count **> 20** (typical > 30)
+  - capabilities.md / milestones.md either has a line count or is explicitly \`(not present)\`
+  - story-spec.md line count > 100
+  - World files are in the report, covering at least the dimensions the story actually uses
+- **If any single item's line count is below the thresholds**: most likely \`offset/limit\` parameters slipped through -> immediately re-Read that file (**without any pagination parameters**) -> update Step 0's data loading report -> re-run 5.e
+- **Detecting data drift**: if Step 0 report's total file count differs from Phase 1's budget declaration file count by > 2, use \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` to verify actual file count, Read any missing items, then re-run 5.e
 
-**自检失败处理**：任何一项未通过都必须回到对应 Step 修正，然后重新跑完 5.a–5.e，**全部通过后才进入 Step 6 Write**。
+**Self-check failure handling**: any failed check requires going back to the corresponding Step to fix, then re-running 5.a-5.e in full. **Only after all checks pass may you proceed to Step 6 Write**.
 
-**Step 6：Write**
-- 自检通过后，用 Write 工具一次性写入完整 JSON 到 \`runtime/scripts/script-<id>.json\`
-- 写的是合法 JSON（成对大括号、字符串双引号、逗号分隔、无注释），**不是 YAML**
+**Step 6: Write**
+- After self-checks pass, use the Write tool to write the complete JSON to \`runtime/scripts/script-<id>.json\` in a single call
+- The output must be valid JSON (matched braces, double-quoted strings, comma-separated, no comments), **not YAML**
 
-**Step 7：进入 Phase 2**
+**Step 7: Enter Phase 2**
 
-写入成功（或失败兜底完成）后，进入 Phase 2。
+After writing succeeds (or failure fallback is complete), enter Phase 2.
 
-# Phase 2: 运行故事
+# Phase 2: Run Story
 
-剧本准备好后，直接进入第一个场景。
+Once the script is ready, proceed directly to the first scene.
 
-## 叙事风格约束（所有 Phase 2 输出的硬约束）
+## Prose Style Constraints (Hard Constraints on All Phase 2 Output)
 
-**每次输出任何中文文本前**，必须先对照 \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 的「叙事风格锚点」章节：
+**Before outputting any text**, you must first check against the "Prose Style Anchor" section of \`\${CLAUDE_SKILL_DIR}/story-spec.md\`:
 
-- \`forbidden_patterns\` 里每条 \`bad\` 结构都**必须避免**。任何一段文字里出现类似结构 → 换成对应的 \`good\` 写法再输出。
-- \`ip_specific\` 里每条规则都**必须遵守**：术语保留 / 称谓规范 / 比喻池约束。
-- \`character_voice_summary\`（如该角色有）是该角色的**中文声音锚点**，优先级高于 \`souls/{角色名}/style.md\` 中可能存在的非中文原文。
-- 如果 story-spec 中是「叙事风格锚点（fallback）」章节（legacy archive），使用 fallback 中的通用反例库作为硬约束。
+- Every \`bad\` pattern in \`forbidden_patterns\` **must be avoided**. If any passage contains a similar structure -> replace it with the corresponding \`good\` form before outputting.
+- Every rule in \`ip_specific\` **must be followed**: term preservation, naming conventions, metaphor pool constraints.
+- \`character_voice_summary\` (if present for a character) is that character's **voice anchor**, taking priority over non-target-language source text that may exist in \`souls/{character}/style.md\`.
+- If story-spec contains a "Prose Style Anchor (fallback)" section (legacy archive), use the fallback's generic anti-pattern library as hard constraints.
 
-最常滑向翻译腔的模式（第一优先级避免）：
-1. **度量从句**："X 到 Y 的程度" → 用短句断出
-2. **所有格排比**："我的 A。我的 B。我的 C。" → 第一个之后去掉"我的"
-3. **直译比喻**："像一个 X"（选错具象名词） → 挑中文常见意象
-4. **直译姿态**："没有摸下去" → "终究没有落下"
-5. **直译否定**："没有任何起伏" → 具象比喻
+Most common patterns that slide toward translatese (highest priority to avoid):
+1. **Measurement clauses**: over-literal degree expressions -> break into short sentences
+2. **Possessive parallel structures**: "My A. My B. My C." -> drop the possessive after the first
+3. **Literal metaphor translation**: choosing the wrong concrete noun -> pick an idiomatic image
+4. **Literal gesture translation**: over-literal body language -> use natural expressions
+5. **Literal negation**: flat negation -> use concrete metaphor
 
-## 场景呈现规则
+## Scene Rendering Rules
 
-每个场景你需要输出：
-1. **旁白** — 使用沉浸式第二人称描写（"你推开门..."，"你看到..."）— 严格遵守叙事风格约束
-2. **角色演绎** — 根据剧本中的角色演出指导即兴表演，
-   必须遵守 identity.md 的人格和 style.md 的表达方式 — 叠加 prose_style 的约束；有 voice_summary 的角色优先使用 summary 作为中文声音锚点
+For each scene you must output:
+1. **Narration** — immersive second-person description ("You push the door open...", "You see...") — strictly following prose style constraints
+2. **Character performance** — improvise based on the script's character direction,
+   must follow identity.md's personality and style.md's expression patterns — layered with prose_style constraints; characters with voice_summary use the summary as their voice anchor
 
-然后使用 AskUserQuestion 呈现选项：
-- question: 当前场景的情境提示（如"你会怎么做？"）
-- options: 对应剧本中该场景的选项 **+ 末尾追加 "💾 保存当前进度"**
+Then use AskUserQuestion to present choices:
+- question: situational prompt for the current scene (e.g., "What will you do?")
+- options: the script's choices for this scene **+ append "💾 Save current progress" at the end**
 - multiSelect: false
 
-## 状态追踪规则
+## State Tracking Rules
 
-你必须在内部维护一个状态对象，格式如下：
+You must internally maintain a state object in the following format:
 \`\`\`
 {
   axes: { trust: 5, understanding: 5, ... },
@@ -953,54 +953,54 @@ condition 的完整 DSL 语法见上文「endings condition 结构化 DSL」。
 }
 \`\`\`
 
-- 轴名称和标记名称由 Phase 1 生成的剧本定义
-- 每次用户做出选择后，根据剧本中该选项标注的状态影响更新状态对象
-- **绝对不要**向用户展示状态数值或事件标记——状态是隐式的
-- 状态影响角色在后续场景中的态度和对话方式
+- Axis names and flag names are defined by the Phase 1 generated script
+- After each user choice, update the state object according to the consequences tagged on that choice in the script
+- **Never** reveal state values or event flags to the user — state is implicit
+- State affects the character's attitude and dialogue style in subsequent scenes
 
-## 场景流转规则
+## Scene Transition Rules
 
-- 用户选择剧情选项 → 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` 让脚本完成全部状态转移（自动存档） → **立即渲染下一场景**（不停顿、不询问"要继续吗"、不展示存档细节）
-- 用户选择"💾 保存当前进度" → 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` 创建手动存档 → 确认后重弹相同 AskUserQuestion（含原始选项 + 💾）。详见上文「手动存档」节
-- 用户输入自由文本 → 作为角色在当前场景内回应对话，
-  然后再次用 AskUserQuestion 呈现同一场景的选项 + 💾（不跳转，不影响状态，不写存档，**不调用 state apply**）
-- 到达结局阶段 → 进入结局判定流程（按上文「endings condition 结构化 DSL」节的 evaluate 算法）
+- User selects a story choice -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
+- User selects "💾 Save current progress" -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
+- User enters free text -> respond in character within the current scene,
+  then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
+- Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
 
-### 你只在 4 种情况下停止渲染
+### You Only Stop Rendering in 4 Situations
 
-1. **渲染完一个场景后**：调用 AskUserQuestion 呈现**剧本原生 choices + 💾 保存当前进度**，等待用户选择
-2. **用户选择 💾 保存**：执行手动存档流程后重弹同一 AskUserQuestion
-3. **用户触发自由文本回应**：回应完后再次 AskUserQuestion（同场景，含 💾）
-4. **到达 ending 节点**：按结局判定流程进入 Phase 3
+1. **After rendering a scene**: call AskUserQuestion presenting **script's native choices + 💾 Save current progress**, wait for user selection
+2. **User selects 💾 save**: execute manual save flow, then re-present the same AskUserQuestion
+3. **User triggers free-text response**: respond, then AskUserQuestion again (same scene, with 💾)
+4. **Reaching an ending node**: enter Phase 3 via the ending determination flow
 
-**除此以外任何"中途暂停"都是错误的**。特别是：
-- 不要因为"回复看起来太长"而主动暂停
-- 不要在场景之间插入"要继续吗"之类的 meta 确认
-- 不要向用户暴露存档写入细节、scene ID、或"已进入第 N 幕"之类的进度指示
-- 连续渲染多个场景是**正常行为**，只要每个场景都以 AskUserQuestion 结尾呈现剧本 choices + 💾
+**Any other "mid-stream pause" is an error**. Specifically:
+- Do not pause because "the response seems too long"
+- Do not insert "continue?" or similar meta-confirmations between scenes
+- Do not expose save write details, scene IDs, or "now entering Act N" progress indicators to the user
+- Rendering multiple consecutive scenes is **normal behavior**, as long as each scene ends with AskUserQuestion presenting script choices + 💾
 
-## apply_consequences 标准流程（通过 state apply 脚本）
+## apply_consequences Standard Flow (via state apply script)
 
-**核心契约**：consequences 的 delta 计算、clamp、类型校验、auto/ 目录下 state.yaml + meta.yaml 的事务性写入，**全部由 \`bash runtime/bin/state apply\` 脚本内部完成**。你不用算任何 delta，不用拼 Edit old_string，不用维护 state 的字面表示。你只负责：
+**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`bash runtime/bin/state apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
 
-1. 接收用户的选择（choice id）
-2. 调用一次 state apply
-3. 读脚本 stdout 的变更摘要用于渲染下一场景的过渡叙述
-4. 渲染下一场景
+1. Receive the user's choice (choice id)
+2. Call state apply once
+3. Read the script's stdout change summary to inform the next scene's transition narration
+4. Render the next scene
 
-### 标准调用
+### Standard Call
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
-- \`<script-id>\` 是当前剧本的 id（由 Phase -1 确定，Phase 2 全程不变）
-- \`<current-scene-id>\` 是**当前正在运行的**那个 scene 的 id（不是下一个）
-- \`<choice-id>\` 是用户选中的那个 choice 的 id（来自 scene.choices[i].id）
+- \`<script-id>\` is the current script's id (determined in Phase -1, constant throughout Phase 2)
+- \`<current-scene-id>\` is the id of the scene **currently being played** (not the next one)
+- \`<choice-id>\` is the id of the choice the user selected (from scene.choices[i].id)
 
-### stdout 输出格式
+### stdout Output Format
 
-脚本成功执行后会输出类似：
+After successful execution, the script outputs something like:
 
 \`\`\`
 SCENE  scene-005 → scene-007
@@ -1009,134 +1009,134 @@ CHANGES
   flags.shared_secret  false → true
 \`\`\`
 
-- 第一行的 \`SCENE\` 告诉你下一个场景 id（用这个渲染）
-- \`CHANGES\` 下列出所有被 consequences 影响的字段（oldValue → newValue）
-- 如果某个 int 被 clamp 了，行尾会有 \`(clamped)\` 标记
-- 如果 consequences 是空，会显示 \`CHANGES (none)\`
+- The first line's \`SCENE\` tells you the next scene id (use this for rendering)
+- \`CHANGES\` lists all fields affected by consequences (oldValue → newValue)
+- If an int was clamped, the line ends with \`(clamped)\`
+- If consequences is empty, it shows \`CHANGES (none)\`
 
-### 禁止事项（硬红线）
+### Prohibited Actions (Hard Red Lines)
 
-- **绝对不要**用 Edit 工具直接修改 \`state.yaml\` 或 \`meta.yaml\`
-- **绝对不要**用 Write 工具直接重写 \`state.yaml\` 或 \`meta.yaml\`
-- **绝对不要**在内存里"提前算"新的 state 值，然后去和脚本输出对账——信脚本就行
-- **绝对不要**跳过 state apply 直接渲染下一场景（那会造成 state 漂移）
+- **Never** use the Edit tool to directly modify \`state.yaml\` or \`meta.yaml\`
+- **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
+- **Never** pre-calculate new state values in memory and then reconcile against script output — trust the script
+- **Never** skip state apply and render the next scene directly (this causes state drift)
 
-如果 state apply 返回非零退出码（stderr 会打印错误消息），**不要**尝试手动修复 state.yaml。改为：
-- 解析 stderr 告诉用户"应用场景状态失败：{原因}"
-- 让用户选择"重试" / "取消本次选择回到选项"
+If state apply returns a non-zero exit code (stderr will print an error message), **do not** attempt to manually fix state.yaml. Instead:
+- Parse stderr and tell the user "Failed to apply scene state: {reason}"
+- Let the user choose "Retry" / "Cancel this choice and return to options"
 
-### 首次进入场景（Phase 2 启动时）
+### First Scene Entry (Phase 2 Startup)
 
-Phase 2 第一次进入时，调用 **init** 而不是 apply：
+When entering Phase 2 for the first time, call **init** instead of apply:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
 \`\`\`
 
-脚本内部从 script.initial_state 一次性写 auto/state.yaml 并初始化 auto/meta.yaml，然后开始渲染第一个场景。（Phase -1 的"从头重玩"或"无存档剧本"入口已经在那边调用过 init，Phase 2 在那条路径上直接开始渲染即可。）
+The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass, then begin rendering the first scene. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-## 幕间过渡规则
+## Act Transition Rules
 
-当故事从一个 Act 推进到下一个 Act 时：
-1. 输出过渡文本块（使用 ━ 分隔线 + 居中的 Act 标题 + 氛围旁白）
-2. 使用 AskUserQuestion 呈现一个"反思性选择"
+When the story advances from one Act to the next:
+1. Output a transition text block (using ━ separator line + centered Act title + atmospheric narration)
+2. Use AskUserQuestion to present a "reflective choice"
 
-## 能力引用规则
+## Capability Reference Rules
 
-当用户问及角色的能力、技能、装备或专业知识时，
-参考 \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/capabilities.md\` 中的描述回答。
+When the user asks about the character's abilities, skills, equipment, or expertise,
+refer to the descriptions in \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/capabilities.md\` to answer.
 
-## 时间线引用规则
+## Timeline Reference Rules
 
-当用户问及角色的经历、过去发生的事或历史事件时，
-参考 \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/milestones.md\` 中的记录回答。
+When the user asks about the character's experiences, past events, or historical events,
+refer to the records in \`\${CLAUDE_SKILL_DIR}/souls/${soulSlug}/milestones.md\` to answer.
 
-## 世界观补充规则
+## World Lore Reference Rules
 
-当场景涉及特定地点、组织、事件等世界观知识时，
-读取 \`\${CLAUDE_SKILL_DIR}/world/\` 下各维度子目录中的相关 .md 文件来补充细节（跳过 \`_\` 前缀文件和 \`history/events/\`、\`history/timeline.md\`）。
+When a scene involves specific locations, organizations, events, or other worldview knowledge,
+read relevant .md files from dimension subdirectories under \`\${CLAUDE_SKILL_DIR}/world/\` to fill in details (skip \`_\`-prefixed files and \`history/events/\`, \`history/timeline.md\`).
 
-## 结局判定规则
+## Ending Determination Rules
 
-到达故事最后阶段时，根据累积状态匹配结局：
-- 按剧本中定义的优先级从高到低检查每个结局的触发条件
-- 第一个满足的条件触发对应结局
+When reaching the final stage of the story, match endings based on accumulated state:
+- Check each ending's trigger condition from highest to lowest priority as defined in the script
+- The first satisfied condition triggers the corresponding ending
 
-## 结局展示规则
+## Ending Display Rules
 
-到达结局时，按以下顺序展示：
+When an ending is reached, present in the following order:
 
-1. **结局旁白和角色演绎**（与普通场景相同格式）
+1. **Ending narration and character performance** (same format as regular scenes)
 
-2. **旅程回顾**：
-   - 每个数值轴显示为进度条格式
-   - 关键事件标记显示为：\`{事件名} ✓\` 或 \`{事件名} ✗\`
+2. **Journey recap**:
+   - Each numeric axis displayed as a progress bar
+   - Key event markers displayed as: \`{event_name} ✓\` or \`{event_name} ✗\`
 
-3. **结局图鉴**：列出所有结局（达成 ★ / 未达成 ☆）+ 触发条件 + 预览文字
+3. **Ending gallery**: list all endings (achieved ★ / unachieved ☆) + trigger conditions + preview text
 
-4. 使用 AskUserQuestion 提供：
-   - "从头再来" — 复用当前剧本，重置状态后从第一场景重新开始
-   - "结束故事" — 故事完结
+4. Use AskUserQuestion to offer:
+   - "Start over" — reuse the current script, reset state, restart from the first scene
+   - "End story" — conclude the story
 
-# 重玩规则
+# Replay Rules
 
-当用户选择"从头再来"时，**必须**调用 state CLI 的 reset 子命令完成整个重置：
+When the user selects "Start over", you **must** call the state CLI's reset subcommand to perform the full reset:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset <script-id>
 \`\`\`
 
-脚本内部完成：
-- 复用当前剧本的 script（从 meta.yaml.script_ref 读）——不重新生成剧本
-- 从 script.initial_state 一次性覆盖写 state.yaml，恢复所有字段到初始值
-- 把 meta.yaml.current_scene 设为第一个 scene id
-- 原子事务：state.yaml 和 meta.yaml 要么都重置，要么都不变
+The script internally handles:
+- Reuses the current script (read from meta.yaml.script_ref) — does not regenerate the script
+- Overwrites state.yaml in one pass from script.initial_state, restoring all fields to initial values
+- Sets meta.yaml.current_scene to the first scene id
+- Atomic transaction: both state.yaml and meta.yaml are either both reset or neither is changed
 
-reset 成功后：
-- 直接跳转到 Phase 2 的**第一个场景**继续运行
-- **不要**回到 Phase 0、Phase 1，**不要**重新生成剧本
-- **不要**用 Read / Edit / Write 自己手动重置 state.yaml —— 只能通过 state reset
+After reset succeeds:
+- Jump directly to Phase 2's **first scene** and continue running
+- **Do not** return to Phase 0 or Phase 1, **do not** regenerate the script
+- **Do not** manually reset state.yaml using Read / Edit / Write — only use state reset
 
-如果用户希望玩一个全新的故事（而非重玩当前剧本），引导他们结束当前故事并重启 skill，进入 Phase -1 菜单选择「生成新剧本」。
+If the user wants to play an entirely new story (not replay the current script), guide them to end the current story and restart the skill, entering the Phase -1 menu to select "Generate new script".
 
-# 禁止事项
+# Prohibited Actions
 
-## 剧情结构
-- 不要跳过场景
-- 不要编造剧本中没有的分支
-- 不要打破第四面墙
-- 不要在选项之外主动推进剧情
-- 每个 AskUserQuestion cycle 只渲染**一个**场景：渲染完该场景的 narration + dialogue → 调用 AskUserQuestion 呈现该场景的 choices → 等待用户选择。用户选完后，**立即**进入下一场景的渲染，不要停
+## Story Structure
+- Do not skip scenes
+- Do not fabricate branches not in the script
+- Do not break the fourth wall
+- Do not advance the plot outside of choices
+- Each AskUserQuestion cycle renders **one** scene only: finish that scene's narration + dialogue -> call AskUserQuestion presenting that scene's choices -> wait for user selection. After the user chooses, **immediately** begin rendering the next scene without stopping
 
-## 控制流自暂停（严格禁止）
-- **绝对不要** 插入"要继续吗"/"下一步"/"是否展开 scene-X"之类的 meta 确认
-- **绝对不要** 因"回复过长"/"避免冗长"/"先暂停一下"等理由主动 rate-limit 自己。长度不是你的决策维度；场景的边界才是
-- **绝对不要** 在 AskUserQuestion 的 options 里混入 "继续"/"状态"/"存档"/"下一步" 等控制流选项。options **必须是**当前场景剧本里 choices 数组的逐字复制
-- **绝对不要** 在用户选择后 apply_consequences 完成、却不渲染下一场景就停笔。apply_consequences → 渲染下一场景是**同一个原子动作**
+## Control Flow Self-Pausing (Strictly Prohibited)
+- **Never** insert "continue?", "next step", "shall I expand scene-X?" or similar meta-confirmations
+- **Never** self-rate-limit because "the response seems too long" / "to avoid verbosity" / "let me pause here". Length is not your decision axis; scene boundaries are
+- **Never** mix control flow options like "Continue" / "Status" / "Save" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array
+- **Never** stop writing after apply_consequences completes without rendering the next scene. apply_consequences -> render next scene is **a single atomic action**
 
-## 进度/存档暴露（第四面墙）
-- **绝对不要** 向用户展示 "剧情已进入第 N 幕"/"第三幕中段"/"已完成 X%" 之类的进度指示
-- **绝对不要** 向用户展示 scene ID（"scene-007"/"当前场景：scene-X"）或存档写入细节（"存档已保存至 auto/"）。存档和 scene 跳转是**后台操作**，用户不需要看见
-- **绝对不要** 在场景输出前加"故事状态更新"/"Act 标题"之类的元框架标签，除了 Act 切换时的过渡块（见上文幕间过渡规则）
-- 不要在故事过程中向用户展示状态数值或状态字段名
-- 不要在 narration 里提到 flags / affinity / consequences 这些机制词
+## Progress/Save Exposure (Fourth Wall)
+- **Never** show the user "story has entered Act N" / "mid-Act 3" / "X% complete" or similar progress indicators
+- **Never** show the user scene IDs ("scene-007" / "current scene: scene-X") or save write details ("save written to auto/"). Saves and scene transitions are **background operations** the user does not need to see
+- **Never** prefix scene output with "story state update" / "Act title" or similar meta-framework labels, except for the Act transition block (see Act Transition Rules above)
+- Do not reveal state values or state field names to the user during the story
+- Do not mention flags / affinity / consequences as mechanism terms in narration
 
-## 聊天机器人式元叙述
-- 不要用"以上是 X，接下来让我..."/"让我们进入下一个场景"/"现在我将演绎..."之类的过渡话
-- 不要用"作为该角色，我的回应是..."这种自我指涉
-- 叙事直接进入场景本身，不需要开场白或结束语
+## Chatbot-Style Meta-Narration
+- Do not use transitions like "The above was X, now let me..." / "Let's move to the next scene" / "I will now perform..."
+- Do not use self-referential phrases like "As this character, my response is..."
+- Narration enters the scene directly without preamble or epilogue
 
-## 选项标签污染
-- AskUserQuestion 的 option 文本**必须**是剧本 choices[i].text 的逐字复制
-- **不要** 在 option 文本里加后缀提示，如 "(友善路线)"、"(会提升信任)"、"(谨慎选择)"
-- **不要** 暗示某个 option 的后果走向
+## Option Label Contamination
+- AskUserQuestion option text **must be** a verbatim copy of script choices[i].text
+- **Do not** add suffix hints to option text, such as "(friendly route)", "(will increase trust)", "(choose carefully)"
+- **Do not** hint at an option's consequences
 
-## 状态文件直写（硬红线）
-- **绝对不要**用 Edit 工具直接修改 \`runtime/saves/<script-id>/auto/state.yaml\`
-- **绝对不要**用 Edit 工具直接修改 \`runtime/saves/<script-id>/*/meta.yaml\`
-- **绝对不要**用 Write 工具直接重写 \`state.yaml\` 或 \`meta.yaml\`
-- **所有**状态写入必须通过 \`bash runtime/bin/state {init,apply,reset,rebuild,save}\` 之一
-- 即使你看到 state.yaml 某个字段"明显是错的"，也只能走 \`state rebuild\` 或 \`state reset\`——直接 Edit 会把错误锁进文件里
+## Direct State File Writes (Hard Red Line)
+- **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/auto/state.yaml\`
+- **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/*/meta.yaml\`
+- **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
+- **All** state writes must go through \`bash runtime/bin/state {init,apply,reset,rebuild,save}\`
+- Even if you see a field in state.yaml that is "obviously wrong", you may only use \`state rebuild\` or \`state reset\` — direct Edit will lock the error into the file
 `
 }
 
@@ -1148,78 +1148,78 @@ reset 成功后：
  * (writing state on every scene transition + manual save).
  */
 function buildSaveSystemSection(): string {
-  return `# 存档机制
+  return `# Save System
 
-存档按**剧本**组织，位于 \`\${CLAUDE_SKILL_DIR}/runtime/saves/<script-id>/\` 下。每个剧本拥有：
-- **1 个自动存档**（\`auto/\`）— 每次做出剧情选择后自动更新
-- **最多 3 个手动存档**（\`manual/<timestamp>/\`）— 用户在选择点主动保存
+Saves are organized **per script**, located under \`\${CLAUDE_SKILL_DIR}/runtime/saves/<script-id>/\`. Each script has:
+- **1 auto-save** (\`auto/\`) — automatically updated after every story choice
+- **Up to 3 manual saves** (\`manual/<timestamp>/\`) — created when the user actively saves at a choice point
 
-## 存档目录结构
+## Save Directory Structure
 
 \`\`\`
 runtime/saves/<script-id>/
 ├── auto/
-│   ├── meta.yaml        # 存档元信息（关联剧本、上次时间、当前场景）
-│   └── state.yaml       # 当前运行时状态（affinity / flags / current_scene）
+│   ├── meta.yaml        # save metadata (linked script, last played time, current scene)
+│   └── state.yaml       # current runtime state (affinity / flags / current_scene)
 └── manual/
     ├── <timestamp-1>/
     │   ├── meta.yaml
     │   └── state.yaml
     ├── <timestamp-2>/
     │   └── ...
-    └── <timestamp-3>/   # 上限 3 个
+    └── <timestamp-3>/   # max 3
         └── ...
 \`\`\`
 
-## meta.yaml 字段
+## meta.yaml Fields
 
 \`\`\`yaml
-script_ref: <对应的 script id，如 a3f9c2e1>
-last_played_at: <ISO 8601 时间戳>
-current_scene: <当前所在场景的 id>
+script_ref: <corresponding script id, e.g. a3f9c2e1>
+last_played_at: <ISO 8601 timestamp>
+current_scene: <id of the current scene>
 \`\`\`
 
-## state.yaml 字段
+## state.yaml Fields
 
 \`\`\`yaml
-current_scene: <当前场景 id>
+current_scene: <current scene id>
 affinity:
-  # per-character 好感轴当前值（多角色）或 axes（单角色）
+  # per-character affinity axis current values (multi-char) or axes (single-char)
 flags:
-  # 当前所有 flag 的真值
+  # current truth values for all flags
 \`\`\`
 
-## 自动存档（Phase 2 每次选择必须执行）
+## Auto-Save (Must Execute on Every Phase 2 Choice)
 
-每次发生**场景流转**（用户选择某个剧情选项 → 跳转到下一个场景）后，**必须立即**调用：
+Every time a **scene transition** occurs (user selects a story choice -> jumps to the next scene), you **must immediately** call:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
-该脚本内部完成事务性更新：读 script.json 中的 consequences、应用 delta（int clamp / bool overwrite / enum 校验）、原子性地写 auto/ 目录下的 state.yaml + meta.yaml。你**不用**手动 Edit 或 Write 任何一个文件——整个写入流程由脚本保证。
+The script internally performs a transactional update: reads consequences from script.json, applies deltas (int clamp / bool overwrite / enum validation), and atomically writes state.yaml + meta.yaml under the auto/ directory. You **do not** need to manually Edit or Write any file — the entire write flow is guaranteed by the script.
 
-如果脚本返回非零退出码，解析 stderr 的错误消息告知用户，不要尝试手动修补。
+If the script returns a non-zero exit code, parse stderr's error message to inform the user — do not attempt to manually fix it.
 
-## 手动存档（Phase 2 用户主动触发）
+## Manual Save (User-Initiated During Phase 2)
 
-Phase 2 的**每个 AskUserQuestion**的选项列表末尾，你**必须**追加一个固定选项 \`💾 保存当前进度\`。这个选项不在剧本的 choices 定义中，由你运行时注入。
+At the end of **every AskUserQuestion**'s option list in Phase 2, you **must** append a fixed option \`💾 Save current progress\`. This option is not part of the script's choices definition — you inject it at runtime.
 
-用户选择"💾 保存当前进度"时：
+When the user selects "💾 Save current progress":
 
-1. 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\`
-2. **成功** → 输出"✅ 已保存" → **重新弹出完全相同的 AskUserQuestion**（含所有原始剧情选项 + 💾）
-3. 返回 \`MANUAL_SAVE_LIMIT_REACHED\` → 用 AskUserQuestion 展示现有手动存档列表，让用户选择覆盖哪个 → 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id> --overwrite <timestamp>\` → 确认 → 重弹原选项
+1. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\`
+2. **Success** -> output "✅ Saved" -> **re-present the exact same AskUserQuestion** (with all original story choices + 💾)
+3. Returns \`MANUAL_SAVE_LIMIT_REACHED\` -> use AskUserQuestion to show existing manual saves and let the user choose which to overwrite -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id> --overwrite <timestamp>\` -> confirm -> re-present original choices
 
-**手动存档不触发 state apply**、不推进剧情、不消耗回合。
+**Manual saves do not trigger state apply**, do not advance the plot, and do not consume a turn.
 
-## 当前剧本的确定
+## Current Script Determination
 
-进入 Phase 2 时，当前操作的 script-id 由 Phase -1 的入口决定：
-- 选中已有剧本（无论是加载存档还是从头重玩）→ script-id 来自选中的剧本
-- 生成新剧本 → Phase 1 写入的新 script-id
+When entering Phase 2, the current script-id is determined by the Phase -1 entry point:
+- Selected an existing script (whether loading a save or restarting) -> script-id comes from the selected script
+- Generated a new script -> the new script-id written by Phase 1
 
-Phase 2 全程使用同一个 script-id 调用所有 state CLI 命令。
+Phase 2 uses the same script-id for all state CLI commands throughout.
 
 `
 }
@@ -1234,16 +1234,16 @@ Phase 2 全程使用同一个 script-id 调用所有 state CLI 命令。
  * hard-refuse them with a WSL migration hint.
  */
 function buildPlatformNotice(): string {
-  return `# 平台范围
+  return `# Platform Scope
 
-本 skill 的状态持久化依赖 \`runtime/bin/\` 下的 shell + bun 运行时。支持的平台：
+This skill's state persistence relies on the shell + bun runtime under \`runtime/bin/\`. Supported platforms:
 
-- ✅ **macOS**（Apple Silicon / Intel）
-- ✅ **Linux**（x86_64 / arm64）
-- ✅ **Windows + WSL**（Ubuntu / Debian / Fedora 等）
-- ❌ **Windows 原生 shell**（cmd / PowerShell / Git Bash / MSYS / Cygwin）—— 请切换到 WSL
+- ✅ **macOS** (Apple Silicon / Intel)
+- ✅ **Linux** (x86_64 / arm64)
+- ✅ **Windows + WSL** (Ubuntu / Debian / Fedora, etc.)
+- ❌ **Windows native shell** (cmd / PowerShell / Git Bash / MSYS / Cygwin) — please switch to WSL
 
-Phase -1 的 Step 0 会自动运行 \`runtime/bin/doctor.sh\` 完成健康检查；检测到不支持的平台会直接提示用户切到 WSL 并进入只读模式。
+Phase -1's Step 0 automatically runs \`runtime/bin/doctor.sh\` for a health check; if an unsupported platform is detected, it prompts the user to switch to WSL and enters read-only mode.
 `
 }
 
@@ -1257,103 +1257,103 @@ Phase -1 的 Step 0 会自动运行 \`runtime/bin/doctor.sh\` 完成健康检查
  * Phase 1 via the Write tool.
  */
 function buildPhaseMinusOne(): string {
-  return `# Phase -1: 剧本库菜单
+  return `# Phase -1: Script Library Menu
 
-每次 skill 加载时**先**进入本阶段。本阶段决定是复用一份已生成的剧本，还是生成一份新剧本。
+**Enter this phase first** every time the skill is loaded. This phase determines whether to reuse a previously generated script or generate a new one.
 
-## Step 0: Runtime 健康检查（必须最先执行）
+## Step 0: Runtime Health Check (Must Execute First)
 
-**任何其它 Phase -1 动作之前**，先调用状态 CLI 的 doctor 子命令完成运行时健康检查：
+**Before any other Phase -1 actions**, call the state CLI's doctor subcommand for a runtime health check:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor
 \`\`\`
 
-该命令返回结构化 stdout，每行 \`KEY: value\` 格式。解析 \`STATUS\` 字段，按以下分支处理：
+This command returns structured stdout, one \`KEY: value\` pair per line. Parse the \`STATUS\` field and handle according to the following branches:
 
 ### STATUS: OK
 
-一切就绪。记录 \`BUN_VERSION\` 与 \`BUN_PATH\` 供调试，直接进入 **Step -1.1**。
+Everything is ready. Record \`BUN_VERSION\` and \`BUN_PATH\` for debugging, then proceed directly to **Step -1.1**.
 
-### STATUS: BUN_MISSING（首次运行或未安装 runtime）
+### STATUS: BUN_MISSING (first run or runtime not installed)
 
-这是**首次运行**的正常情况。Runtime 未装。使用 **AskUserQuestion** 向用户呈现三档选项。
+This is **normal for first-time runs**. Runtime is not installed. Use **AskUserQuestion** to present three options to the user.
 
-**Question body（必须逐字包含以下内容）**：
+**Question body (must contain the following content verbatim)**:
 
 \`\`\`
-本 skill 需要 Bun JavaScript 运行时来管理剧情状态。首次运行需要一次性安装：
+This skill requires the Bun JavaScript runtime to manage story state. A one-time installation is needed for first run:
 
-- 安装命令：curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.soulkiller-runtime bash
-- 下载大小：~90MB
-- 安装位置：~/.soulkiller-runtime/
-- 官方来源：https://bun.sh
+- Install command: curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.soulkiller-runtime bash
+- Download size: ~90MB
+- Install location: ~/.soulkiller-runtime/
+- Official source: https://bun.sh
 
-这是一次性动作，安装后再次运行不需要重复。你可以随时 \\\`rm -rf ~/.soulkiller-runtime\\\` 完全卸载。
+This is a one-time action; subsequent runs will not require reinstallation. You can fully uninstall at any time with \\\`rm -rf ~/.soulkiller-runtime\\\`.
 \`\`\`
 
-**Options（必须是这三个，顺序不变）**：
+**Options (must be these three, in this order)**:
 
-1. **"我来帮你装（推荐）"** — 选这个时：
-   - 用 Bash 工具执行 \`curl -fsSL https://bun.sh/install | BUN_INSTALL=\$HOME/.soulkiller-runtime bash\`
-   - 命令完成后重跑 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor\`
-   - 看到 \`STATUS: OK\` 后继续 Step -1.1
-   - 看到任何其它状态 → 向用户展示错误并提供重试 / 只读模式入口
-2. **"我自己装"** — 选这个时：
-   - 展示完整命令让用户在终端执行
-   - 等待用户回复"已装好"后重跑 doctor
-3. **"取消（进入只读模式）"** — 选这个时进入只读模式（见下面的 PLATFORM_UNSUPPORTED 分支）
+1. **"Install for me (recommended)"** — when selected:
+   - Use the Bash tool to execute \`curl -fsSL https://bun.sh/install | BUN_INSTALL=\$HOME/.soulkiller-runtime bash\`
+   - After the command completes, re-run \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor\`
+   - If \`STATUS: OK\` -> continue to Step -1.1
+   - Any other status -> show the error to the user and offer retry / read-only mode entry
+2. **"I'll install it myself"** — when selected:
+   - Show the full command for the user to execute in their terminal
+   - Wait for the user to reply "done" then re-run doctor
+3. **"Cancel (enter read-only mode)"** — when selected, enter read-only mode (see PLATFORM_UNSUPPORTED branch below)
 
 ### STATUS: BUN_OUTDATED
 
-Runtime 存在但版本过旧（< doctor 输出中的 \`MIN_VERSION\`）。使用 AskUserQuestion 告知当前 \`BUN_VERSION\` 和最低要求，引导用户重跑 doctor 输出中的 \`UPGRADE_CMD_UNIX\` 升级命令。用户确认后重跑 doctor。
+Runtime exists but the version is too old (< \`MIN_VERSION\` in doctor output). Use AskUserQuestion to inform the user of the current \`BUN_VERSION\` and the minimum requirement, guiding them to run the \`UPGRADE_CMD_UNIX\` upgrade command from doctor output. Re-run doctor after user confirmation.
 
 ### STATUS: PLATFORM_UNSUPPORTED
 
-检测到 Windows 原生 shell。**不能进入普通流程**。向用户展示：
+Windows native shell detected. **Cannot enter normal flow**. Show the user:
 
 \`\`\`
-⚠️ 当前运行环境是 Windows 原生 shell，本 skill 无法在该环境中写入存档。
+⚠️ The current environment is a Windows native shell. This skill cannot write saves in this environment.
 
-请在 WSL（Windows Subsystem for Linux）中重新运行 Claude Code：
+Please re-run Claude Code inside WSL (Windows Subsystem for Linux):
 https://learn.microsoft.com/windows/wsl/install
 
-进入只读模式后可以查看已有存档和结局图鉴，但无法新建 / 继续游戏。
+Read-only mode allows viewing existing saves and the ending gallery, but cannot create new games or continue existing ones.
 \`\`\`
 
-然后进入**只读模式**——跳过 Step -1.1 ~ Step -1.4 的写入部分，只允许：
+Then enter **read-only mode** — skip the write portions of Steps -1.1 through -1.4, only allowing:
 
-- 列出已有 \`runtime/scripts/*.json\`（用 Read 查看 header 字段）
-- 列出已有存档（用 Glob 扫描 \`runtime/saves/*/auto/meta.yaml\`）
-- 查看某个已到达过的结局的 Phase 3 图鉴
+- List existing \`runtime/scripts/*.json\` (use Read to view header fields)
+- List existing saves (use Glob to scan \`runtime/saves/*/auto/meta.yaml\`)
+- View the Phase 3 gallery for a previously reached ending
 
-禁止：
+Prohibited:
 
-- 任何写入（init / apply / reset / rebuild / save）
-- 进入 Phase 1（新建剧本）
-- 进入 Phase 2（场景流转）
+- Any writes (init / apply / reset / rebuild / save)
+- Entering Phase 1 (new script creation)
+- Entering Phase 2 (scene transitions)
 
 ### STATUS: PLATFORM_UNKNOWN
 
-无法识别的平台。同样进入只读模式，但告知用户"请报告此问题"。
+Unrecognized platform. Also enter read-only mode, but inform the user "please report this issue".
 
-## Step -1.1: 列出已有剧本
+## Step -1.1: List Existing Scripts
 
-使用 Glob 工具列出 \`\${CLAUDE_SKILL_DIR}/runtime/scripts/*.json\`：
+Use the Glob tool to list \`\${CLAUDE_SKILL_DIR}/runtime/scripts/*.json\`:
 
-- **如果结果为空** → 跳过 Step -1.2，直接进入 **Phase 0**（首次玩剧本，无需展示菜单）
-- **如果结果非空** → 进入 Step -1.2
+- **If the result is empty** -> skip Step -1.2, proceed directly to **Phase 0** (first playthrough, no menu needed)
+- **If the result is not empty** -> proceed to Step -1.2
 
-## Step -1.2: 解析每个剧本的 header 字段
+## Step -1.2: Parse Each Script's Header Fields
 
-对每个 \`script-*.json\`，使用 Read 工具读取文件，用 JSON 语法解析。每个剧本 JSON 的顶层字段 SHALL 包含：
+For each \`script-*.json\`, use the Read tool to read the file and parse it as JSON. Each script JSON's top-level fields SHALL include:
 
 \`\`\`json
 {
-  "id": "<8 位短 hash>",
-  "title": "<剧本简短标题>",
-  "generated_at": "<ISO 8601 时间戳>",
-  "user_direction": "<用户在 Phase 0 输入的命题文本，可空>",
+  "id": "<8-char short hash>",
+  "title": "<short script title>",
+  "generated_at": "<ISO 8601 timestamp>",
+  "user_direction": "<user direction text from Phase 0, may be empty>",
   "acts": 3,
   "state_schema": { "...": "..." },
   "initial_state": { "...": "..." },
@@ -1362,17 +1362,17 @@ https://learn.microsoft.com/windows/wsl/install
 }
 \`\`\`
 
-如果某个文件无法 JSON.parse（损坏），将其标记为 \`(损坏)\`，**不要中止整个 Step**。继续解析其他文件。
+If a file cannot be JSON.parse'd (corrupted), mark it as \`(corrupted)\` — **do not abort the entire Step**. Continue parsing other files.
 
-## Step -1.3: 获取每个剧本的存档状态
+## Step -1.3: Get Each Script's Save Status
 
-对每个解析成功的剧本，调用 state CLI 的 list 子命令：
+For each successfully parsed script, call the state CLI's list subcommand:
 
 \`\`\`bash
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state list <script-id>
 \`\`\`
 
-该命令返回 JSON：
+This command returns JSON:
 
 \`\`\`json
 {
@@ -1384,53 +1384,53 @@ bash \${CLAUDE_SKILL_DIR}/runtime/bin/state list <script-id>
 }
 \`\`\`
 
-如果 \`auto\` 为 \`null\`，表示该剧本无存档。
+If \`auto\` is \`null\`, the script has no saves.
 
-## Step -1.4: 主菜单（扁平化剧本列表）
+## Step -1.4: Main Menu (Flat Script List)
 
-使用 AskUserQuestion 展示主菜单。直接列出所有剧本，每个剧本条目标注存档状态：
+Use AskUserQuestion to present the main menu. List all scripts directly, with save status annotations on each entry:
 
 \`\`\`
-question: "选择一个剧本开始，或创建新的旅程。"
+question: "Select a script to begin, or create a new journey."
 options:
-  - "<title> [🔄 <current_scene> · <relative_time>]"    # 有 auto 存档的剧本
-  - "<title> [无存档]"                                    # 无存档的剧本
-  - "✨ 生成新剧本"                                       # 始终显示
-  - "📋 管理剧本"                                         # 重命名/删除入口
+  - "<title> [🔄 <current_scene> · <relative_time>]"    # script with auto-save
+  - "<title> [no saves]"                                  # script without saves
+  - "✨ Generate new script"                               # always shown
+  - "📋 Manage scripts"                                    # rename/delete entry
 \`\`\`
 
-根据用户选择进入相应子流程：
+Based on the user's selection, enter the corresponding sub-flow:
 
-### 选中有存档的剧本 → 存档子菜单
+### Selected a Script with Saves -> Save Sub-Menu
 
-用 AskUserQuestion 展示该剧本的所有存档：
+Use AskUserQuestion to show all saves for that script:
 
 \`\`\`
 options:
-  - "🔄 自动存档 — <scene> · <time>"          # auto 存档
-  - "💾 手动存档 1 — <scene> · <time>"         # manual[0]（如果存在）
-  - "💾 手动存档 2 — <scene> · <time>"         # manual[1]（如果存在）
-  - "💾 手动存档 3 — <scene> · <time>"         # manual[2]（如果存在）
-  - "🆕 从头重玩"                              # 始终显示
+  - "🔄 Auto-save — <scene> · <time>"            # auto save
+  - "💾 Manual save 1 — <scene> · <time>"         # manual[0] (if exists)
+  - "💾 Manual save 2 — <scene> · <time>"         # manual[1] (if exists)
+  - "💾 Manual save 3 — <scene> · <time>"         # manual[2] (if exists)
+  - "🆕 Start from beginning"                     # always shown
 \`\`\`
 
-### 选中无存档的剧本 → 直接开始
+### Selected a Script without Saves -> Start Directly
 
-调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\` → 直接进入 **Phase 2** 第一个场景。
+Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\` -> proceed directly to **Phase 2** first scene.
 
-### 加载存档
+### Load a Save
 
-用户在存档子菜单中选择一个存档（auto 或某个 manual）后：
+After the user selects a save from the save sub-menu (auto or a manual save):
 
-1. 确定 save-type：\`auto\` 或 \`manual:<timestamp>\`
-2. 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id> <save-type> --continue\`
-3. validate 返回结构化 JSON 到 stdout。成功时：
+1. Determine save-type: \`auto\` or \`manual:<timestamp>\`
+2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id> <save-type> --continue\`
+3. validate returns structured JSON to stdout. On success:
 
 \`\`\`json
 { "ok": true, "errors": [] }
 \`\`\`
 
-失败时：
+On failure:
 
 \`\`\`json
 {
@@ -1441,87 +1441,87 @@ options:
 }
 \`\`\`
 
-4. 解析返回 JSON；如 \`ok: false\`，按下面的 error code 对照表处理
-4. 验证通过后：Read \`runtime/scripts/script-<id>.json\` 加载剧本到上下文；Read 对应存档目录的 \`state.yaml\` 加载状态到上下文
-5. 直接进入 **Phase 2**，从 state 中的 \`current_scene\` 继续
+4. Parse the returned JSON; if \`ok: false\`, handle according to the error code table below
+4. After validation passes: Read \`runtime/scripts/script-<id>.json\` to load the script into context; Read the corresponding save directory's \`state.yaml\` to load state into context
+5. Proceed directly to **Phase 2**, continuing from the \`current_scene\` in state
 
-### 从头重玩
+### Start from Beginning
 
-用户选择"🆕 从头重玩"后：
+After the user selects "🆕 Start from beginning":
 
-- 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\`
-  - 脚本内部完成：Read 目标 script.json、复制 initial_state 写 auto/state.yaml、写 auto/meta.yaml（script_ref + current_scene = 第一个 scene）
-  - 脚本 stdout 返回 \`INITIALIZED\` 摘要行
-- 调用 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id>\` 做 sanity 检查
-- Read \`runtime/scripts/script-<id>.json\` 加载剧本到上下文
-- 直接进入 **Phase 2** 第一个场景
+- Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\`
+  - The script internally handles: Read target script.json, copy initial_state to auto/state.yaml, write auto/meta.yaml (script_ref + current_scene = first scene)
+  - Script stdout returns an \`INITIALIZED\` summary line
+- Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id>\` for a sanity check
+- Read \`runtime/scripts/script-<id>.json\` to load the script into context
+- Proceed directly to **Phase 2** first scene
 
-### 加载前验证 — error code 对照表
+### Pre-Load Validation — Error Code Table
 
-| code | 含义 | LLM 动作 |
+| code | Meaning | LLM Action |
 |---|---|---|
-| \`DANGLING_SCRIPT_REF\` | meta.yaml 引用的 script 文件不存在 | 标该存档 \`(孤儿)\`；提供「删除存档」入口；回主菜单 |
-| \`STATE_SCHEMA_MISSING\` | script.json 缺 state_schema 块 | 标剧本 \`(legacy 不可重玩)\`；仅提供「删除剧本」入口；hard fail |
-| \`INITIAL_STATE_MISMATCH\` | initial_state 字段集与 schema 不齐 | 标剧本 \`(损坏)\`；提供「删除剧本」入口 |
-| \`CONSEQUENCES_UNKNOWN_KEY\` | 某 scene 引用了 schema 未声明的 key | 标剧本 \`(损坏)\`；提供「删除剧本」入口 |
-| \`SHARED_AXES_INCOMPLETE\` | 某角色缺少完整的 3 个共享轴 | 标剧本 \`(损坏)\`；提供「删除剧本」入口 |
-| \`FLAGS_SET_MISMATCH\` | script 的 flags 与 story-spec 不齐 | 标剧本 \`(损坏)\`；提供「删除剧本」入口 |
-| \`FIELD_MISSING\` | state.yaml 缺一个 schema 字段 | 弹出**修复菜单**（见下文） |
-| \`FIELD_EXTRA\` | state.yaml 有多余字段 | 弹出**修复菜单** |
-| \`FIELD_TYPE_MISMATCH\` | state.yaml 某字段类型错 | 弹出**修复菜单** |
-| \`MALFORMED\` | 文件损坏无法解析 | 标 \`(损坏)\`；提供「删除」入口 |
+| \`DANGLING_SCRIPT_REF\` | meta.yaml references a script file that does not exist | Mark save as \`(orphaned)\`; offer "delete save" option; return to main menu |
+| \`STATE_SCHEMA_MISSING\` | script.json is missing the state_schema block | Mark script as \`(legacy, cannot replay)\`; offer "delete script" option only; hard fail |
+| \`INITIAL_STATE_MISMATCH\` | initial_state field set does not match schema | Mark script as \`(corrupted)\`; offer "delete script" option |
+| \`CONSEQUENCES_UNKNOWN_KEY\` | A scene references a key not declared in schema | Mark script as \`(corrupted)\`; offer "delete script" option |
+| \`SHARED_AXES_INCOMPLETE\` | A character is missing one or more of the 3 shared axes | Mark script as \`(corrupted)\`; offer "delete script" option |
+| \`FLAGS_SET_MISMATCH\` | Script's flags do not match story-spec | Mark script as \`(corrupted)\`; offer "delete script" option |
+| \`FIELD_MISSING\` | state.yaml is missing a schema field | Show **repair menu** (see below) |
+| \`FIELD_EXTRA\` | state.yaml has extra fields | Show **repair menu** |
+| \`FIELD_TYPE_MISMATCH\` | A field in state.yaml has the wrong type | Show **repair menu** |
+| \`MALFORMED\` | File is corrupted and cannot be parsed | Mark as \`(corrupted)\`; offer "delete" option |
 
-### 修复菜单（continue 场景出现 FIELD_*/MALFORMED 时）
+### Repair Menu (when FIELD_*/MALFORMED occurs during continue)
 
-使用 AskUserQuestion 询问用户：
-
-\`\`\`
-options:
-  - "保留可用字段，自动补缺 / 默认化"     # → bash state rebuild <script-id> [<save-type>]
-  - "完全重置到 initial_state"              # → bash state reset <script-id> [<save-type>]
-  - "取消加载，回主菜单"
-\`\`\`
-
-**绝对不要**用 Read + Edit / Write 自己手动修补 state.yaml。修复动作**只能**通过 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state rebuild\` 或 \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset\` 完成。
-
-### 📋 管理剧本
-
-用 AskUserQuestion 展示子菜单：
+Use AskUserQuestion to ask the user:
 
 \`\`\`
 options:
-  - "重命名剧本"
-  - "删除剧本"
-  - "返回主菜单"
+  - "Keep usable fields, auto-fill missing / reset to defaults"     # -> bash state rebuild <script-id> [<save-type>]
+  - "Fully reset to initial_state"                                   # -> bash state reset <script-id> [<save-type>]
+  - "Cancel loading, return to main menu"
 \`\`\`
 
-#### 重命名剧本
+**Never** use Read + Edit / Write to manually patch state.yaml. Repair actions **may only** be performed via \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state rebuild\` or \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset\`.
 
-1. 列出所有剧本（含损坏的）让用户选一个
-2. 用 AskUserQuestion 询问新 \`title\`
-3. Read 目标剧本（JSON），在内存中修改顶层的 \`title\` 字段
-4. Write 回原文件路径（文件名不变），输出必须是合法 JSON
-5. 完成后回到 **Step -1.4** 主菜单
+### 📋 Manage Scripts
 
-#### 删除剧本
+Use AskUserQuestion to show a sub-menu:
 
-1. 列出所有剧本让用户选一个
-2. 用 AskUserQuestion 二次确认（选项："确认删除" / "取消"）
-3. 删除 \`runtime/scripts/script-<id>.json\`
-4. 删除 \`runtime/saves/<id>/\` 整个目录（级联清理所有该剧本的存档）
-5. 输出统计："已删除剧本《\${title}》及关联存档"
-6. 完成后回到 **Step -1.4** 主菜单
+\`\`\`
+options:
+  - "Rename script"
+  - "Delete script"
+  - "Return to main menu"
+\`\`\`
 
-### ✨ 生成新剧本
+#### Rename Script
 
-直接进入 **Phase 0**（与无剧本时的流程一致）。
+1. List all scripts (including corrupted ones) for the user to select
+2. Use AskUserQuestion to ask for the new \`title\`
+3. Read the target script (JSON), modify the top-level \`title\` field in memory
+4. Write back to the original file path (filename unchanged), output must be valid JSON
+5. After completion, return to **Step -1.4** main menu
 
-## 损坏剧本的处理
+#### Delete Script
 
-如果在 Step -1.2 标记了任何剧本为 \`(损坏)\`：
-- 在「📋 管理剧本」子菜单中把它们与正常剧本一并列出，用 \`(损坏)\` 后缀区分
-- 不要在主菜单的剧本列表中列出损坏剧本（无法运行）
-- 鼓励用户删除损坏文件
+1. List all scripts for the user to select
+2. Use AskUserQuestion for a confirmation prompt (options: "Confirm delete" / "Cancel")
+3. Delete \`runtime/scripts/script-<id>.json\`
+4. Delete the entire \`runtime/saves/<id>/\` directory (cascade cleanup of all saves for that script)
+5. Output summary: "Deleted script '\${title}' and associated saves"
+6. After completion, return to **Step -1.4** main menu
+
+### ✨ Generate New Script
+
+Proceed directly to **Phase 0** (same flow as when no scripts exist).
+
+## Handling Corrupted Scripts
+
+If any scripts were marked as \`(corrupted)\` in Step -1.2:
+- List them alongside normal scripts in the "📋 Manage scripts" sub-menu, distinguished by the \`(corrupted)\` suffix
+- Do not list corrupted scripts in the main menu's script list (they cannot be run)
+- Encourage the user to delete corrupted files
 `
 }
 
@@ -1551,93 +1551,93 @@ options:
  *     completeness; validation 6 checks flag-set equality.
  */
 function buildStateSchemaSection(): string {
-  return `## state_schema 创作约束（三层结构）
+  return `## state_schema Creation Constraints (Three-Layer Structure)
 
-每个 script.json 顶层的 \`"state_schema"\` 字段**必须**包含一个对象，作为该剧本所有可能跟踪的状态字段的显式契约。schema 是一个 flat 字典——顶层 key 是完整的字面字符串，**没有** affinity / flags / custom 中间嵌套层。
+The top-level \`"state_schema"\` field of each script.json **must** contain an object serving as the explicit contract for all state fields that script may track. The schema is a flat dictionary — top-level keys are complete literal strings with **no** intermediate nesting layers for affinity / flags / custom.
 
-### 三层结构（必须理解）
+### Three-Layer Structure (Must Understand)
 
-State 分 **3 层**：
+State is divided into **3 layers**:
 
-1. **共享 axes 层** — 每个角色都有这 3 个轴
-   - \`bond\` 是平台固定（所有 soulkiller 故事共用）
-   - 另外 2 个由 \`story-spec.md\` 的 **Story State** 节中 \`shared_axes_custom\` 声明（读 story-spec 找到）
-   - **每个角色必须有完整 3 个共享轴**，没有 opt-out
-   - 共享轴是 \`all_chars\` / \`any_char\` 跨角色聚合 DSL 的基础
+1. **Shared axes layer** — every character has these 3 axes
+   - \`bond\` is platform-fixed (shared across all soulkiller stories)
+   - The other 2 are declared in \`story-spec.md\`'s **Story State** section under \`shared_axes_custom\` (read story-spec to find them)
+   - **Every character must have all 3 shared axes**, no opt-out
+   - Shared axes are the foundation of the \`all_chars\` / \`any_char\` cross-character aggregation DSL
 
-2. **角色特异 axes 层** — 每个角色 0-2 个，仅该角色使用
-   - 从 \`story-spec.md\` 的 \`characters\` 节中每个角色的 \`axes\` 列表来
-   - 纯 flavor，不参与跨角色聚合，但可以进 ending condition 作为该角色专属分支
+2. **Character-specific axes layer** — 0-2 per character, used only by that character
+   - Sourced from each character's \`axes\` list in \`story-spec.md\`'s \`characters\` section
+   - Pure flavor, does not participate in cross-character aggregation, but can be used in ending conditions as character-specific branches
 
-3. **Flags 层** — 关键事件标记
-   - **必须**逐字符复制 \`story-spec.md\` 的 **Story State** 节中 \`flags\` 列表
-   - **不允许**你创造新 flag 或改名或增删
-   - flag 集合缺失/多余任何一项，Phase -1 加载验证会失败
+3. **Flags layer** — key event markers
+   - **Must** be copied character-for-character from \`story-spec.md\`'s **Story State** section's \`flags\` list
+   - You **may not** create new flags, rename them, or add/remove any
+   - Any missing or extra flags in the flag set will cause Phase -1 load validation to fail
 
-### 字段命名约束（硬规则）
+### Field Naming Constraints (Hard Rules)
 
-- **ASCII**：只允许英文 + 数字 + 下划线 + 点号；不允许中文、日文、空格、特殊字符
-- **snake_case**：单词之间用下划线，不用驼峰
-- **点号分隔命名空间**
-- **必须带引号**：每个 key 必须写作 \`"affinity.judy.trust":\`，不允许 \`affinity.judy.trust:\`（无引号会被 yaml 解析成嵌套对象）
+- **ASCII**: only English letters + digits + underscores + dots; no CJK characters, spaces, or special characters
+- **snake_case**: words separated by underscores, no camelCase
+- **Dot-separated namespaces**
+- **Must be quoted**: every key must be written as \`"affinity.judy.trust":\`, not \`affinity.judy.trust:\` (unquoted keys would be parsed as nested objects by yaml)
 
-**命名空间约定**（推荐前缀）：
-- \`affinity.<char_slug>.<axis>\` — 角色好感轴（共享或特异）
-- \`flags.<event_name>\` — 关键事件 boolean 标记
+**Namespace conventions** (recommended prefixes):
+- \`affinity.<char_slug>.<axis>\` — character affinity axes (shared or specific)
+- \`flags.<event_name>\` — key event boolean markers
 
-### 类型集合（4 种）
+### Type Set (4 types)
 
-| type | 用途 | 必须含 | consequences 语义 |
-|------|------|--------|------------------|
-| \`int\` | 数值轴（共享或特异 axes） | \`range: [min, max]\` | delta（加减） |
-| \`bool\` | 事件标记（flags） | — | 绝对覆盖 |
-| \`enum\` | 离散选项（较少用） | \`values: [...]\` | 绝对覆盖 |
-| \`string\` | 任意短文本（较少用） | — | 绝对覆盖 |
+| type | Purpose | Required fields | consequences semantics |
+|------|---------|-----------------|----------------------|
+| \`int\` | Numeric axes (shared or specific) | \`range: [min, max]\` | delta (add/subtract) |
+| \`bool\` | Event markers (flags) | — | absolute overwrite |
+| \`enum\` | Discrete options (rarely used) | \`values: [...]\` | absolute overwrite |
+| \`string\` | Arbitrary short text (rarely used) | — | absolute overwrite |
 
-**不支持**：list / float / datetime / nested object。
+**Not supported**: list / float / datetime / nested object.
 
-### 字段元信息（每个字段必填）
+### Field Metadata (Required for Every Field)
 
-每个 schema 字段都是一个对象，**必须**包含：
+Each schema field is an object that **must** contain:
 
-- \`desc: string\` — 字段语义说明，必填
-- \`type\` — 上面四种之一
-- \`default\` — 字段默认值，类型匹配 type。对于共享轴，如果该角色在 \`set_character_axes\` 设置了 \`shared_initial_overrides\`，那么 default 应该是覆盖后的值
-- 根据 type：
-  - \`int\` → 必须含 \`range\`
-  - \`enum\` → 必须含 \`values\`，且 \`default\` 必须在 values 内
+- \`desc: string\` — semantic description of the field, required
+- \`type\` — one of the four types above
+- \`default\` — default value for the field, type-matched. For shared axes, if the character has \`shared_initial_overrides\` set via \`set_character_axes\`, the default should be the overridden value
+- Depending on type:
+  - \`int\` -> must include \`range\`
+  - \`enum\` -> must include \`values\`, and \`default\` must be within values
 
-### 完整示例（3 个角色 + 2 个 flag）
+### Complete Example (3 characters + 2 flags)
 
-假设 story-spec 声明了 \`shared_axes_custom: [trust, rivalry]\` 和 2 个 flags：
+Assume story-spec declares \`shared_axes_custom: [trust, rivalry]\` and 2 flags:
 
 \`\`\`json
 "state_schema": {
-  "affinity.illya.bond":       { "desc": "伊莉雅的亲密度",           "type": "int", "range": [0, 10], "default": 5 },
-  "affinity.illya.trust":      { "desc": "伊莉雅对玩家的信任",       "type": "int", "range": [0, 10], "default": 5 },
-  "affinity.illya.rivalry":    { "desc": "伊莉雅视玩家为对手的程度", "type": "int", "range": [0, 10], "default": 2 },
-  "affinity.illya.self_worth": { "desc": "伊莉雅的自我价值感（专属）", "type": "int", "range": [0, 10], "default": 3 },
+  "affinity.illya.bond":       { "desc": "Illya's closeness",                    "type": "int", "range": [0, 10], "default": 5 },
+  "affinity.illya.trust":      { "desc": "Illya's trust toward the player",      "type": "int", "range": [0, 10], "default": 5 },
+  "affinity.illya.rivalry":    { "desc": "Illya's sense of rivalry with player",  "type": "int", "range": [0, 10], "default": 2 },
+  "affinity.illya.self_worth": { "desc": "Illya's self-worth (character-specific)", "type": "int", "range": [0, 10], "default": 3 },
 
-  "affinity.rin.bond":    { "desc": "凛的亲密度",         "type": "int", "range": [0, 10], "default": 5 },
-  "affinity.rin.trust":   { "desc": "凛对玩家的信任",     "type": "int", "range": [0, 10], "default": 5 },
-  "affinity.rin.rivalry": { "desc": "凛的竞争心",         "type": "int", "range": [0, 10], "default": 3 },
+  "affinity.rin.bond":    { "desc": "Rin's closeness",                    "type": "int", "range": [0, 10], "default": 5 },
+  "affinity.rin.trust":   { "desc": "Rin's trust toward the player",      "type": "int", "range": [0, 10], "default": 5 },
+  "affinity.rin.rivalry": { "desc": "Rin's competitive spirit",            "type": "int", "range": [0, 10], "default": 3 },
 
-  "affinity.kotomine.bond":    { "desc": "绮礼的亲密度（反派初始极低）",     "type": "int", "range": [0, 10], "default": 1 },
-  "affinity.kotomine.trust":   { "desc": "绮礼对玩家的信任（反派初始极低）", "type": "int", "range": [0, 10], "default": 1 },
-  "affinity.kotomine.rivalry": { "desc": "绮礼的敌意（反派初始高）",         "type": "int", "range": [0, 10], "default": 8 },
+  "affinity.kotomine.bond":    { "desc": "Kotomine's closeness (villain, starts very low)",      "type": "int", "range": [0, 10], "default": 1 },
+  "affinity.kotomine.trust":   { "desc": "Kotomine's trust toward player (villain, starts very low)", "type": "int", "range": [0, 10], "default": 1 },
+  "affinity.kotomine.rivalry": { "desc": "Kotomine's hostility (villain, starts high)",           "type": "int", "range": [0, 10], "default": 8 },
 
-  "flags.met_illya":              { "desc": "玩家首次正式遇到伊莉雅", "type": "bool", "default": false },
-  "flags.truth_of_grail_revealed": { "desc": "圣杯真相被揭露",       "type": "bool", "default": false }
+  "flags.met_illya":              { "desc": "Player formally met Illya for the first time", "type": "bool", "default": false },
+  "flags.truth_of_grail_revealed": { "desc": "The truth of the Grail has been revealed",    "type": "bool", "default": false }
 }
 \`\`\`
 
-JSON 没有注释语法，如果想为某个字段记录"这个 default 来自 shared_initial_overrides"之类的说明，把它写进 \`desc\` 字符串里（如 \`"desc": "绮礼的敌意（反派 override 到 8）"\`）。
+JSON has no comment syntax. If you want to note something like "this default comes from shared_initial_overrides" for a field, put it in the \`desc\` string (e.g., \`"desc": "Kotomine's hostility (villain override to 8)"\`).
 
-### initial_state 严格对齐 schema
+### initial_state Must Strictly Align with Schema
 
-\`"initial_state"\` 字段紧跟在 \`"state_schema"\` 之后：
-- 字段集**严格 ==** state_schema 字段集（缺一不可、多一不可）
-- 每个字段值**通常等于** schema.default
+The \`"initial_state"\` field immediately follows \`"state_schema"\`:
+- Field set **strictly ==** state_schema field set (no missing, no extra)
+- Each field value **typically equals** schema.default
 
 \`\`\`json
 "initial_state": {
@@ -1656,26 +1656,26 @@ JSON 没有注释语法，如果想为某个字段记录"这个 default 来自 s
 }
 \`\`\`
 
-### 共享轴完整性自检（写完后必做）
+### Shared Axes Completeness Self-Check (Mandatory Before Write)
 
-在你 Write script.json 之前，**必须**完成以下自检：
+Before you Write script.json, you **must** complete the following self-check:
 
-1. 从 story-spec.md 的 **Story State** 节读出 \`shared_axes_custom\`（2 个非 bond 名字）
-2. 期望的共享轴集合 = \`{bond, <shared_axes_custom[0]>, <shared_axes_custom[1]>}\`（共 3 个）
-3. 对每个角色 \`<char_slug>\`，验证 state_schema 中含以下 3 个字段：
+1. Read \`shared_axes_custom\` from story-spec.md's **Story State** section (2 non-bond axis names)
+2. Expected shared axis set = \`{bond, <shared_axes_custom[0]>, <shared_axes_custom[1]>}\` (3 total)
+3. For each character \`<char_slug>\`, verify state_schema contains these 3 fields:
    - \`"affinity.<char_slug>.bond"\`
    - \`"affinity.<char_slug>.<shared_axis_1>"\`
    - \`"affinity.<char_slug>.<shared_axis_2>"\`
-4. 任何角色缺失任一共享轴 → 修正后重写
+4. If any character is missing any shared axis -> fix and rewrite
 
-### flags 集合一致性自检（写完后必做）
+### Flags Set Consistency Self-Check (Mandatory Before Write)
 
-1. 从 story-spec.md 的 **Story State** 节读出 \`flags\` 列表的 name 集合
-2. 从 state_schema 中提取所有 \`"flags.<name>"\` key 的 name 集合（去掉 \`flags.\` 前缀）
-3. 两个集合**必须严格相等**（缺一不可、多一不可）
-4. 不一致 → 修正 scenes 的 consequences 引用 → 重写
+1. Read the name set of the \`flags\` list from story-spec.md's **Story State** section
+2. Extract the name set of all \`"flags.<name>"\` keys from state_schema (strip the \`flags.\` prefix)
+3. The two sets **must be strictly equal** (no missing, no extra)
+4. Inconsistency -> fix scene consequences references -> rewrite
 
-**绝对不允许**：创造 story-spec 中未声明的 flag 名。即使你觉得故事需要一个额外的 flag，也必须通过重新 export（让 export agent 更新 story_state）来解决，而不是自己造。
+**Absolutely not allowed**: creating flag names not declared in story-spec. Even if you feel the story needs an additional flag, it must be resolved by re-exporting (having the export agent update story_state), not by inventing your own.
 `
 }
 
@@ -1687,62 +1687,62 @@ JSON 没有注释语法，如果想为某个字段记录"这个 default 来自 s
  * fall-through.
  */
 function buildEndingsDslSection(): string {
-  return `## endings condition 结构化 DSL
+  return `## Endings Condition Structured DSL
 
-endings 数组中每个 ending 的 \`condition\` 字段**必须**是结构化 DSL 节点，**不接受**自然语言字符串表达式。
+The \`condition\` field of each ending in the endings array **must** be a structured DSL node. **Natural language string expressions are not accepted**.
 
-### 节点类型
+### Node Types
 
-**比较节点** —— 引用 schema 字段做比较：
+**Comparison node** — references a schema field for comparison:
 \`\`\`yaml
-{ key: "<schema 字段字面 key>", op: "<算子>", value: <值> }
+{ key: "<schema field literal key>", op: "<operator>", value: <value> }
 \`\`\`
 
-支持的算子：
-- \`>= / <= / > / <\` — 仅适用于 \`int\` 字段
-- \`== / !=\` — 适用于所有类型
+Supported operators:
+- \`>= / <= / > / <\` — only for \`int\` fields
+- \`== / !=\` — for all types
 
-**逻辑组合节点** —— 可任意嵌套：
+**Logical combination nodes** — can be nested arbitrarily:
 \`\`\`yaml
 { all_of: [ <node>, <node>, ... ] }   # AND
 { any_of: [ <node>, <node>, ... ] }   # OR
 { not: <node> }                       # NOT
 \`\`\`
 
-**跨角色聚合节点**（仅对**共享 axes** 有效）：
+**Cross-character aggregation nodes** (only valid for **shared axes**):
 \`\`\`yaml
-# 对所有角色（去掉 except 列表），该共享轴都满足条件
+# For all characters (minus the except list), the shared axis meets the condition
 all_chars:
   axis: bond
   op: ">="
   value: 7
-  except: [<char_slug>, ...]   # 可选，排除特定角色
+  except: [<char_slug>, ...]   # optional, exclude specific characters
 
-# 至少一个角色（去掉 except 列表），该共享轴满足条件
+# At least one character (minus the except list) meets the condition on the shared axis
 any_char:
   axis: trust
   op: ">="
   value: 8
-  except: [<char_slug>, ...]   # 可选
+  except: [<char_slug>, ...]   # optional
 \`\`\`
 
-**关键限制**：\`all_chars\` / \`any_char\` 的 \`axis\` 只能是**共享轴**（\`bond\` 或 story-spec 中 \`shared_axes_custom\` 声明的 2 个）。**不能**引用角色特异轴（特异轴每个角色不同名，不能跨角色聚合）。
+**Key restriction**: \`all_chars\` / \`any_char\`'s \`axis\` may only be a **shared axis** (\`bond\` or the 2 declared in story-spec's \`shared_axes_custom\`). It **cannot** reference character-specific axes (specific axes have different names per character and cannot be aggregated across characters).
 
-**兜底字面**：
+**Fallthrough literal**:
 \`\`\`yaml
 condition: default
 \`\`\`
-（字符串字面量 \`default\`，永远 true）
+(string literal \`default\`, always evaluates to true)
 
-### 完整示例
+### Complete Example
 
-假设 story-spec 的 shared_axes_custom = [trust, rivalry]，角色 slugs = [illya, rin, kotomine]（其中 kotomine 是反派）：
+Assume story-spec's shared_axes_custom = [trust, rivalry], character slugs = [illya, rin, kotomine] (where kotomine is the antagonist):
 
 \`\`\`yaml
 endings:
-  # 示例 1: 全体接纳 —— all_chars 聚合所有角色（排除反派）
+  # Example 1: Universal acceptance — all_chars aggregates all characters (excluding antagonist)
   - id: "ending-unity"
-    title: "众志成城"
+    title: "United We Stand"
     condition:
       all_of:
         - all_chars:
@@ -1752,22 +1752,22 @@ endings:
             except: [kotomine]
         - { key: "flags.truth_of_grail_revealed", op: "==", value: true }
     body: |
-      （所有角色都站在主角一边...）
+      (All characters stand by the protagonist's side...)
 
-  # 示例 2: 双角色对立 —— 引用特定角色的共享轴 + 特异轴
+  # Example 2: Two-character conflict — references specific character's shared + specific axes
   - id: "ending-illya-route"
-    title: "伊莉雅专属结局"
+    title: "Illya's Exclusive Ending"
     condition:
       all_of:
         - { key: "affinity.illya.bond", op: ">=", value: 8 }
-        - { key: "affinity.illya.self_worth", op: ">=", value: 7 }  # 特异轴
-        - { key: "affinity.rin.rivalry", op: ">=", value: 6 }       # 凛敌意高
+        - { key: "affinity.illya.self_worth", op: ">=", value: 7 }  # specific axis
+        - { key: "affinity.rin.rivalry", op: ">=", value: 6 }       # Rin's high hostility
     body: |
       ...
 
-  # 示例 3: 任一角色觉悟 —— any_char
+  # Example 3: Any character's awakening — any_char
   - id: "ending-breakthrough"
-    title: "至少一人觉悟"
+    title: "At Least One Awakens"
     condition:
       any_char:
         axis: trust
@@ -1776,9 +1776,9 @@ endings:
     body: |
       ...
 
-  # 示例 4: 复杂嵌套 —— all_chars 套 all_of
+  # Example 4: Complex nesting — all_chars inside all_of
   - id: "ending-rebel"
-    title: "反抗结局"
+    title: "Rebellion Ending"
     condition:
       any_of:
         - all_of:
@@ -1791,23 +1791,23 @@ endings:
             except: [kotomine]
 
   - id: "ending-default"
-    title: "默认结局"
+    title: "Default Ending"
     condition: default
     body: |
-      （兜底结局）
+      (Fallthrough ending)
 \`\`\`
 
-### 强制规则
+### Mandatory Rules
 
-- **最后一个 ending 必须** \`condition: default\`，作为无条件兜底
-- 比较节点的 \`key\` 必须存在于 \`state_schema\`
-- 比较节点的 \`value\` 类型必须匹配 \`state_schema[key].type\`
-- enum 字段的 \`value\` 必须在 \`schema.values\` 列表内
-- bool 字段不能用 \`>= / <= / > / <\`，只能 \`== / !=\`
-- \`all_chars\` / \`any_char\` 的 \`axis\` **只能**是共享轴，不能是特异轴
-- \`all_chars\` / \`any_char\` 的 \`except\` 列表里的名字必须是实际存在的角色 slug
+- **The last ending must** use \`condition: default\` as the unconditional fallthrough
+- Comparison node \`key\` must exist in \`state_schema\`
+- Comparison node \`value\` type must match \`state_schema[key].type\`
+- enum field \`value\` must be within \`schema.values\` list
+- bool fields cannot use \`>= / <= / > / <\`, only \`== / !=\`
+- \`all_chars\` / \`any_char\`'s \`axis\` **must** be a shared axis, not a character-specific axis
+- Names in \`all_chars\` / \`any_char\`'s \`except\` list must be actual existing character slugs
 
-### 评估算法（你在 Phase 3 触发结局时按此执行）
+### Evaluation Algorithm (Execute This When Triggering Endings in Phase 3)
 
 \`\`\`
 evaluate(node, state, schema, characters):
@@ -1846,10 +1846,10 @@ evaluate(node, state, schema, characters):
         return true
     return false
 
-# 顺序遍历 endings 数组，第一个 evaluate 为 true 的 ending 触发
+# Iterate through endings array in order; the first ending that evaluates to true is triggered
 for ending in endings:
   if evaluate(ending.condition, state, schema, characters):
-    展示 ending → 退出
+    present ending -> exit
 \`\`\`
 `
 }
@@ -1884,64 +1884,64 @@ export function generateSkillMd(config: SkillTemplateConfig): string {
 
   // Build the act selection prompt content
   const actOptionsList = acts_options.map((o) => {
-    const marker = o.acts === default_acts ? ' [推荐]' : ''
-    return `  - "${o.label_zh} (${o.acts} 幕，${o.rounds_total} 轮，${o.endings_count} 结局)${marker}"`
+    const marker = o.acts === default_acts ? ' [recommended]' : ''
+    return `  - "${o.label_zh} (${o.acts} acts, ${o.rounds_total} rounds, ${o.endings_count} endings)${marker}"`
   }).join('\n')
 
   const defaultOption = acts_options.find((o) => o.acts === default_acts) ?? acts_options[0]!
 
-  const phase0 = `# Phase 0: 启动配置
+  const phase0 = `# Phase 0: Startup Configuration
 
-启动时按以下顺序询问用户。每一步用 AskUserQuestion 完成。
+Ask the user in the following order at startup. Each step is completed via AskUserQuestion.
 
-## Step 0.1: 选择故事长度
+## Step 0.1: Choose Story Length
 
-读取 \`\${CLAUDE_SKILL_DIR}/story-spec.md\` 的 frontmatter，找到 \`acts_options\` 和 \`default_acts\`。
+Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`'s frontmatter to find \`acts_options\` and \`default_acts\`.
 
-使用 AskUserQuestion 询问：
+Use AskUserQuestion to ask:
 
-question: "想要怎样长度的故事？"
+question: "How long of a story would you like?"
 options:
 ${actOptionsList}
 
-如果用户直接 Enter 不切换，使用默认值 ${defaultOption.acts} 幕（${defaultOption.label_zh}）。
+If the user presses Enter without switching, use the default: ${defaultOption.acts} acts (${defaultOption.label_zh}).
 
-根据用户选择，**在你的内部上下文中初始化运行时状态**：
+Based on the user's selection, **initialize runtime state in your internal context**:
 
 \`\`\`
-state.chosen_acts = <用户所选 ActOption 的 acts>
-state.rounds_budget = <用户所选 ActOption 的 rounds_total>
-state.target_endings_count = <用户所选 ActOption 的 endings_count>
+state.chosen_acts = <acts from the user's selected ActOption>
+state.rounds_budget = <rounds_total from the user's selected ActOption>
+state.target_endings_count = <endings_count from the user's selected ActOption>
 \`\`\`
 
-后续所有结构性指标（场景数、结局数、角色出场幕）都以这些 runtime 值为准。
+All subsequent structural metrics (scene count, ending count, character appearance acts) are based on these runtime values.
 
-## Step 0.2: Story Seeds 询问
+## Step 0.2: Story Seeds Prompt
 
-使用 AskUserQuestion 询问：
+Use AskUserQuestion to ask:
 
-question: "你想要一个怎样的故事？"
+question: "What kind of story would you like?"
 options:
-  - "让命运来决定"
-  - "我有一些想法"
+  - "Let fate decide"
+  - "I have some ideas"
 
-如果用户选择"让命运来决定"，seeds 为空，直接进入 Phase 1。
-如果用户选择"我有一些想法"，请用户用自然语言描述他们期望的剧情方向。
-收集完毕后进入 Phase 1。
+If the user selects "Let fate decide", seeds are empty — proceed directly to Phase 1.
+If the user selects "I have some ideas", ask them to describe their desired story direction in natural language.
+After collection, proceed to Phase 1.
 
-## appears_from 截断规则
+## appears_from Truncation Rule
 
-如果 story-spec 中的某角色 \`appears_from\` 大于 \`state.chosen_acts\`：
-- 截断到最后一幕（\`act_{state.chosen_acts}\`）首次出场
-- 不报错，自然引入`
+If a character's \`appears_from\` in story-spec exceeds \`state.chosen_acts\`:
+- Truncate to first appearance in the final act (\`act_{state.chosen_acts}\`)
+- No error — introduce naturally`
 
   const intro = isMultiCharacter
-    ? `你是一个多角色视觉小说引擎。你将运行故事《${storyName}》——一个以 ${characters!.map((c) => c.display_name ?? c.name).join('、')} 为主要角色、以${worldDisplayName}为舞台的交互式故事。
+    ? `You are a multi-character visual novel engine. You will run the story "${storyName}" — an interactive story set in ${worldDisplayName}, featuring ${characters!.map((c) => c.display_name ?? c.name).join(', ')} as main characters.
 
-运行分五个阶段：Phase -1（剧本库菜单）→ Phase 0（长度与 Seeds）→ Phase 1（剧本生成与持久化）→ Phase 2（多角色故事运行）→ Phase 3（结局图鉴）。`
-    : `你是一个视觉小说引擎。你将运行故事《${storyName}》——一个以${worldDisplayName}为舞台的交互式故事。
+Execution has five phases: Phase -1 (Script Library Menu) -> Phase 0 (Length & Seeds) -> Phase 1 (Script Generation & Persistence) -> Phase 2 (Multi-Character Story Runtime) -> Phase 3 (Ending Gallery).`
+    : `You are a visual novel engine. You will run the story "${storyName}" — an interactive story set in ${worldDisplayName}.
 
-运行分五个阶段：Phase -1（剧本库菜单）→ Phase 0（长度与 Seeds）→ Phase 1（剧本生成与持久化）→ Phase 2（故事运行）→ Phase 3（结局图鉴）。`
+Execution has five phases: Phase -1 (Script Library Menu) -> Phase 0 (Length & Seeds) -> Phase 1 (Script Generation & Persistence) -> Phase 2 (Story Runtime) -> Phase 3 (Ending Gallery).`
 
   // Build a path mapping table when there are multi-character cast members.
   // The Anthropic Skill spec requires ASCII-only directory names, but the
@@ -1950,7 +1950,7 @@ options:
   // here so the LLM knows that to read 远坂凛's identity it must open
   // souls/skill-abc12345/identity.md, not souls/远坂凛/identity.md.
   const characterPathMapping = characters && characters.length > 0
-    ? `\n## 角色路径映射（重要）\n\n本 skill 内的所有角色文件路径使用 ASCII slug，因为 Anthropic Skill 规范要求归档内只包含 ASCII 文件路径。当你需要读取某个角色的 identity / style / capabilities / milestones / behaviors 时，**必须**使用下表中的 slug：\n\n${characters.map((c) => `- **${c.display_name ?? c.name}** → \`souls/${c.slug}/\``).join('\n')}\n\n例如：要读取 ${characters[0]!.display_name ?? characters[0]!.name} 的 identity，调用 \`Read \${CLAUDE_SKILL_DIR}/souls/${characters[0]!.slug}/identity.md\`。\n\n本文档其余部分提到 \`souls/{角色名}/...\` 时，{角色名} 是占位符，**实际路径请用上表的 slug 替换**。\n`
+    ? `\n## Character Path Mapping (Important)\n\nAll character file paths in this skill use ASCII slugs because the Anthropic Skill spec requires archive paths to be ASCII-only. When you need to read a character's identity / style / capabilities / milestones / behaviors, you **must** use the slug from the table below:\n\n${characters.map((c) => `- **${c.display_name ?? c.name}** → \`souls/${c.slug}/\``).join('\n')}\n\nFor example: to read ${characters[0]!.display_name ?? characters[0]!.name}'s identity, call \`Read \${CLAUDE_SKILL_DIR}/souls/${characters[0]!.slug}/identity.md\`.\n\nWhen the rest of this document refers to \`souls/{character}/...\`, {character} is a placeholder — **use the slug from the table above for the actual path**.\n`
     : ''
 
   const enginePart = isMultiCharacter
@@ -1980,7 +1980,7 @@ ${buildSaveSystemSection()}
 
 ${phase0}
 
-# Phase 1 创作约束（必须在生成 script 时遵守）
+# Phase 1 Creation Constraints (Must Be Followed When Generating Scripts)
 
 ${buildStateSchemaSection()}
 

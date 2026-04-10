@@ -252,8 +252,9 @@ export class ExportBuilder {
     if (this.characters.size > 0) {
       throw new Error('set_prose_style must be called before any add_character')
     }
-    if (s.target_language !== 'zh') {
-      throw new Error(`target_language must be 'zh' (got: ${s.target_language})`)
+    const validLanguages = ['zh', 'en', 'ja']
+    if (!validLanguages.includes(s.target_language)) {
+      throw new Error(`target_language must be one of ${validLanguages.join(', ')} (got: ${s.target_language})`)
     }
     if (typeof s.voice_anchor !== 'string' || s.voice_anchor.length < 20) {
       throw new Error('voice_anchor must be at least 20 characters')
@@ -500,7 +501,7 @@ export type ExportProgressEvent =
    * stuck on the network. Approximate token count = char count / 4.
    */
   | { type: 'reasoning_progress'; chars: number; tokens: number }
-  | { type: 'plan_ready'; plan: ExportPlan }
+  | { type: 'plan_ready'; plan: ExportPlan; storyDirection?: string; exportLanguage?: string }
   | { type: 'plan_confirmed' }
   | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name: string }
   | { type: 'error'; error: string }
@@ -548,6 +549,8 @@ export interface PreSelectedExportData {
   storyDirection?: string
   /** Absolute parent directory where the skill dir will be created */
   outputBaseDir: string
+  /** Target language for exported skill content (zh/en/ja). Defaults to config.language. */
+  exportLanguage: 'zh' | 'en' | 'ja'
 }
 
 /**

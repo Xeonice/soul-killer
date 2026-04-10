@@ -632,5 +632,46 @@
   "unpack.conflict_hint": "↑↓ Select  Enter Confirm  Esc Cancel",
   "unpack.item_installed": "✓ {type}: {name}",
   "unpack.item_renamed": "✓ {type}: {from} → {to}",
-  "unpack.item_skipped": "- {type}: {name} (skipped)"
+  "unpack.item_skipped": "- {type}: {name} (skipped)",
+
+  "distill_panel.phase.ingest": "Data Ingestion",
+  "distill_panel.phase.classify": "Dimension Classification",
+  "distill_panel.phase.cluster": "Semantic Clustering",
+  "distill_panel.phase.extract": "Entry Generation",
+
+  "review.complete": "Review complete: {accepted}/{total} entries accepted",
+  "review.no_entries": "No entries to review",
+  "review.time_label": "  Time: {time}",
+  "review.sort_key_unreliable": "⚠️  Time unreliable: sort_key was heuristically inferred, please verify before saving",
+  "review.action.accept": " Accept ",
+  "review.action.skip": " Skip   ",
+  "review.action.end": " End Review",
+
+  "export.err.cannot_read_soul": "Cannot read soul: {name}",
+  "export.err.cannot_read_world": "Cannot read world: {name}",
+  "export.err.config_not_initialized": "Config not initialized",
+  "export.hint.press_enter_to_return": "Press Enter to return",
+
+  "create.placeholder.tags": "INTJ quiet dry-humor perfectionist",
+
+  "config.lang_label.zh": "Chinese",
+  "config.lang_label.ja": "Japanese",
+  "config.lang_label.en": "English",
+  "config.search.searxng_label": "SearXNG (Local Docker)",
+
+  "export_panel.input_label": "  Entered:",
+  "export_panel.plan_summary": "{count} characters · {axes}",
+
+  "planning.fallback_criteria.relevant": "Contains specific information directly relevant to this dimension",
+  "planning.fallback_criteria.depth": "Has depth of analysis rather than surface description",
+  "planning.timeout": "Planning Agent timed out ({seconds}s no response): model {model} did not return structured JSON within the time limit. Consider switching to a model with more stable structured output.",
+
+  "distill.runtime_note": "Downstream features (multi-soul export, Phase 2 runtime rendering) depend on the source-only invariant being intact.",
+  "distill.relations_section_header": "Relationship with {name}",
+  "distill.relations_types": "nemesis/liege-vassal/ally/mentor-disciple/spouse",
+  "distill.relations_name_note": "Use the character's common name (for cross-soul matching)",
+
+  "capture.score_example_reason": "Detailed description of...",
+
+  "export.step.select_language": "Select export language"
 }

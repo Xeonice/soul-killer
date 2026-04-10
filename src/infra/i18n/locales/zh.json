@@ -632,5 +632,46 @@
   "unpack.conflict_hint": "↑↓ 选择  Enter 确认  Esc 取消",
   "unpack.item_installed": "✓ {type}: {name}",
   "unpack.item_renamed": "✓ {type}: {from} → {to}",
-  "unpack.item_skipped": "- {type}: {name} (跳过)"
+  "unpack.item_skipped": "- {type}: {name} (跳过)",
+
+  "distill_panel.phase.ingest": "数据摄入",
+  "distill_panel.phase.classify": "维度分类",
+  "distill_panel.phase.cluster": "语义聚类",
+  "distill_panel.phase.extract": "条目生成",
+
+  "review.complete": "审查完成: {accepted}/{total} 条目已接受",
+  "review.no_entries": "无条目可审查",
+  "review.time_label": "  时间: {time}",
+  "review.sort_key_unreliable": "⚠️  时间不可靠：sort_key 由启发式推断，请校正后再保存",
+  "review.action.accept": " 接受  ",
+  "review.action.skip": " 跳过  ",
+  "review.action.end": " 结束审查",
+
+  "export.err.cannot_read_soul": "无法读取 soul: {name}",
+  "export.err.cannot_read_world": "无法读取 world: {name}",
+  "export.err.config_not_initialized": "配置未初始化",
+  "export.hint.press_enter_to_return": "按 Enter 返回",
+
+  "create.placeholder.tags": "INTJ 话少 冷幽默 技术洁癖",
+
+  "config.lang_label.zh": "中文",
+  "config.lang_label.ja": "日本語",
+  "config.lang_label.en": "English",
+  "config.search.searxng_label": "SearXNG (本地 Docker)",
+
+  "export_panel.input_label": "  已输入:",
+  "export_panel.plan_summary": "{count} 角色 · {axes}",
+
+  "planning.fallback_criteria.relevant": "包含与该维度直接相关的具体信息",
+  "planning.fallback_criteria.depth": "有深度分析而非表面描述",
+  "planning.timeout": "Planning Agent 超时（{seconds}s 无响应）：模型 {model} 未在时限内返回结构化 JSON。建议换一个对 structured output 更稳定的模型。",
+
+  "distill.runtime_note": "下游特性（多角色导出、Phase 2 运行时演绎）依赖于仅从源数据提取的不变性。",
+  "distill.relations_section_header": "与{name}的关系",
+  "distill.relations_types": "宿敌/君臣/同盟/师徒/夫妻",
+  "distill.relations_name_note": "使用角色常用名（便于跨 soul 交叉匹配）",
+
+  "capture.score_example_reason": "详细描述了...",
+
+  "export.step.select_language": "选择导出语言"
 }

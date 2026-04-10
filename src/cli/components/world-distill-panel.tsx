@@ -48,7 +48,7 @@ export function WorldDistillPanel({ progress, worldName }: WorldDistillPanelProp
 
       {/* Phase 1: Ingest */}
       <PhaseRow
-        label="数据摄入"
+        label={t('distill_panel.phase.ingest')}
         done={currentPhaseIdx > 0}
         active={progress.phase === 'ingest'}
         detail={progress.phase === 'ingest' ? progress.message : `${progress.total > 0 ? progress.message : ''}`}
@@ -60,7 +60,7 @@ export function WorldDistillPanel({ progress, worldName }: WorldDistillPanelProp
         <>
           <Text> </Text>
           <PhaseRow
-            label="维度分类"
+            label={t('distill_panel.phase.classify')}
             done={currentPhaseIdx > 1}
             active={progress.phase === 'classify'}
             detail={progress.phase === 'classify'
@@ -79,7 +79,7 @@ export function WorldDistillPanel({ progress, worldName }: WorldDistillPanelProp
         <>
           <Text> </Text>
           <PhaseRow
-            label="语义聚类"
+            label={t('distill_panel.phase.cluster')}
             done={currentPhaseIdx > 2}
             active={progress.phase === 'cluster'}
             detail={progress.message}
@@ -93,7 +93,7 @@ export function WorldDistillPanel({ progress, worldName }: WorldDistillPanelProp
         <>
           <Text> </Text>
           <PhaseRow
-            label="条目生成"
+            label={t('distill_panel.phase.extract')}
             done={isDone}
             active={progress.phase === 'extract' && !isDone}
             detail={`${progress.current}/${progress.total}`}

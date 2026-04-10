@@ -1,65 +1,128 @@
 /**
- * Prose style anchor — 故事级叙事风格锚点系统的入口。
+ * Prose style anchor — entry point for the story-level narrative style system.
  *
- * 该模块导出：
- * 1. 通用中文翻译腔反例库 (ZH_TRANSLATESE_PATTERNS)
- * 2. ProseStyleForbiddenPattern 类型
- * 3. 将反例库渲染为 LLM 可读文本的辅助函数
+ * This module exports:
+ * 1. Chinese translatese anti-pattern library (ZH_TRANSLATESE_PATTERNS)
+ * 2. Japanese translatese anti-pattern library (JA_TRANSLATESE_PATTERNS)
+ * 3. ProseStyleForbiddenPattern type
+ * 4. Language-aware helper functions for rendering pattern libraries
  *
- * 使用方：
- * - `src/agent/export-agent.ts` — set_prose_style 工具 description 通过
- *   `formatPatternsForToolDescription()` 动态 inline 反例库
- * - `src/export/story-spec.ts` — formatProseStyleSection 使用反例库作为
- *   fallback 渲染源（当 export 的 StorySpecConfig 缺 prose_style 时）
- * - `src/export/skill-template.ts` — SKILL.md fallback 分支 inline 5 条
- *   最高频反例
+ * Consumers:
+ * - `src/export/agent/` — set_prose_style tool description uses
+ *   `formatPatternsForToolDescription()` to dynamically inline the library
+ * - `src/export/spec/story-spec.ts` — formatProseStyleSection uses the library
+ *   as a fallback rendering source
+ * - `src/export/spec/skill-template.ts` — SKILL.md fallback branch inlines
+ *   top 5 most frequent anti-patterns
  */
+
+import type { SupportedLanguage } from '../../config/schema.js'
 
 export {
   ZH_TRANSLATESE_PATTERNS,
   type ProseStyleForbiddenPattern,
 } from './zh-translatese-patterns.js'
 
+export {
+  JA_TRANSLATESE_PATTERNS,
+  type JaProseStyleForbiddenPattern,
+} from './ja-translatese-patterns.js'
+
 import {
   ZH_TRANSLATESE_PATTERNS,
   type ProseStyleForbiddenPattern,
 } from './zh-translatese-patterns.js'
 
+import {
+  JA_TRANSLATESE_PATTERNS,
+  type JaProseStyleForbiddenPattern,
+} from './ja-translatese-patterns.js'
+
 /**
- * 把反例库渲染为 LLM 可读文本，用于 set_prose_style 工具 description。
+ * Render the anti-pattern library as LLM-readable text for tool descriptions.
  *
- * 输出格式（每条一段）：
- * ```
- * [id: degree_clause]
- *   ✗ 反例：...
- *   ✓ 正例：...
- *   理由：...
- * ```
+ * When language is 'zh', uses Chinese patterns with Chinese labels.
+ * When language is 'ja', uses Japanese patterns with Japanese labels.
+ * When language is 'en', returns English-only prose guidance (no anti-translatese needed).
  *
- * 该函数是反例库的唯一规范渲染入口。以后反例库扩展、改版，
- * 所有 consumer 都通过这个函数拿到最新内容，不会出现硬编码漂移。
+ * If no language is specified, defaults to Chinese patterns (backward compat).
  */
 export function formatPatternsForToolDescription(
-  patterns: ProseStyleForbiddenPattern[] = ZH_TRANSLATESE_PATTERNS,
+  patternsOrLang?: ProseStyleForbiddenPattern[] | SupportedLanguage,
 ): string {
+  // Backward compat: if called with an array, use it directly (Chinese format)
+  if (Array.isArray(patternsOrLang)) {
+    return formatZhPatterns(patternsOrLang)
+  }
+
+  const lang = patternsOrLang
+  if (lang === 'ja') {
+    return formatJaPatterns(JA_TRANSLATESE_PATTERNS)
+  }
+  if (lang === 'en') {
+    return formatEnGuidance()
+  }
+  // Default: zh
+  return formatZhPatterns(ZH_TRANSLATESE_PATTERNS)
+}
+
+function formatZhPatterns(patterns: ProseStyleForbiddenPattern[]): string {
   return patterns
     .map(
       (p) =>
         `[id: ${p.id}]\n` +
-        `  ✗ 反例：${p.bad}\n` +
-        `  ✓ 正例：${p.good}\n` +
-        `  理由：${p.reason}`,
+        `  ✗ Bad: ${p.bad}\n` +
+        `  ✓ Good: ${p.good}\n` +
+        `  Reason: ${p.reason}`,
     )
     .join('\n\n')
 }
 
+function formatJaPatterns(patterns: JaProseStyleForbiddenPattern[]): string {
+  return patterns
+    .map(
+      (p) =>
+        `[id: ${p.id}]\n` +
+        `  ✗ Bad: ${p.bad}\n` +
+        `  ✓ Good: ${p.good}\n` +
+        `  Reason: ${p.reason}`,
+    )
+    .join('\n\n')
+}
+
+function formatEnGuidance(): string {
+  return `English is the LLM's native language — no anti-translatese patterns are needed.
+
+Focus on natural, fluent English prose:
+- Vary sentence length and structure
+- Use active voice by default
+- Avoid purple prose and overwrought descriptions
+- Let dialogue carry character voice naturally
+- Use concrete sensory details over abstract emotional statements`
+}
+
 /**
- * 返回反例库的前 N 条最高频条目，用于 SKILL.md fallback 分支的内嵌清单。
- * 默认 5 条。反例库按频率从高到低排序，前 N 条就是最高频子集。
+ * Return the top N most frequent anti-pattern entries for SKILL.md fallback.
+ * Default 5 entries. The library is ordered by frequency (high to low).
+ *
+ * When language is specified, returns patterns for that language.
+ * For English, returns an empty array (no anti-translatese needed).
  */
 export function topForbiddenPatterns(
   n = 5,
-  patterns: ProseStyleForbiddenPattern[] = ZH_TRANSLATESE_PATTERNS,
-): ProseStyleForbiddenPattern[] {
-  return patterns.slice(0, n)
+  langOrPatterns?: ProseStyleForbiddenPattern[] | SupportedLanguage,
+): ProseStyleForbiddenPattern[] | JaProseStyleForbiddenPattern[] {
+  // Backward compat: if called with an array, use it
+  if (Array.isArray(langOrPatterns)) {
+    return langOrPatterns.slice(0, n)
+  }
+
+  const lang = langOrPatterns
+  if (lang === 'ja') {
+    return JA_TRANSLATESE_PATTERNS.slice(0, n)
+  }
+  if (lang === 'en') {
+    return []
+  }
+  return ZH_TRANSLATESE_PATTERNS.slice(0, n)
 }
