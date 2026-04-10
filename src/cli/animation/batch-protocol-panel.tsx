@@ -5,7 +5,7 @@ import { DistillProgressPanel } from '../components/distill-progress.js'
 import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { t } from '../../i18n/index.js'
-import type { SoulTaskStatus, SoulTaskPhase } from '../../agent/batch-pipeline.js'
+import type { SoulTaskStatus, SoulTaskPhase } from '../../soul/batch-pipeline.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 

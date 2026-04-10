@@ -4,7 +4,7 @@ import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { t } from '../../i18n/index.js'
-import type { ExportProgressEvent, ExportPhase, ExportPlan, AskUserOption } from '../../agent/export-agent.js'
+import type { ExportProgressEvent, ExportPhase, ExportPlan, AskUserOption } from '../../export/agent/index.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 

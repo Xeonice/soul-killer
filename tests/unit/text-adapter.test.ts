@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { textToChunks } from '../../src/ingest/text-adapter.js'
+import { textToChunks } from '../../src/infra/ingest/text-adapter.js'
 
 describe('textToChunks', () => {
   it('converts a simple text to a single chunk', () => {

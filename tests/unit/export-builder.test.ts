@@ -23,7 +23,7 @@ import { ZH_TRANSLATESE_PATTERNS } from '../../src/export/prose-style/index.js'
 // a test-only hatch below. The simplest path is to inline a shim that
 // mirrors the real class — but that risks drift. Instead, we add a
 // named export in the source file.
-import { __TEST_ONLY_ExportBuilder as ExportBuilder } from '../../src/agent/export-agent.js'
+import { __TEST_ONLY_ExportBuilder as ExportBuilder } from '../../src/export/agent/index.js'
 
 const storyState: StoryState = {
   shared_axes_custom: ['trust', 'rivalry'],

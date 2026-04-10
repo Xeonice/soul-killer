@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { webExtractionToChunks } from '../../src/ingest/web-adapter.js'
+import { webExtractionToChunks } from '../../src/infra/ingest/web-adapter.js'
 
 describe('webExtractionToChunks', () => {
   it('converts extractions to SoulChunks with web source', () => {

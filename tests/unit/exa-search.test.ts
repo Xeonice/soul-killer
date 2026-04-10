@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasCJK } from '../../src/agent/search/exa-search.js'
+import { hasCJK } from '../../src/infra/search/exa-search.js'
 
 describe('hasCJK', () => {
   it('detects Chinese characters', () => {

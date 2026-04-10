@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateText } from 'ai'
-import { extractFeatures, type DistillProgress } from '../../src/distill/extractor.js'
+import { extractFeatures, type DistillProgress } from '../../src/soul/distill/extractor.js'
 
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>()

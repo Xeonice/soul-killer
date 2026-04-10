@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
-import { WorldDistillReview } from '../../src/cli/commands/world-distill-review.js'
+import { WorldDistillReview } from '../../src/cli/commands/world/world-distill-review.js'
 import type { GeneratedEntry } from '../../src/world/distill.js'
 
 const noop = () => {}

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { signalsToRegex, getBaseDimensions } from '../../src/agent/planning/dimension-framework.js'
-import { SOUL_DIMENSION_TEMPLATES } from '../../src/agent/strategy/soul-dimensions.js'
-import { WORLD_DIMENSION_TEMPLATES } from '../../src/agent/strategy/world-dimensions.js'
-import type { DimensionDef } from '../../src/agent/planning/dimension-framework.js'
+import { signalsToRegex, getBaseDimensions } from '../../src/infra/agent/dimension-framework.js'
+import { SOUL_DIMENSION_TEMPLATES } from '../../src/soul/capture/soul-dimensions.js'
+import { WORLD_DIMENSION_TEMPLATES } from '../../src/world/capture/world-dimensions.js'
+import type { DimensionDef } from '../../src/infra/agent/dimension-framework.js'
 
 describe('signalsToRegex', () => {
   it('converts CJK keywords to direct match regex', () => {

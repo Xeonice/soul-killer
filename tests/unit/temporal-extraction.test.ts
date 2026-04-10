@@ -3,10 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
-import { extractTemporal, parseFrontmatterDate } from '../../src/ingest/markdown-adapter.js'
-import { webExtractionToChunks } from '../../src/ingest/web-adapter.js'
-import { MarkdownAdapter } from '../../src/ingest/markdown-adapter.js'
-import { TwitterAdapter } from '../../src/ingest/twitter-adapter.js'
+import { extractTemporal, parseFrontmatterDate } from '../../src/infra/ingest/markdown-adapter.js'
+import { webExtractionToChunks } from '../../src/infra/ingest/web-adapter.js'
+import { MarkdownAdapter } from '../../src/infra/ingest/markdown-adapter.js'
+import { TwitterAdapter } from '../../src/infra/ingest/twitter-adapter.js'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

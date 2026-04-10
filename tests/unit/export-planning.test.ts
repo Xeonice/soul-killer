@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   __TEST_ONLY_validatePlan as validatePlan,
   type ExportPlan,
-} from '../../src/agent/export-agent.js'
+} from '../../src/export/agent/index.js'
 import {
   createInitialPanelState,
   reducePanelEvent,

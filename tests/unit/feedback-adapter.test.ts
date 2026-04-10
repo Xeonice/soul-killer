@@ -8,7 +8,7 @@ import {
   markFeedbackConsumed,
   feedbackToChunks,
   type FeedbackRecord,
-} from '../../src/ingest/feedback-adapter.js'
+} from '../../src/infra/ingest/feedback-adapter.js'
 
 function makeFeedback(overrides: Partial<FeedbackRecord> = {}): FeedbackRecord {
   return {

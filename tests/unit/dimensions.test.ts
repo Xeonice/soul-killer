@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/agent/strategy/soul-dimensions.js'
+import { analyzeCoverage, generateSearchPlan, ALL_DIMENSIONS, REQUIRED_DIMENSIONS } from '../../src/soul/capture/soul-dimensions.js'
 
 describe('analyzeCoverage', () => {
   it('returns all uncovered for empty input', () => {

@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
 import { generateText, type LanguageModel } from 'ai'
-import type { DimensionPlan } from '../agent/planning/dimension-framework.js'
-import type { SearchResult } from '../agent/search/tavily-search.js'
-import type { SoulChunk } from '../ingest/types.js'
-import { IngestPipeline, type AdapterType } from '../ingest/pipeline.js'
+import type { DimensionPlan } from '../infra/agent/dimension-framework.js'
+import type { SearchResult } from '../infra/search/tavily-search.js'
+import type { SoulChunk } from '../infra/ingest/types.js'
+import { IngestPipeline, type AdapterType } from '../infra/ingest/pipeline.js'
 import {
   addEntry,
   loadAllEntries,
@@ -17,9 +17,9 @@ import {
 } from './entry.js'
 import { addChronicleEntry, mergeIntoTimelineFile, type ChronicleKind } from './chronicle.js'
 import { loadWorld, saveWorld, bumpPatchVersion } from './manifest.js'
-import type { WorldClassification, WorldDimension } from '../agent/strategy/world-dimensions.js'
-import { WORLD_DIMENSIONS, ALL_WORLD_DIMENSIONS } from '../agent/strategy/world-dimensions.js'
-import type { DimensionDef } from '../agent/planning/dimension-framework.js'
+import type { WorldClassification, WorldDimension } from './capture/world-dimensions.js'
+import { WORLD_DIMENSIONS, ALL_WORLD_DIMENSIONS } from './capture/world-dimensions.js'
+import type { DimensionDef } from '../infra/agent/dimension-framework.js'
 import type { AgentLogger } from '../utils/agent-logger.js'
 
 export type DistillPhase = 'ingest' | 'classify' | 'cluster' | 'extract' | 'review'

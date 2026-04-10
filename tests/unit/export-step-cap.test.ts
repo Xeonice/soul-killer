@@ -11,7 +11,7 @@
  * full formula derivation.
  */
 import { describe, it, expect } from 'vitest'
-import { computeExportStepCap } from '../../src/agent/export-agent.js'
+import { computeExportStepCap } from '../../src/export/agent/index.js'
 
 describe('computeExportStepCap', () => {
   // Formula: (3 + N × 2 + 1) + max(5, N) = 2N + 4 + max(5, N)

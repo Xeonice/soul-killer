@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
-import { TwitterAdapter } from '../../src/ingest/twitter-adapter.js'
+import { TwitterAdapter } from '../../src/infra/ingest/twitter-adapter.js'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

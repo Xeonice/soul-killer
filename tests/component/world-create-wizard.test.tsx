@@ -4,7 +4,7 @@ import { render } from 'ink-testing-library'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { WorldCreateWizard } from '../../src/cli/commands/world-create-wizard.js'
+import { WorldCreateWizard } from '../../src/cli/commands/world/world-create-wizard.js'
 import { setLocale } from '../../src/i18n/index.js'
 
 let tmpDir: string

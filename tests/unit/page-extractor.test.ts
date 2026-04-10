@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { extractPageContent, extractPagesParallel } from '../../src/agent/search/page-extractor.js'
+import { extractPageContent, extractPagesParallel } from '../../src/infra/search/page-extractor.js'
 
 const SAMPLE_HTML = `
 <!DOCTYPE html>

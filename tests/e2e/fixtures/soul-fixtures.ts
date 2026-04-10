@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { packageSoul, generateManifest, appendEvolveEntry } from '../../../src/soul/package.js'
-import { generateSoulFiles } from '../../../src/distill/generator.js'
+import { generateSoulFiles } from '../../../src/soul/distill/generator.js'
 import type { WorldBinding } from '../../../src/world/binding.js'
 import type { SoulType } from '../../../src/soul/manifest.js'
-import type { SoulChunk } from '../../../src/ingest/types.js'
+import type { SoulChunk } from '../../../src/infra/ingest/types.js'
 
 export interface BareSoul {
   soulDir: string

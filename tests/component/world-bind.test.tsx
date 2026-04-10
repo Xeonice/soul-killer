@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from 'ink-testing-library'
-import { WorldBindCommand } from '../../src/cli/commands/world-bind.js'
+import { WorldBindCommand } from '../../src/cli/commands/world/world-bind.js'
 
 vi.mock('../../src/world/binding.js', async () => {
   const actual = await vi.importActual('../../src/world/binding.js') as Record<string, unknown>

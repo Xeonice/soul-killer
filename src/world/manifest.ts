@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import type { WorldType, WorldClassification, WorldDimension } from '../agent/strategy/world-dimensions.js'
-import type { DimensionDef } from '../agent/planning/dimension-framework.js'
+import type { WorldType, WorldClassification, WorldDimension } from './capture/world-dimensions.js'
+import type { DimensionDef } from '../infra/agent/dimension-framework.js'
 import type { WorldTagSet } from '../tags/world-taxonomy.js'
 import { emptyWorldTagSet } from '../tags/world-taxonomy.js'
 

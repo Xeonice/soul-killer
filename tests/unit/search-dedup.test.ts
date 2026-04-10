@@ -2,20 +2,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { createEvaluationTools } from '../../src/agent/tools/index.js'
+import { createEvaluationTools } from '../../src/infra/agent/tools/index.js'
 import type { SoulkillerConfig } from '../../src/config/schema.js'
-import type { DimensionPlan } from '../../src/agent/planning/dimension-framework.js'
+import type { DimensionPlan } from '../../src/infra/agent/dimension-framework.js'
 
-vi.mock('../../src/agent/search/tavily-search.js', () => ({
+vi.mock('../../src/infra/search/tavily-search.js', () => ({
   executeTavilySearch: vi.fn(),
 }))
 
-vi.mock('../../src/agent/search/exa-search.js', () => ({
+vi.mock('../../src/infra/search/exa-search.js', () => ({
   executeExaSearch: vi.fn(),
   hasCJK: vi.fn(() => false),
 }))
 
-vi.mock('../../src/agent/search/searxng-search.js', () => ({
+vi.mock('../../src/infra/search/searxng-search.js', () => ({
   searxngSearch: vi.fn(),
   ensureSearxng: vi.fn(),
 }))
@@ -95,7 +95,7 @@ describe('evaluateDimension', () => {
 
 describe('supplementSearch', () => {
   it('appends results to dimension cache', async () => {
-    const { executeTavilySearch } = await import('../../src/agent/search/tavily-search.js')
+    const { executeTavilySearch } = await import('../../src/infra/search/tavily-search.js')
     vi.mocked(executeTavilySearch).mockResolvedValueOnce([
       { title: 'New Result', url: 'https://example.com/new', content: 'New content' },
     ])
@@ -121,7 +121,7 @@ describe('supplementSearch', () => {
   })
 
   it('enforces supplement limit per dimension', async () => {
-    const { executeTavilySearch } = await import('../../src/agent/search/tavily-search.js')
+    const { executeTavilySearch } = await import('../../src/infra/search/tavily-search.js')
     vi.mocked(executeTavilySearch).mockResolvedValue([
       { title: 'R', url: 'https://example.com/r', content: 'Content' },
     ])
@@ -143,7 +143,7 @@ describe('supplementSearch', () => {
   })
 
   it('deduplicates against existing cache', async () => {
-    const { executeTavilySearch } = await import('../../src/agent/search/tavily-search.js')
+    const { executeTavilySearch } = await import('../../src/infra/search/tavily-search.js')
     vi.mocked(executeTavilySearch).mockResolvedValueOnce([
       { title: 'Dup', url: 'https://example.com/old', content: 'Dup content' },
       { title: 'New', url: 'https://example.com/new', content: 'New content' },

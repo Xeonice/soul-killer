@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from 'ink-testing-library'
-import { CreateCommand } from '../../src/cli/commands/create.js'
+import { CreateCommand } from '../../src/cli/commands/soul/create.js'
 
 // Mock heavy dependencies
 vi.mock('../../src/config/loader.js', () => ({
@@ -26,7 +26,7 @@ vi.mock('../../src/llm/client.js', () => ({
   }),
 }))
 
-vi.mock('../../src/agent/soul-capture-agent.js', () => ({
+vi.mock('../../src/soul/capture/soul-capture-agent.js', () => ({
   captureSoul: vi.fn().mockResolvedValue({
     classification: 'PUBLIC_ENTITY',
     origin: 'Test',

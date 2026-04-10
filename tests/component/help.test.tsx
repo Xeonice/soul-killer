@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { HelpCommand } from '../../src/cli/commands/help.js'
+import { HelpCommand } from '../../src/cli/commands/system/help.js'
 
 describe('HelpCommand', () => {
   it('renders full help output', () => {

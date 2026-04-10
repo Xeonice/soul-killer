@@ -4,7 +4,7 @@ import { PRIMARY, ACCENT, DARK, DIM } from '../animation/colors.js'
 import { isAnimationEnabled } from '../animation/use-animation.js'
 import { t } from '../../i18n/index.js'
 import type { WorldDistillProgress, DimensionStats } from '../../world/distill.js'
-import { ALL_WORLD_DIMENSIONS, WORLD_DIMENSIONS } from '../../agent/strategy/world-dimensions.js'
+import { ALL_WORLD_DIMENSIONS, WORLD_DIMENSIONS } from '../../world/capture/world-dimensions.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 

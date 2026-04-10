@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorldDir } from './manifest.js'
-import type { WorldDimension } from "../agent/strategy/world-dimensions.js";
+import type { WorldDimension } from "./capture/world-dimensions.js";
 
 export type EntryMode = 'always' | 'keyword' | 'semantic'
 export type EntryScope =

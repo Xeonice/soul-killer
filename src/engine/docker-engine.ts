@@ -1,4 +1,4 @@
-import type { SoulChunk } from '../ingest/types.js'
+import type { SoulChunk } from '../infra/ingest/types.js'
 import type { EngineAdapter, RecallOptions, RecallResult, IngestResult, EngineStatus } from './adapter.js'
 
 const BASE_URL = 'http://localhost:6600'

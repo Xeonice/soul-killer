@@ -1,13 +1,13 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from 'ink-testing-library'
-import { EvolveCommand } from '../../src/cli/commands/evolve.js'
-import type { SoulChunk } from '../../src/ingest/types.js'
+import { EvolveCommand } from '../../src/cli/commands/soul/evolve.js'
+import type { SoulChunk } from '../../src/infra/ingest/types.js'
 
 const DELAY = 80
 
 // Mock heavy dependencies
-vi.mock('../../src/ingest/pipeline.js', () => {
+vi.mock('../../src/infra/ingest/pipeline.js', () => {
   const EventEmitter = require('node:events')
   return {
     IngestPipeline: vi.fn().mockImplementation(() => {
@@ -43,11 +43,11 @@ vi.mock('../../src/llm/client.js', () => ({
   }),
 }))
 
-vi.mock('../../src/distill/sampler.js', () => ({
+vi.mock('../../src/soul/distill/sampler.js', () => ({
   sampleChunks: vi.fn().mockReturnValue([]),
 }))
 
-vi.mock('../../src/distill/extractor.js', () => ({
+vi.mock('../../src/soul/distill/extractor.js', () => ({
   extractFeatures: vi.fn().mockResolvedValue({
     identity: '',
     style: '',
@@ -55,12 +55,12 @@ vi.mock('../../src/distill/extractor.js', () => ({
   }),
 }))
 
-vi.mock('../../src/distill/generator.js', () => ({
+vi.mock('../../src/soul/distill/generator.js', () => ({
   generateSoulFiles: vi.fn(),
   loadSoulFiles: vi.fn().mockReturnValue(null),
 }))
 
-vi.mock('../../src/distill/merger.js', () => ({
+vi.mock('../../src/soul/distill/merger.js', () => ({
   mergeSoulFiles: vi.fn().mockResolvedValue({
     identity: '',
     style: '',
@@ -76,7 +76,7 @@ vi.mock('../../src/soul/package.js', () => ({
   appendEvolveEntry: vi.fn(),
 }))
 
-vi.mock('../../src/ingest/url-adapter.js', () => ({
+vi.mock('../../src/infra/ingest/url-adapter.js', () => ({
   extractUrl: vi.fn().mockResolvedValue({
     url: 'https://example.com',
     content: 'test content from url that is long enough.',
@@ -87,13 +87,13 @@ vi.mock('../../src/ingest/url-adapter.js', () => ({
   ]),
 }))
 
-vi.mock('../../src/ingest/text-adapter.js', () => ({
+vi.mock('../../src/infra/ingest/text-adapter.js', () => ({
   textToChunks: vi.fn().mockReturnValue([
     { id: 'txt1', source: 'user-input', content: 'text chunk', timestamp: '', context: 'personal', type: 'knowledge', metadata: {} },
   ]),
 }))
 
-vi.mock('../../src/ingest/feedback-adapter.js', () => ({
+vi.mock('../../src/infra/ingest/feedback-adapter.js', () => ({
   readUnconsumedFeedback: vi.fn().mockReturnValue([]),
   feedbackToChunks: vi.fn().mockReturnValue([]),
   markFeedbackConsumed: vi.fn(),

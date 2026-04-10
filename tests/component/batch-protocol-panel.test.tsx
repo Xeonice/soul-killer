@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { render } from 'ink-testing-library'
 import { BatchProtocolPanel } from '../../src/cli/animation/batch-protocol-panel.js'
 import { setLocale } from '../../src/i18n/index.js'
-import type { SoulTaskStatus } from '../../src/agent/batch-pipeline.js'
+import type { SoulTaskStatus } from '../../src/soul/batch-pipeline.js'
 
 function makeStatus(name: string, overrides?: Partial<SoulTaskStatus>): SoulTaskStatus {
   return {

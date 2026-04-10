@@ -1,9 +1,71 @@
+import React from 'react'
 import { t } from '../i18n/index.js'
+import type { EngineAdapter, RecallResult } from '../engine/adapter.js'
+import type { ChatMessage } from '../llm/stream.js'
 
 export interface CommandDef {
   name: string
   description: string
   group: string
+}
+
+// ─── Command Router Types ───
+
+export type Requirement = 'soul' | 'engine' | 'args' | 'conversation'
+
+export interface AppState {
+  phase: 'boot' | 'setup' | 'idle' | 'command' | 'exit'
+  promptMode: string
+  promptStatus: string
+  soulName?: string
+  soulDir?: string
+  commandOutput: React.ReactNode | null
+  error: { severity: string; title: string; message: string; suggestions?: string[] } | null
+  lastRecallResults: RecallResult[]
+  chunks: unknown[]
+  interactiveMode: boolean
+  conversationMessages: Array<{ role: 'user' | 'assistant'; content: string }>
+  isThinking: boolean
+  isStreaming: boolean
+  streamContent: string
+}
+
+export interface CommandContext {
+  args: string
+  state: Readonly<AppState>
+  setState: (updater: (s: AppState) => AppState) => void
+  engineRef: React.RefObject<EngineAdapter | null>
+  conversationRef: React.RefObject<ChatMessage[]>
+  closeInteractive: () => void
+  handleRecallResults: (results: RecallResult[]) => void
+  handleCreateComplete: (name: string, dir: string) => void
+  handleUseComplete: (dir: string) => void
+}
+
+export interface SubcommandHandler {
+  requires?: Requirement[]
+  argDef?: { name: string }
+  interactive?: boolean
+  handle(ctx: CommandContext): React.ReactNode | void | Promise<React.ReactNode | void>
+}
+
+export interface CommandHandler extends SubcommandHandler {
+  name: string
+  descriptionKey: string
+  groupKey: string
+  subcommands?: Record<string, SubcommandHandler>
+}
+
+// ─── Handler Registry ───
+
+const handlerRegistry = new Map<string, CommandHandler>()
+
+export function registerCommand(handler: CommandHandler): void {
+  handlerRegistry.set(handler.name, handler)
+}
+
+export function getHandler(name: string): CommandHandler | undefined {
+  return handlerRegistry.get(name)
 }
 
 interface CommandTemplate {

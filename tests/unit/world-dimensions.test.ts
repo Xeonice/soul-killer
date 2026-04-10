@@ -7,7 +7,7 @@ import {
   generateWorldSearchPlan,
   analyzeWorldCoverage,
   type WorldDimension,
-} from '../../src/agent/strategy/world-dimensions.js'
+} from '../../src/world/capture/world-dimensions.js'
 
 describe('WORLD_DIMENSIONS', () => {
   it('defines 9 dimensions', () => {

@@ -4,10 +4,10 @@ import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
 import { LocalEngine } from '../../src/engine/local-engine.js'
-import { MarkdownAdapter } from '../../src/ingest/markdown-adapter.js'
-import { TwitterAdapter } from '../../src/ingest/twitter-adapter.js'
-import { IngestPipeline } from '../../src/ingest/pipeline.js'
-import type { SoulChunk } from '../../src/ingest/types.js'
+import { MarkdownAdapter } from '../../src/infra/ingest/markdown-adapter.js'
+import { TwitterAdapter } from '../../src/infra/ingest/twitter-adapter.js'
+import { IngestPipeline } from '../../src/infra/ingest/pipeline.js'
+import type { SoulChunk } from '../../src/infra/ingest/types.js'
 
 const FIXTURES_DIR = path.join(import.meta.dirname, 'fixtures')
 const MD_FIXTURES = path.join(FIXTURES_DIR, 'markdown-docs')

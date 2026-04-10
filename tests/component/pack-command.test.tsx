@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from 'ink-testing-library'
-import { PackCommand } from '../../src/cli/commands/pack.js'
+import { PackCommand } from '../../src/cli/commands/export/pack.js'
 
 // Mock the packer module
 vi.mock('../../src/pack/packer.js', () => ({

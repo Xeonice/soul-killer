@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { urlResultToChunks, type UrlExtractionResult } from '../../src/ingest/url-adapter.js'
+import { urlResultToChunks, type UrlExtractionResult } from '../../src/infra/ingest/url-adapter.js'
 
 describe('urlResultToChunks', () => {
   it('converts successful extraction to chunks', () => {

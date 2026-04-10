@@ -12,7 +12,7 @@ describe('Planning Agent', () => {
       text: JSON.stringify(responseJson),
     } as any)
 
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     return runPlanningAgent(
       {} as any, // dummy model
       'world',
@@ -53,7 +53,7 @@ describe('Planning Agent', () => {
   it('throws on invalid JSON response', async () => {
     vi.mocked(generateText).mockResolvedValueOnce({ text: 'not json at all' } as any)
 
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     await expect(
       runPlanningAgent({} as any, 'world', 'Test', undefined, [], 'REAL_SETTING'),
     ).rejects.toThrow('invalid JSON')
@@ -67,7 +67,7 @@ describe('Planning Agent', () => {
     const json = JSON.stringify({ dimensions: dims })
     vi.mocked(generateText).mockResolvedValueOnce({ text: '```json\n' + json + '\n```' } as any)
 
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     const plan = await runPlanningAgent({} as any, 'world', 'Test', undefined, [], 'REAL_SETTING')
     expect(plan.dimensions.length).toBe(6)
   })
@@ -132,7 +132,7 @@ describe('Planning Agent — meta exclusion prompt', () => {
 
   it('includes meta exclusion section when type is world', async () => {
     vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     await runPlanningAgent({} as any, 'world', 'TestWorld', undefined, [], 'FICTIONAL_UNIVERSE')
 
     const prompt = capturePrompt()
@@ -143,7 +143,7 @@ describe('Planning Agent — meta exclusion prompt', () => {
 
   it('does NOT include meta exclusion section when type is soul', async () => {
     vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     await runPlanningAgent({} as any, 'soul', 'TestSoul', undefined, [], 'PUBLIC_ENTITY')
 
     const prompt = capturePrompt()
@@ -153,7 +153,7 @@ describe('Planning Agent — meta exclusion prompt', () => {
 
   it('includes strict qualifiers for REAL_SETTING classification', async () => {
     vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     await runPlanningAgent({} as any, 'world', 'White Album 2', undefined, [], 'REAL_SETTING')
 
     const prompt = capturePrompt()
@@ -165,7 +165,7 @@ describe('Planning Agent — meta exclusion prompt', () => {
 
   it('does NOT include strict qualifiers for FICTIONAL_UNIVERSE', async () => {
     vi.mocked(generateText).mockResolvedValueOnce({ text: JSON.stringify(validResponse) } as any)
-    const { runPlanningAgent } = await import('../../src/agent/planning/planning-agent.js')
+    const { runPlanningAgent } = await import('../../src/infra/agent/planning-agent.js')
     await runPlanningAgent({} as any, 'world', 'Cyberpunk 2077', undefined, [], 'FICTIONAL_UNIVERSE')
 
     const prompt = capturePrompt()
