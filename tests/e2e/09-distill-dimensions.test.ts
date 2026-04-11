@@ -55,22 +55,16 @@ describe('E2E: Distill with new dimensions', () => {
       { type: 'tool_calls', tool_calls: [tc('d9', 'finalize', { summary: 'Distillation complete with capabilities and milestones.' })] },
     ])
 
-    // Start evolve with markdown fixture
-    const fixturesDir = 'tests/integration/fixtures'
-    term.send('/evolve')
-    await term.waitFor(/◉.*Web Search|◯.*Markdown/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
-    term.sendKey(' ')
-    await term.waitFor(/◯.*Web Search/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    term.sendKey('down')
-    await term.waitFor(/◯.*Markdown|◉.*Markdown/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    term.sendKey(' ')
-    await term.waitFor(/◉.*Markdown/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    term.sendKey('enter')
+    // Start evolve — /evolve renders CreateCommand with supplementSoul
+    // Markdown data source is currently disabled, so uncheck web-search and submit empty
+    // to go through synthetic distill path with mock LLM
+    await term.sendLine('/evolve')
+    await term.waitFor(/data source|Supplement|数据源/i, { since: 'last', timeout: SOUL_LOAD_TIMEOUT })
+    await term.sendKeyAfter(' ') // uncheck web-search
+    await term.waitFor(/◯/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
+    await term.sendKeyAfter('enter') // submit empty selection
 
-    await term.waitFor(/path/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    await term.sendLine(fixturesDir)
-
-    // Wait for distill to complete
+    // Wait for distill to complete (mock LLM handles tool calls)
     await term.waitFor(PROMPT_RE, { since: 'last', timeout: 30000 })
 
     // Verify capabilities.md and milestones.md were created
