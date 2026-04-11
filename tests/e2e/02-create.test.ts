@@ -21,13 +21,8 @@ describe('E2E: /create flow', () => {
 
     // Start /create (use send for slash commands that trigger interactive mode)
     term.send('/create')
-    // Step 1: type selection — wait for full UI to render (Public Soul is last option)
-    await term.waitFor(/Public Soul|公开/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    // Accept default (personal) — sendKeyAfter gives ink a render cycle
-    await term.sendKeyAfter('enter')
-
-    // Step 2: name — enter soul name
-    await term.waitFor(/name|名称/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
+    // Step 1: name — type-select is disabled, starts directly at name step
+    await term.waitFor(/target|目标|name|名称/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     await term.sendLine('test-soul-e2e')
 
     // Step 3: description — enter or skip

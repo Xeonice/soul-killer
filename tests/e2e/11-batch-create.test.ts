@@ -20,13 +20,10 @@ describe('E2E: Batch create', () => {
 
     // Start /create
     term.send('/create')
-    // Step 1: type-select — wait for options, select public
-    await term.waitFor(/Public Soul|公开/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
-    term.sendKey('down')
-    await term.sendKeyAfter('enter')
+    // Step 1: name — type-select is disabled, starts directly at name step
 
     // Soul 1: name
-    await term.waitFor(/name|名称/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
+    await term.waitFor(/target|目标|name|名称/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     await term.sendLine('batch-soul-one')
 
     // Soul 1: description

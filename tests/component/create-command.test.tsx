@@ -108,38 +108,14 @@ describe('CreateCommand', () => {
     mockSoulDirExists = false
   })
 
-  it('renders type selection as first step', () => {
+  it('renders name input as first step (type-select disabled)', () => {
     const { lastFrame } = render(
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
-    const frame = lastFrame()!
-    expect(frame).toContain('SOULKILLER PROTOCOL')
-    expect(frame).toContain('选择灵魂类型')
-    expect(frame).toContain('个人灵魂')
-    expect(frame).toContain('公开灵魂')
-  })
-
-  it('shows personal soul type selected by default', () => {
-    const { lastFrame } = render(
-      <CreateCommand onComplete={onComplete} onCancel={onCancel} />
-    )
-    const frame = lastFrame()!
-    expect(frame).toContain('● ')
-    expect(frame).toContain('○ ')
-  })
-
-  it('navigates to name step after pressing Enter', async () => {
-    const { lastFrame, stdin } = render(
-      <CreateCommand onComplete={onComplete} onCancel={onCancel} />
-    )
-
-    stdin.write('\r')
-    await new Promise((r) => setTimeout(r, DELAY))
-
     const frame = lastFrame()!
     expect(frame).toContain('Q1')
     expect(frame).toContain('灵魂目标')
-    expect(frame).toContain('🔒 个人灵魂')
+    expect(frame).toContain('🌐 公开灵魂')
   })
 
   it('proceeds through name → description', async () => {
@@ -147,11 +123,7 @@ describe('CreateCommand', () => {
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
 
-    // Select type
-    stdin.write('\r')
-    await new Promise((r) => setTimeout(r, DELAY))
-
-    // Type name
+    // Type name (starts directly at name step)
     stdin.write('test')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('\r')
@@ -168,9 +140,7 @@ describe('CreateCommand', () => {
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
 
-    // Select type → name → description
-    stdin.write('\r')
-    await new Promise((r) => setTimeout(r, DELAY))
+    // name → description (starts directly at name step)
     stdin.write('test')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('\r')
@@ -201,9 +171,7 @@ describe('CreateCommand', () => {
       <CreateCommand onComplete={onComplete} onCancel={onCancel} />
     )
 
-    // Select type → name → description → soul-list → continue → skip tags
-    stdin.write('\r')
-    await new Promise((r) => setTimeout(r, DELAY))
+    // name → description → soul-list → continue → skip tags (starts directly at name step)
     stdin.write('test')
     await new Promise((r) => setTimeout(r, DELAY))
     stdin.write('\r')
@@ -223,7 +191,7 @@ describe('CreateCommand', () => {
     const frame = lastFrame()!
     expect(frame).toContain('信息汇总')
     expect(frame).toContain('test')
-    expect(frame).toContain('个人灵魂')
+    expect(frame).toContain('公开灵魂')
     expect(frame).toContain('my friend')
     expect(frame).toContain('确认')
     expect(frame).toContain('修改')
@@ -247,9 +215,7 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Select type → name → description → soul-list → continue → skip tags → confirm
-      stdin.write('\r')
-      await new Promise((r) => setTimeout(r, DELAY))
+      // name → description → soul-list → continue → skip tags → confirm (starts at name step)
       stdin.write('test')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
@@ -280,9 +246,7 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Navigate to conflict step: type → name → desc → soul-list → continue → skip tags → confirm
-      stdin.write('\r')
-      await new Promise((r) => setTimeout(r, DELAY))
+      // Navigate to conflict step: name → desc → soul-list → continue → skip tags → confirm
       stdin.write('test')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
@@ -300,6 +264,7 @@ describe('CreateCommand', () => {
       await new Promise((r) => setTimeout(r, DELAY))
 
       const frame = lastFrame()!
+      // existing manifest has soulType: 'personal', shown as-is from stored data
       expect(frame).toContain('个人灵魂')
       expect(frame).toContain('42')
       expect(frame).toContain('2026-03-15')
@@ -314,9 +279,7 @@ describe('CreateCommand', () => {
         <CreateCommand onComplete={onComplete} onCancel={onCancel} />
       )
 
-      // Navigate: type(personal) → name → skip desc → soul-list → continue → skip tags → confirm
-      stdin.write('\r')
-      await new Promise((r) => setTimeout(r, DELAY))
+      // Navigate: name → skip desc → soul-list → continue → skip tags → confirm (starts at name step)
       stdin.write('newsoul')
       await new Promise((r) => setTimeout(r, DELAY))
       stdin.write('\r')
