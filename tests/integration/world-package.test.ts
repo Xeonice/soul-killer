@@ -60,7 +60,7 @@ describe('copyWorldToPackage', () => {
     const copiedDir = path.join(stagingDir, 'copy-world')
     expect(fs.existsSync(copiedDir)).toBe(true)
     expect(fs.existsSync(path.join(copiedDir, 'world.json'))).toBe(true)
-    expect(fs.existsSync(path.join(copiedDir, 'entries', 'test-entry.md'))).toBe(true)
+    expect(fs.existsSync(path.join(copiedDir, 'factions', 'test-entry.md'))).toBe(true)
   })
 })
 
