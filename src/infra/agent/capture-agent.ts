@@ -20,22 +20,7 @@ import { logger } from '../utils/logger.js'
 import { AgentLogger } from '../utils/agent-logger.js'
 import { ensureSearxng } from '../search/searxng-search.js'
 import type { SearchResult } from '../search/tavily-search.js'
-
-const STREAM_TIMEOUT_MS = 90_000
-
-function extractApiErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object') {
-    const e = err as { statusCode?: number; data?: { error?: { message?: string } }; message?: string }
-    if (e.data?.error?.message) {
-      return e.statusCode ? `API error ${e.statusCode}: ${e.data.error.message}` : e.data.error.message
-    }
-    if (e.message) {
-      const msg = e.message.replace(/^[A-Za-z_]+Error\s*\[.*?\]:\s*/, '')
-      return e.statusCode ? `API error ${e.statusCode}: ${msg}` : msg
-    }
-  }
-  return String(err)
-}
+import { runAgentLoop } from './agent-loop.js'
 
 // ── Search executor: runs all planned queries deterministically ──
 
@@ -577,45 +562,13 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
 
   logger.info(`${tag} Running quality evaluation agent...`)
 
-  const abortController = new AbortController()
-  let watchdog: ReturnType<typeof setTimeout> | undefined
-  function resetWatchdog() {
-    if (watchdog) clearTimeout(watchdog)
-    watchdog = setTimeout(() => {
-      logger.warn(`${tag} Stream timeout — aborting`)
-      abortController.abort()
-    }, STREAM_TIMEOUT_MS)
-  }
-  resetWatchdog()
-
-  let streamResult: Awaited<ReturnType<typeof agent.stream>>
-  try {
-    streamResult = await agent.stream({ prompt: userMessage, abortSignal: abortController.signal })
-  } catch (err) {
-    if (watchdog) clearTimeout(watchdog)
-    if (abortController.signal.aborted) {
-      throw new Error(`Capture timed out: no response from LLM within ${STREAM_TIMEOUT_MS / 1000}s`)
-    }
-    throw new Error(extractApiErrorMessage(err))
-  }
-
-  let streamError: string | undefined
-  try {
-    for await (const event of streamResult.fullStream) {
-      resetWatchdog()
-      if (event.type === 'error') {
-        const errObj = event.error as { message?: string } | string
-        streamError = typeof errObj === 'string' ? errObj : (errObj?.message ?? String(errObj))
-        logger.error(`${tag} Stream error:`, streamError)
-        break
-      }
-      if (event.type === 'start-step') {
-        stepCount++
-        agentLog.startStep(stepCount, 'analyzing')
-      } else if (event.type === 'text-delta') {
-        agentLog.modelOutput(event.text)
-      } else if (event.type === 'tool-call') {
-        agentLog.toolCall(event.toolName, event.input)
+  const loopResult = await runAgentLoop({
+    agent,
+    prompt: userMessage,
+    tag,
+    agentLog,
+    onEvent(event) {
+      if (event.type === 'tool-call') {
         if (event.toolName === 'evaluateDimension') {
           const input = event.input as { dimensionName: string }
           onProgress?.({ type: 'tool_call', tool: 'checkCoverage', query: `evaluating: ${input.dimensionName}` })
@@ -627,7 +580,6 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
           reportFindingsBackup = event.input
         }
       } else if (event.type === 'tool-result') {
-        agentLog.toolResult(event.toolName, event.output, 0)
         if (event.toolName === 'evaluateDimension') {
           onProgress?.({ type: 'tool_result', tool: 'checkCoverage', resultCount: 1 })
         } else if (event.toolName === 'supplementSearch') {
@@ -635,39 +587,36 @@ Review each dimension's scores by calling evaluateDimension. If any dimension is
           onProgress?.({ type: 'tool_result', tool: 'search', resultCount: output.newResults ?? 0 })
         }
       }
-    }
-  } catch (err) {
-    if (watchdog) clearTimeout(watchdog)
-    if (abortController.signal.aborted) {
-      throw new Error(`Capture timed out: no response from LLM within ${STREAM_TIMEOUT_MS / 1000}s`)
-    }
-    throw err
-  }
-  if (watchdog) clearTimeout(watchdog)
+    },
+    async extractResult(streamResult) {
+      const staticCalls = await streamResult.staticToolCalls
+      let call = staticCalls.find((tc) => tc.toolName === 'reportFindings')
 
+      // Fallback: recover from stream event backup if staticToolCalls missed it
+      if (!call && reportFindingsBackup) {
+        logger.warn(`${tag} staticToolCalls missed reportFindings, recovering from backup`)
+        let input = reportFindingsBackup
+        if (typeof input === 'string') {
+          try { input = JSON.parse(input) } catch { /* keep as-is */ }
+        }
+        const parsed = input as Record<string, unknown>
+        if (parsed && typeof parsed === 'object' && 'classification' in parsed && 'dimensionStatus' in parsed) {
+          call = { toolName: 'reportFindings' as const, input } as any
+          logger.info(`${tag} Backup recovery successful`)
+        }
+      }
+      return call
+    },
+  })
+
+  stepCount = loopResult.stepCount
   logger.info(`${tag} Stream finished. Steps:`, stepCount)
 
-  if (streamError) {
-    throw new Error(`Capture agent stream error: ${streamError}`)
+  if (loopResult.aborted) {
+    throw new Error(`Capture agent aborted after ${stepCount} steps`)
   }
 
-  // Extract reportFindings
-  const staticCalls = await streamResult.staticToolCalls
-  let findingsCall = staticCalls.find((tc) => tc.toolName === 'reportFindings')
-
-  // Fallback: recover from stream event backup if staticToolCalls missed it
-  if (!findingsCall && reportFindingsBackup) {
-    logger.warn(`${tag} staticToolCalls missed reportFindings, recovering from backup`)
-    let input = reportFindingsBackup
-    if (typeof input === 'string') {
-      try { input = JSON.parse(input) } catch { /* keep as-is */ }
-    }
-    const parsed = input as Record<string, unknown>
-    if (parsed && typeof parsed === 'object' && 'classification' in parsed && 'dimensionStatus' in parsed) {
-      findingsCall = { toolName: 'reportFindings' as const, input } as any
-      logger.info(`${tag} Backup recovery successful`)
-    }
-  }
+  const findingsCall = loopResult.extracted
 
   if (findingsCall) {
     const args = findingsCall.input as {

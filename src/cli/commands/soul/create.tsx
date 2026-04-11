@@ -88,7 +88,8 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       }
     }
     return {
-      step: 'type-select' as CreateStep,
+      // TODO: re-enable type-select when personal soul is ready
+      step: 'name' as CreateStep,
       soulType: 'public' as SoulType,
       soulName: '',
       description: '',
@@ -1164,8 +1165,9 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
           <CheckboxSelect<DataSourceOption>
             items={[
               ...(soulType === 'public' ? [{ value: 'web-search' as const, label: t('create.source.web_search'), checked: true }] : []),
-              { value: 'markdown' as const, label: t('create.source.markdown') },
-              { value: 'twitter' as const, label: 'Twitter Archive' },
+              // TODO: re-enable when markdown/twitter adapters are ready
+              // { value: 'markdown' as const, label: t('create.source.markdown') },
+              // { value: 'twitter' as const, label: 'Twitter Archive' },
             ]}
             onEscape={onCancel}
             onSubmit={handleSourcesSubmit}

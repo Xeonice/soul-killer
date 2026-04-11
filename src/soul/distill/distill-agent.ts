@@ -6,11 +6,12 @@ import { z } from 'zod'
 import type { SoulkillerConfig } from '../../config/schema.js'
 import type { SoulChunk } from '../../infra/ingest/types.js'
 import type { TagSet } from '../tags/taxonomy.js'
-import type { AgentLogger } from '../../infra/utils/agent-logger.js'
+import { AgentLogger } from '../../infra/utils/agent-logger.js'
 import { withExacto, getProviderOptions } from '../../infra/llm/client.js'
 import { t } from '../../infra/i18n/index.js'
 import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 import { logger } from '../../infra/utils/logger.js'
+import { runAgentLoop } from '../../infra/agent/agent-loop.js'
 
 // ========== Article Index (for sessionDir path) ==========
 
@@ -603,34 +604,39 @@ export async function distillSoul(
     : `Distill the soul of "${name}" from the provided data fragments. Begin by sampling the data.`
 
   logger.info('[distillSoul] Running ToolLoopAgent (streaming)...')
-  const streamResult = await agent.stream({ prompt: userMessage })
 
-  let stepCount = 0
+  // Ensure agentLog exists for runAgentLoop (create a default if caller didn't provide one)
+  const effectiveAgentLog = agentLog ?? new AgentLogger(userMessage, {
+    model: distillModel,
+    provider: 'openrouter',
+    subdir: 'distill',
+  })
+
   const toolCallTimers = new Map<string, number>()
 
-  for await (const event of streamResult.fullStream) {
-    if (event.type === 'start-step') {
-      stepCount++
-      agentLog?.startStep(stepCount, 'distilling')
-    } else if (event.type === 'text-delta') {
-      agentLog?.modelOutput(event.text)
-    } else if (event.type === 'tool-call') {
-      toolCallTimers.set(event.toolName, Date.now())
-      agentLog?.toolCall(event.toolName, event.input)
+  const loopResult = await runAgentLoop({
+    agent,
+    prompt: userMessage,
+    tag: '[distillSoul]',
+    agentLog: effectiveAgentLog,
+    onEvent(event) {
+      if (event.type === 'tool-call') {
+        toolCallTimers.set(event.toolName, Date.now())
+        const detail = summarizeToolCallInput(event.toolName, event.input)
+        onProgress?.({ type: 'tool_call', tool: event.toolName, detail })
+      } else if (event.type === 'tool-result') {
+        const summary = summarizeToolResult(event.toolName, event.output)
+        onProgress?.({ type: 'tool_result', tool: event.toolName, resultSummary: summary })
+      }
+    },
+  })
 
-      const detail = summarizeToolCallInput(event.toolName, event.input)
-      onProgress?.({ type: 'tool_call', tool: event.toolName, detail })
-    } else if (event.type === 'tool-result') {
-      const start = toolCallTimers.get(event.toolName) ?? Date.now()
-      const durationMs = Date.now() - start
-      agentLog?.toolResult(event.toolName, event.output, durationMs)
-
-      const summary = summarizeToolResult(event.toolName, event.output)
-      onProgress?.({ type: 'tool_result', tool: event.toolName, resultSummary: summary })
-    }
-  }
-
+  const stepCount = loopResult.stepCount
   logger.info('[distillSoul] Stream finished. Steps:', stepCount)
+
+  if (loopResult.aborted) {
+    throw new Error(`Distill agent aborted after ${stepCount} steps`)
+  }
 
   // ========== Read Final State ==========
 

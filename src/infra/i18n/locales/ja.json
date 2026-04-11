@@ -673,5 +673,12 @@
 
   "capture.score_example_reason": "詳細に記述された...",
 
-  "export.step.select_language": "エクスポート言語を選択"
+  "export.step.select_language": "エクスポート言語を選択",
+
+  "agent.error.payment": "API残高不足です。OpenRouterにチャージしてから再試行してください。",
+  "agent.error.auth": "APIキーが無効または期限切れです。設定を確認してください。",
+  "agent.error.rate_limit": "APIレート制限を超過しました。しばらくしてから再試行してください。",
+  "agent.error.timeout": "エージェントタイムアウト：{seconds}秒以内に応答がありません。",
+  "agent.error.connect_timeout": "APIサービスに接続できません。ネットワークを確認してください。",
+  "agent.error.circuit_breaker": "ツール呼び出しが{count}回連続で失敗しました。中止しました。"
 }

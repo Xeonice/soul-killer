@@ -673,5 +673,12 @@
 
   "capture.score_example_reason": "Detailed description of...",
 
-  "export.step.select_language": "Select export language"
+  "export.step.select_language": "Select export language",
+
+  "agent.error.payment": "Insufficient API balance. Please top up your OpenRouter account and try again.",
+  "agent.error.auth": "Invalid or expired API key. Please check your configuration.",
+  "agent.error.rate_limit": "API rate limit exceeded. Please try again later.",
+  "agent.error.timeout": "Agent timed out: no response within {seconds}s.",
+  "agent.error.connect_timeout": "Unable to connect to API service. Please check your network.",
+  "agent.error.circuit_breaker": "{count} consecutive tool call failures. Aborted."
 }

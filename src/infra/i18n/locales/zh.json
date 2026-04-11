@@ -673,5 +673,12 @@
 
   "capture.score_example_reason": "详细描述了...",
 
-  "export.step.select_language": "选择导出语言"
+  "export.step.select_language": "选择导出语言",
+
+  "agent.error.payment": "API 余额不足，请前往 OpenRouter 充值后重试。",
+  "agent.error.auth": "API 密钥无效或已过期，请检查配置。",
+  "agent.error.rate_limit": "API 请求频率超限，请稍后重试。",
+  "agent.error.timeout": "Agent 超时：{seconds}秒内无响应。",
+  "agent.error.connect_timeout": "无法连接到 API 服务，请检查网络。",
+  "agent.error.circuit_breaker": "连续 {count} 次工具调用失败，已中止。"
 }
