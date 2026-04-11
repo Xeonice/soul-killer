@@ -1,11 +1,17 @@
 import React from 'react'
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { MalfunctionError } from '../../src/cli/animation/malfunction-error.js'
 import { resetGlitchEngine } from '../../src/cli/animation/glitch-engine.js'
 
-// Set deterministic seed and reset the singleton so it picks up our seed,
-// even if another test file already initialized the glitch engine.
+// Disable animation so glitch effects are never applied — ensures snapshot
+// stability across environments (local config may differ from CI).
+vi.mock('../../src/cli/animation/use-animation.js', () => ({
+  isAnimationEnabled: () => false,
+}))
+
+// Set deterministic seed as a safety net (glitch won't fire with animation
+// disabled, but keeps the engine predictable if any path does use it).
 const ORIGINAL_SEED = process.env.SOULKILLER_SEED
 beforeAll(() => {
   process.env.SOULKILLER_SEED = '42'
