@@ -43,8 +43,10 @@ describe('E2E: /create flow', () => {
     await term.waitFor(/Confirm|确认/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
     await term.sendKeyAfter('enter')
 
-    // Step 6: data sources — skip (Enter)
+    // Step 6: data sources — uncheck web-search (space key), wait for visual change, then submit
     await term.waitFor(/data source|Supplement|数据源/i, { since: 'last', timeout: WIZARD_STEP_TIMEOUT })
+    await term.sendKeyAfter(' ') // uncheck web-search (space toggles checkbox)
+    await term.waitFor(/◯/, { since: 'last', timeout: WIZARD_STEP_TIMEOUT }) // wait for unchecked indicator
     await term.sendKeyAfter('enter')
 
     // Wait for completion — either prompt returns or error
