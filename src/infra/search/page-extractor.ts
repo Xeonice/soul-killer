@@ -1,5 +1,5 @@
 import { Readability } from '@mozilla/readability'
-import { JSDOM } from 'jsdom'
+import { parseHTML } from 'linkedom'
 import TurndownService from 'turndown'
 import { t } from '../i18n/index.js'
 
@@ -42,11 +42,11 @@ export async function extractPageContent(url: string): Promise<string | null> {
 
     const html = await response.text()
 
-    // Parse with jsdom
-    const dom = new JSDOM(html, { url })
+    // Parse with linkedom (lightweight DOM for Readability)
+    const { document } = parseHTML(html)
 
     // Extract main content with readability
-    const reader = new Readability(dom.window.document)
+    const reader = new Readability(document)
     const article = reader.parse()
 
     if (!article || !article.content) {

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Readability } from '@mozilla/readability'
-import { JSDOM } from 'jsdom'
+import { parseHTML } from 'linkedom'
 import TurndownService from 'turndown'
 import type { SoulChunk, ChunkTemporal } from './types.js'
 import { t } from '../i18n/index.js'
@@ -49,8 +49,7 @@ export async function extractUrl(url: string): Promise<UrlExtractionResult> {
     }
 
     const html = await response.text()
-    const dom = new JSDOM(html, { url })
-    const doc = dom.window.document
+    const { document: doc } = parseHTML(html)
 
     // Extract published date from meta tags
     const publishedDate = extractPublishedDate(doc)
