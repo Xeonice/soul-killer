@@ -12,6 +12,9 @@ Soulkiller is a Cyberpunk 2077-themed CLI REPL that extracts "souls" from digita
 # Run the REPL
 bun run dev                    # or: bun src/index.tsx
 
+# Build release binaries (5 platforms)
+bun run build:release          # outputs to dist/
+
 # Type checking (no JS output)
 bun run build                  # tsc --noEmit
 
@@ -137,6 +140,14 @@ src/cli/app.tsx        → Main state machine (boot → setup → idle → comma
 **Docker Engine** — `engine/` (Python)
 - `main.py` — FastAPI with /ingest, /recall, /status endpoints
 - Not required — LocalEngine is the zero-dependency fallback
+
+## Release & Distribution
+
+- **Build**: `bun scripts/build.ts` — two-phase build: bundle (stub `react-devtools-core` via plugin, inject version) → cross-compile 5 platforms via `bun build --compile --target`. Outputs `.tar.gz` (Unix) and `.zip` (Windows) to `dist/`.
+- **CI**: `.github/workflows/release.yml` — triggered by `v*` tag push. Single ubuntu runner cross-compiles all targets, runs tests first, then creates GitHub Release with all archives + install scripts.
+- **Install**: `scripts/install.sh` (macOS/Linux) and `scripts/install.ps1` (Windows). Detect platform, download binary from GitHub Release, install to `~/.soulkiller/bin/`, configure PATH.
+- **Self-update**: `soulkiller --update` queries GitHub API for latest release, downloads and atomically replaces the current binary.
+- **Version**: Injected at build time via `process.env.SOULKILLER_VERSION`. `soulkiller --version` prints it. Dev mode falls back to `dev`.
 
 ## Testing
 
