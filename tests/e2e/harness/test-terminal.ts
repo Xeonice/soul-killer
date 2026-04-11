@@ -4,6 +4,10 @@ import { EventEmitter } from 'node:events'
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..', '..')
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export class WaitForTimeout extends Error {
   constructor(pattern: RegExp | string, elapsed: number, buffer: string) {
     const preview = buffer.slice(-500)
@@ -289,6 +293,25 @@ export class TestTerminal {
     next()
   }
 
+  async sendLine(input: string): Promise<void> {
+    this.log('send', `sendLine: "${input}"`)
+    // Write characters one by one with delays for ink compatibility
+    const chars = input.split('')
+    for (const char of chars) {
+      if (this._killed) return
+      this.proc.terminal!.write(char)
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    // Wait for the full input followed by cursor block █ on the prompt line.
+    // This distinguishes from palette menu text (which won't end with █).
+    const escaped = escapeRegex(input)
+    await this.waitFor(new RegExp(escaped + '█'), { since: 'last', timeout: 2000 })
+    // Now safe to send Enter — palette state is consistent with value
+    if (!this._killed) {
+      this.proc.terminal!.write('\r')
+    }
+  }
+
   sendKey(key: string): void {
     if (this._killed) return
     const raw = KEY_MAP[key] ?? key
@@ -297,17 +320,22 @@ export class TestTerminal {
     this.proc.terminal!.write(raw)
   }
 
+  async sendKeyAfter(key: string, delayMs = 50): Promise<void> {
+    await new Promise((r) => setTimeout(r, delayMs))
+    this.sendKey(key)
+  }
+
   async sendAndWait(
     input: string,
     pattern: RegExp | string,
     opts?: WaitForOptions,
   ): Promise<WaitForResult> {
-    this.send(input)
+    await this.sendLine(input)
     return this.waitFor(pattern, { since: 'last', ...opts })
   }
 
   async sendCommand(cmd: string, opts?: WaitForOptions): Promise<WaitForResult> {
-    this.send(cmd)
+    await this.sendLine(cmd)
     return this.waitForPrompt(opts)
   }
 

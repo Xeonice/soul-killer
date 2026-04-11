@@ -19,12 +19,15 @@ export type MockResponse =
   | { type: 'text'; content: string }
   | { type: 'tool_calls'; tool_calls: ToolCallResponse['tool_calls'] }
 
+export type ToolHandler = (args: Record<string, unknown>) => MockResponse
+
 export class MockLLMServer {
   private server: http.Server | null = null
   private _port: number
   private _requests: RecordedRequest[] = []
   private responseText: string
   private _responseQueue: MockResponse[] = []
+  private _toolHandlers = new Map<string, ToolHandler>()
 
   constructor(opts?: { port?: number; responseText?: string }) {
     this._port = opts?.port ?? 0
@@ -37,6 +40,19 @@ export class MockLLMServer {
    */
   setResponseQueue(responses: MockResponse[]): void {
     this._responseQueue = [...responses]
+  }
+
+  /**
+   * Register a handler that responds dynamically by tool name.
+   * When a request contains tool call results, the handler for the
+   * matching tool name is invoked to generate the next response.
+   */
+  setToolHandler(toolName: string, handler: ToolHandler): void {
+    this._toolHandlers.set(toolName, handler)
+  }
+
+  clearToolHandlers(): void {
+    this._toolHandlers.clear()
   }
 
   get port(): number {
@@ -96,7 +112,20 @@ export class MockLLMServer {
         timestamp: Date.now(),
       })
 
-      // Check response queue first
+      // Check tool handlers first (match by tool name in tool_call results)
+      const handlerResponse = this.matchToolHandler(parsed)
+      if (handlerResponse) {
+        if (handlerResponse.type === 'tool_calls') {
+          this.toolCallResponse(res, handlerResponse.tool_calls, parsed.stream ?? false)
+        } else if (parsed.stream) {
+          this.streamResponseText(res, handlerResponse.content)
+        } else {
+          this.jsonResponseText(res, handlerResponse.content)
+        }
+        return
+      }
+
+      // Check response queue
       const queued = this._responseQueue.shift()
 
       if (queued) {
@@ -113,6 +142,23 @@ export class MockLLMServer {
         this.jsonResponse(res)
       }
     })
+  }
+
+  private matchToolHandler(parsed: { messages: Array<{ role: string; tool_call_id?: string; name?: string; content?: string }> }): MockResponse | null {
+    if (this._toolHandlers.size === 0) return null
+    // Look for tool result messages (role: 'tool') and match by name
+    const toolResults = parsed.messages.filter((m) => m.role === 'tool' && m.name)
+    if (toolResults.length === 0) return null
+    // Use the last tool result's name to find the handler
+    const lastTool = toolResults[toolResults.length - 1]!
+    const handler = this._toolHandlers.get(lastTool.name!)
+    if (!handler) return null
+    try {
+      const args = lastTool.content ? JSON.parse(lastTool.content) : {}
+      return handler(args)
+    } catch {
+      return handler({})
+    }
   }
 
   private toolCallResponse(

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { Text, Box, useInput } from 'ink'
 import { CommandPalette } from './command-palette.js'
 import { PathPalette } from './path-palette.js'
@@ -60,10 +60,18 @@ export function TextInput({
   const [pathPaletteOpen, setPathPaletteOpen] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
 
-  // Helper: update value + cursor together
+  // Refs for immediate read in useInput — prevents closure staleness
+  // when multiple keystrokes arrive in the same React render frame
+  const valueRef = useRef('')
+  const cursorRef = useRef(0)
+
+  // Helper: update value + cursor together (both state and ref)
   function updateValue(next: string, nextCursor?: number) {
+    const nc = nextCursor ?? next.length
+    valueRef.current = next
+    cursorRef.current = nc
     setValue(next)
-    setCursor(nextCursor ?? next.length)
+    setCursor(nc)
 
     // Palette open/close logic
     if (next.startsWith('/') && completionItems) {
@@ -131,6 +139,19 @@ export function TextInput({
       : pathItems.length
 
   useInput((input, key) => {
+    // Read value/cursor from refs to avoid stale closures when
+    // multiple keystrokes arrive in the same React render frame
+    const val = valueRef.current
+    const cur = cursorRef.current
+
+    // Helper: reset value/cursor (for submit paths)
+    const resetInput = () => {
+      valueRef.current = ''
+      cursorRef.current = 0
+      setValue('')
+      setCursor(0)
+    }
+
     // Esc: close palette first, then call onEscape
     if (key.escape) {
       if (anyPaletteOpen) {
@@ -173,8 +194,8 @@ export function TextInput({
       if (showArgPalette) {
         const selected = argCompletion!.items[selectedIndex]
         if (selected) {
-          const spaceIdx = value.indexOf(' ')
-          const cmdPart = value.slice(0, spaceIdx + 1)
+          const spaceIdx = val.indexOf(' ')
+          const cmdPart = val.slice(0, spaceIdx + 1)
           updateValue(`${cmdPart}${selected.name}`)
           setArgPaletteOpen(false)
         }
@@ -183,7 +204,7 @@ export function TextInput({
       if (showPathPalette) {
         const selected = pathItems[selectedIndex] as PathItem | undefined
         if (selected) {
-          const displayPath = buildDisplayPath(selected, value)
+          const displayPath = buildDisplayPath(selected, val)
           updateValue(displayPath)
           setSelectedIndex(0)
           if (!selected.isDirectory) {
@@ -201,43 +222,39 @@ export function TextInput({
         const selected = filteredCommands[selectedIndex]
         if (selected) {
           const cmd = `/${selected.name}`
-          setValue('')
-          setCursor(0)
+          resetInput()
           setCmdPaletteOpen(false)
           setSelectedIndex(0)
           onSubmit(cmd)
+          return
         }
-        return
       }
       if (showArgPalette) {
         const selected = argCompletion!.items[selectedIndex]
         if (selected) {
-          const spaceIdx = value.indexOf(' ')
-          const cmdPart = value.slice(0, spaceIdx + 1)
+          const spaceIdx = val.indexOf(' ')
+          const cmdPart = val.slice(0, spaceIdx + 1)
           const fullCmd = `${cmdPart}${selected.name}`
-          setValue('')
-          setCursor(0)
+          resetInput()
           setArgPaletteOpen(false)
           setSelectedIndex(0)
           onSubmit(fullCmd)
+          return
         }
-        return
       }
       if (showPathPalette) {
         const selected = pathItems[selectedIndex] as PathItem | undefined
         if (selected) {
-          const displayPath = buildDisplayPath(selected, value)
-          setValue('')
-          setCursor(0)
+          const displayPath = buildDisplayPath(selected, val)
+          resetInput()
           setPathPaletteOpen(false)
           setSelectedIndex(0)
           onSubmit(displayPath)
           return
         }
       }
-      const submitted = value
-      setValue('')
-      setCursor(0)
+      const submitted = val
+      resetInput()
       setCmdPaletteOpen(false)
       setArgPaletteOpen(false)
       setPathPaletteOpen(false)
@@ -250,35 +267,37 @@ export function TextInput({
 
     // Home / Ctrl+A — jump to start
     if (key.ctrl && input === 'a') {
+      cursorRef.current = 0
       setCursor(0)
       return
     }
 
     // End / Ctrl+E — jump to end
     if (key.ctrl && input === 'e') {
-      setCursor(value.length)
+      cursorRef.current = val.length
+      setCursor(val.length)
       return
     }
 
     // Ctrl+W — delete previous word
     if (key.ctrl && input === 'w') {
-      const boundary = prevWordBoundary(value, cursor)
-      const next = value.slice(0, boundary) + value.slice(cursor)
+      const boundary = prevWordBoundary(val, cur)
+      const next = val.slice(0, boundary) + val.slice(cur)
       updateValue(next, boundary)
       return
     }
 
     // Ctrl+U — delete to start of line
     if (key.ctrl && input === 'u') {
-      const next = value.slice(cursor)
+      const next = val.slice(cur)
       updateValue(next, 0)
       return
     }
 
     // Ctrl+K — delete to end of line
     if (key.ctrl && input === 'k') {
-      const next = value.slice(0, cursor)
-      updateValue(next, cursor)
+      const next = val.slice(0, cur)
+      updateValue(next, cur)
       return
     }
 
@@ -286,9 +305,13 @@ export function TextInput({
     if (key.leftArrow) {
       if (key.meta) {
         // Option+Left — jump to previous word boundary
-        setCursor(prevWordBoundary(value, cursor))
+        const nc = prevWordBoundary(val, cur)
+        cursorRef.current = nc
+        setCursor(nc)
       } else {
-        setCursor((c) => Math.max(0, c - 1))
+        const nc = Math.max(0, cur - 1)
+        cursorRef.current = nc
+        setCursor(nc)
       }
       return
     }
@@ -297,18 +320,22 @@ export function TextInput({
     if (key.rightArrow) {
       if (key.meta) {
         // Option+Right — jump to next word boundary
-        setCursor(nextWordBoundary(value, cursor))
+        const nc = nextWordBoundary(val, cur)
+        cursorRef.current = nc
+        setCursor(nc)
       } else {
-        setCursor((c) => Math.min(value.length, c + 1))
+        const nc = Math.min(val.length, cur + 1)
+        cursorRef.current = nc
+        setCursor(nc)
       }
       return
     }
 
     // Option+Backspace — delete previous word
     if ((key.backspace || key.delete) && key.meta) {
-      if (cursor > 0) {
-        const boundary = prevWordBoundary(value, cursor)
-        const next = value.slice(0, boundary) + value.slice(cursor)
+      if (cur > 0) {
+        const boundary = prevWordBoundary(val, cur)
+        const next = val.slice(0, boundary) + val.slice(cur)
         updateValue(next, boundary)
       }
       return
@@ -316,17 +343,17 @@ export function TextInput({
 
     // Backspace — delete char before cursor
     if (key.backspace || key.delete) {
-      if (cursor > 0) {
-        const next = value.slice(0, cursor - 1) + value.slice(cursor)
-        updateValue(next, cursor - 1)
+      if (cur > 0) {
+        const next = val.slice(0, cur - 1) + val.slice(cur)
+        updateValue(next, cur - 1)
       }
       return
     }
 
     // Character input — insert at cursor position
     if (input && !key.ctrl && !key.meta) {
-      const next = value.slice(0, cursor) + input + value.slice(cursor)
-      updateValue(next, cursor + input.length)
+      const next = val.slice(0, cur) + input + val.slice(cur)
+      updateValue(next, cur + input.length)
     }
   })
 
