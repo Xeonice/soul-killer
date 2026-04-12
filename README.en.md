@@ -1,0 +1,149 @@
+<h1 align="center">SOULKILLER</h1>
+
+<p align="center">
+  One command. Extract any person's digital footprint into a playable text adventure game.
+</p>
+
+<p align="center">
+  <a href="./README.md">中文</a> · <strong>English</strong> · <a href="./README.ja.md">日本語</a>
+</p>
+
+---
+
+> **To all division technical staff:**
+>
+> The SOULKILLER protocol's core mission: extract a target's "soul" from public data — identity, linguistic style, behavioral patterns — distill it into an AI character, and automatically generate a distributable interactive text adventure (visual novel). No code required from the operator.
+>
+> Enter a name to create a character, enter a world setting to build a world, then combine the two — and out comes a complete Galgame script.
+>
+> **Those classic regrets — now you can rewrite them yourself:**
+>
+> - **Fate/stay night — The Illya Route** — A dedicated Illyasviel route was planned during development but cut due to scheduling. She remains the only core heroine without her own route. For over a decade, fans have scrounged for fragments in FHA and Prisma Illya. Input "Illyasviel" + "Fate/Stay Night" → generate the route that never existed.
+> - **White Album 2** — Touma Kazusa leaves for Vienna. The farewell in the airport snow is where all heartache-genre Galgames begin — even Kazusa's True End in coda carries irredeemable regret. Input "Touma Kazusa" + "White Album 2" → write an IF route where all three find redemption.
+>
+> Every exported `.skill` archive is a standalone visual novel — with state management, save/load, multiple scripts per story, affinity tracking, and branching endings. You don't need to write a single line of code.
+>
+> **How to play?** Exported `.skill` files run in any application that supports the Skill protocol — such as [Claude](https://claude.ai) or [OpenClaw](https://github.com/nicepkg/openclaw). Import it as a Skill, and start playing. Each script supports saving, a single story can have multiple generated scripts, and you can view the current script's choice branch tree at any time. Also perfect for developers loading it in Claude Code's terminal — as far as your boss can tell, you're just "debugging an AI Skill."
+
+## Prerequisites
+
+SOULKILLER requires the following API keys to operate. Complete registration before installation:
+
+| Service | Purpose | Required | Get Key |
+|---------|---------|:--------:|---------|
+| [OpenRouter](https://openrouter.ai/keys) | LLM inference (soul distillation, world building, script generation) | **Yes** | https://openrouter.ai/keys |
+| [Tavily](https://app.tavily.com/home) | Web search (collecting digital footprints) | Either one | https://app.tavily.com/home |
+| [Exa](https://dashboard.exa.ai/api-keys) | Web search (alternative to Tavily) | Either one | https://dashboard.exa.ai/api-keys |
+
+> **Note:** Pick either Tavily or Exa for search — one is enough. The first-launch wizard will guide you through entering these keys step by step.
+
+## Installation
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh
+```
+
+For Windows environments, use PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.ps1 | iex
+```
+
+Open a new terminal window after installation completes, then run `soulkiller` to launch.
+
+## 30-Second Overview
+
+```bash
+# Step 1: Create a character soul
+/create johnny           # AI agent auto-searches, collects, distills target
+
+# Step 2: Build a world
+/world create cyberpunk  # Create world — define rules, lore, chronicles
+
+# Step 3: Export as a playable text adventure
+/export johnny           # Package soul × world into a visual novel Skill archive
+```
+
+Character → World → Export. Three steps to a distributable text adventure game, executed autonomously by the AI agent.
+
+## Core Operation Commands
+
+**Phase 1: Character**
+
+| Command | Function |
+|---------|----------|
+| `/create <name>` | Create a soul construct — AI agent autonomously searches and distills target data |
+| `/use <name>` | Load an existing soul and enter conversation mode |
+| `/distill <name>` | Execute distillation on an existing soul, generating identity/style/behavior files |
+| `/evolve <name>` | Inject new data sources into a soul for incremental evolution |
+
+**Phase 2: World**
+
+| Command | Function |
+|---------|----------|
+| `/world create <name>` | Create a world — AI agent auto-searches and distills world settings |
+| `/world bind <name>` | Bind souls to a world |
+| `/world list` | List all created worlds |
+
+**Phase 3: Export**
+
+| Command | Function |
+|---------|----------|
+| `/export <name>` | Export soul × world as a playable text adventure visual novel Skill archive |
+| `/pack <name>` | Package a soul into a portable `.soul.pack` archive |
+| `/help` | Display the complete command reference |
+
+## Full Procedure
+
+```
+Step 1: Create a Character
+/create johnny
+┌─────────────────────────────────────┐
+│  1. Enter target name & description  │
+│  2. Select data sources (Web search) │
+│  3. AI agent collects digital traces │
+│  4. Distill identity/style/behavior  │
+│  5. Soul construct ready             │
+└─────────────────────────────────────┘
+
+Step 2: Build a World
+/world create nightcity
+┌─────────────────────────────────────┐
+│  1. Enter world name & description   │
+│  2. AI agent searches world lore     │
+│  3. Distill rules/lore/chronicles    │
+│  4. Bind characters to the world     │
+└─────────────────────────────────────┘
+
+Step 3: Export the Game
+/export johnny
+┌─────────────────────────────────────┐
+│  → Generate adventure script from    │
+│    character × world                 │
+│  → Package as .skill archive         │
+│  → Others load it and play           │
+└─────────────────────────────────────┘
+```
+
+## System Maintenance
+
+```bash
+soulkiller --version    # Confirm current protocol version
+soulkiller --update     # Execute self-update to latest version
+```
+
+## Data Storage
+
+All soul data and configuration reside at `~/.soulkiller/`:
+
+```
+~/.soulkiller/
+├── config.yaml          # System config (API keys, language, etc.)
+├── souls/<name>/        # Individual soul construct data
+├── worlds/<name>/       # World-building data
+└── exports/             # Exported Skill archives
+```
+
+## License
+
+This project is licensed under [GPL-3.0](./LICENSE).
