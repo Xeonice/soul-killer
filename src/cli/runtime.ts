@@ -1,17 +1,16 @@
 /**
  * `soulkiller runtime <subcommand> [args...]`
  *
- * Cross-platform entry point for the skill state CLI. Spawns the compiled
- * binary itself (via process.execPath + BUN_BE_BUN=1) to execute the
- * external runtime/lib/main.ts shipped inside the skill archive.
+ * Entry point for the skill state CLI. Directly invokes the built-in
+ * runCli() with SKILL_ROOT set to the skill directory.
  *
- * This avoids any shell wrapper dependency (bash/powershell) and works
- * identically on macOS, Linux, and Windows.
+ * Previously this spawned an external runtime/lib/main.ts from the skill
+ * archive — but that meant the skill's bundled code could be out of date
+ * relative to the binary. Since SKILL.md always calls `soulkiller runtime`,
+ * the binary's own code should be authoritative.
  */
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { spawn } from 'node:child_process'
+import { runCli } from '../export/state/main.js'
 
 export async function runRuntime(args: string[]): Promise<number> {
   // Support --root <path> for manual / dev usage outside a skill context.
@@ -31,22 +30,8 @@ export async function runRuntime(args: string[]): Promise<number> {
     return 1
   }
 
-  const mainTs = join(skillRoot, 'runtime', 'lib', 'main.ts')
-  if (!existsSync(mainTs)) {
-    process.stderr.write(`error: ${mainTs} not found\n`)
-    return 1
-  }
+  // Set SKILL_ROOT so runCli's resolveSkillRoot() picks it up
+  process.env.SKILL_ROOT = skillRoot
 
-  // Spawn self to execute the external .ts file.
-  // MUST use process.execPath (the absolute path to this binary), NOT
-  // process.argv[0] which resolves to "bun" in compiled binaries and
-  // would fail on Windows where system bun is not installed.
-  const child = spawn(process.execPath, [mainTs, ...filteredArgs], {
-    env: { ...process.env, BUN_BE_BUN: '1', SKILL_ROOT: skillRoot },
-    stdio: 'inherit',
-  })
-
-  return new Promise((resolve) => {
-    child.on('exit', (code) => resolve(code ?? 1))
-  })
+  return runCli(filteredArgs)
 }
