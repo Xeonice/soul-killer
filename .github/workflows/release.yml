@@ -40,3 +40,16 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes \
             dist/*
+
+      - name: Upload to Cloudflare R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-darwin-arm64.tar.gz" --file dist/soulkiller-darwin-arm64.tar.gz
+          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-darwin-x64.tar.gz" --file dist/soulkiller-darwin-x64.tar.gz
+          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-linux-x64.tar.gz" --file dist/soulkiller-linux-x64.tar.gz
+          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-linux-arm64.tar.gz" --file dist/soulkiller-linux-arm64.tar.gz
+          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-windows-x64.zip" --file dist/soulkiller-windows-x64.zip
+          npx wrangler r2 object put "soulkiller-releases/scripts/install.sh" --file dist/install.sh
+          npx wrangler r2 object put "soulkiller-releases/scripts/install.ps1" --file dist/install.ps1

@@ -37,20 +37,36 @@ detect_platform() {
 install_binary() {
   ASSET="soulkiller-${PLATFORM}.tar.gz"
 
-  # Get latest release download URL
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+  # Primary: Cloudflare CDN (global edge, reliable in all regions)
+  # Fallback: GitHub Releases (may be slow in some regions)
+  DOWNLOAD_URL="https://soulkiller-download.ad546971975.workers.dev/download/${PLATFORM}"
+  FALLBACK_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
   echo "  Downloading soulkiller for ${PLATFORM}..."
 
   mkdir -p "$INSTALL_DIR"
 
-  # Download and extract
+  # Download and extract (try CDN first, fall back to GitHub)
+  download_ok=0
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+    if curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR" 2>/dev/null; then
+      download_ok=1
+    elif curl -fsSL "$FALLBACK_URL" | tar -xz -C "$INSTALL_DIR"; then
+      download_ok=1
+    fi
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO- "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
+    if wget -qO- "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR" 2>/dev/null; then
+      download_ok=1
+    elif wget -qO- "$FALLBACK_URL" | tar -xz -C "$INSTALL_DIR"; then
+      download_ok=1
+    fi
   else
     echo "Error: Neither curl nor wget found. Please install one and retry."
+    exit 1
+  fi
+
+  if [ "$download_ok" = "0" ]; then
+    echo "Error: Download failed from both CDN and GitHub."
     exit 1
   fi
 

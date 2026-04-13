@@ -15,7 +15,10 @@ Write-Host ""
 
 # Download
 $Asset = "soulkiller-windows-x64.zip"
-$DownloadUrl = "https://github.com/$Repo/releases/latest/download/$Asset"
+# Primary: Cloudflare CDN (global edge, reliable in all regions)
+$DownloadUrl = "https://soulkiller-download.ad546971975.workers.dev/download/windows-x64"
+# Fallback: GitHub Releases
+$FallbackUrl = "https://github.com/$Repo/releases/latest/download/$Asset"
 $TmpZip = "$env:TEMP\soulkiller-install.zip"
 
 Write-Host "  Downloading soulkiller for windows-x64..."
@@ -24,7 +27,12 @@ if (!(Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $TmpZip -UseBasicParsing
+try {
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $TmpZip -UseBasicParsing
+} catch {
+    Write-Host "  CDN unavailable, falling back to GitHub..."
+    Invoke-WebRequest -Uri $FallbackUrl -OutFile $TmpZip -UseBasicParsing
+}
 
 # Extract
 Expand-Archive -Path $TmpZip -DestinationPath $InstallDir -Force

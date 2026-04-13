@@ -1,0 +1,12 @@
+{
+  "name": "soulkiller-download",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-13",
+  "account_id": "969e3fe43b3e8d70841923c39fee92e0",
+  "r2_buckets": [
+    {
+      "binding": "RELEASES",
+      "bucket_name": "soulkiller-releases"
+    }
+  ]
+}
