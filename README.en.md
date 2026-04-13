@@ -39,19 +39,19 @@ SOULKILLER requires the following API keys to operate. Complete registration bef
 
 ## Installation
 
-Supports macOS, Linux, and Windows.
+Supports macOS, Linux, and Windows. Binaries are distributed globally via Cloudflare CDN.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh
+curl -fsSL https://soulkiller-download.ad546971975.workers.dev/scripts/install.sh | sh
 ```
 
 For Windows environments, use PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.ps1 | iex
+irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | iex
 ```
 
-Open a new terminal window after installation completes, then run `soulkiller` to launch.
+After installation, copy and run the PATH command shown in the terminal to use immediately, or open a new terminal window and run `soulkiller` to launch.
 
 ## 30-Second Overview
 

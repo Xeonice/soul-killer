@@ -39,19 +39,19 @@ SOULKILLER 需要以下 API 密钥才能运行。请在安装前完成注册：
 
 ## 安装
 
-支持 macOS、Linux 和 Windows。
+支持 macOS、Linux 和 Windows。二进制通过 Cloudflare CDN 全球加速分发。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh
+curl -fsSL https://soulkiller-download.ad546971975.workers.dev/scripts/install.sh | sh
 ```
 
 Windows 环境使用 PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.ps1 | iex
+irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | iex
 ```
 
-安装完成后，打开新的终端窗口，执行 `soulkiller` 启动。
+安装完成后，按终端提示复制执行 PATH 命令即可立即使用，或打开新的终端窗口，执行 `soulkiller` 启动。
 
 ## 30 秒速览
 
