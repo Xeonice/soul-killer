@@ -9,8 +9,15 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            targets: darwin-arm64,darwin-x64
+          - os: ubuntu-latest
+            targets: linux-x64,linux-arm64,windows-x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,10 +32,36 @@ jobs:
         run: bun run test
 
       - name: Build release binaries
+        env:
+          SOULKILLER_TARGETS: ${{ matrix.targets }}
         run: bun scripts/build.ts
 
-      - name: Copy install scripts to dist
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-all/
+
+      - name: Merge artifacts into dist/
         run: |
+          mkdir -p dist
+          cp dist-all/dist-macos-latest/* dist/
+          cp dist-all/dist-ubuntu-latest/* dist/
           cp scripts/install.sh dist/install.sh
           cp scripts/install.ps1 dist/install.ps1
 

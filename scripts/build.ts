@@ -14,13 +14,20 @@ import { execSync } from 'node:child_process'
 const DIST = join(import.meta.dir, '..', 'dist')
 const ROOT = join(import.meta.dir, '..')
 
-const TARGETS = [
+const ALL_TARGETS = [
   { platform: 'darwin-arm64', bunTarget: 'bun-darwin-arm64' },
   { platform: 'darwin-x64', bunTarget: 'bun-darwin-x64' },
   { platform: 'linux-x64', bunTarget: 'bun-linux-x64' },
   { platform: 'linux-arm64', bunTarget: 'bun-linux-arm64' },
   { platform: 'windows-x64', bunTarget: 'bun-windows-x64' },
 ] as const
+
+// SOULKILLER_TARGETS=darwin-arm64,darwin-x64 → only build those platforms.
+// Empty or unset → build all (default, for local dev).
+const targetFilter = process.env.SOULKILLER_TARGETS?.split(',').map(s => s.trim()).filter(Boolean)
+const TARGETS = targetFilter?.length
+  ? ALL_TARGETS.filter(t => targetFilter.includes(t.platform))
+  : ALL_TARGETS
 
 // Read version from package.json
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'))
