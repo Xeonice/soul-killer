@@ -60,8 +60,16 @@ jobs:
       - name: Merge artifacts into dist/
         run: |
           mkdir -p dist
-          cp dist-all/dist-macos-26/* dist/
-          cp dist-all/dist-ubuntu-latest/* dist/
+          # Copy binaries and archives (non-checksums)
+          for f in dist-all/dist-macos-26/*; do
+            [ "$(basename "$f")" != "checksums.txt" ] && cp "$f" dist/
+          done
+          for f in dist-all/dist-ubuntu-latest/*; do
+            [ "$(basename "$f")" != "checksums.txt" ] && cp "$f" dist/
+          done
+          # Merge checksums.txt from all runners (skip comment headers from subsequent files)
+          cat dist-all/dist-macos-26/checksums.txt > dist/checksums.txt
+          tail -n +2 dist-all/dist-ubuntu-latest/checksums.txt >> dist/checksums.txt
           cp scripts/install.sh dist/install.sh
           cp scripts/install.ps1 dist/install.ps1
 
