@@ -129,7 +129,7 @@ async function handleApiRequest(
 
 // ── Production server (runs as detached process) ─────────────────
 
-function startServer(skillRoot: string, viewName: string, scriptId: string): void {
+export function startServer(skillRoot: string, viewName: string, scriptId: string): void {
   if (!existsSync(join(VIEWER_DIR, 'index.html'))) {
     process.stderr.write(`error: ${VIEWER_DIR}/index.html not found.\nRun "soulkiller --update" or reinstall to restore viewer files.\n`)
     process.exit(1)

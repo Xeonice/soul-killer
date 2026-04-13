@@ -10,7 +10,7 @@
  * two levels up from the script (runtime/lib/main.ts → skill root).
  */
 
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { runInit } from './init.js'
 import { runApply } from './apply.js'
 import { runValidate } from './validate.js'
@@ -19,7 +19,7 @@ import { runReset } from './reset.js'
 import { runList } from './list.js'
 import { runSave } from './save.js'
 import { runTree, runTreeStop } from './tree.js'
-import { AVAILABLE_VIEWS } from './viewer-server.js'
+import { AVAILABLE_VIEWS, startServer as startViewerServer } from './viewer-server.js'
 import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild } from './script-builder.js'
 import { runRoute } from './route.js'
 import { runScripts } from './scripts.js'
@@ -37,6 +37,7 @@ const SUBCOMMANDS = [
   'list',
   'scripts',
   'viewer',
+  'viewer-serve',
   'tree',
   'script',
   'route',
@@ -248,6 +249,16 @@ export async function runCli(argv: string[]): Promise<number> {
       return 0
     }
 
+    // Internal: viewer-serve runs the HTTP server in-process (called by detached spawn)
+    if (sub === 'viewer-serve') {
+      const viewName = argv[1]
+      const viewScriptId = argv[2]
+      if (!viewName || !viewScriptId) return 2
+      startViewerServer(skillRoot, viewName, viewScriptId)
+      // Keep process alive — startServer starts Bun.serve which keeps the event loop running
+      return new Promise(() => {}) // never resolves
+    }
+
     if (sub === 'viewer') {
       const viewName = argv[1]
       const viewScriptId = argv[2]
@@ -259,18 +270,19 @@ export async function runCli(argv: string[]): Promise<number> {
         process.stderr.write(`error: unknown view "${viewName}"\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
         return 2
       }
-      // Spawn viewer-server as a detached process
-      const serverScript = join(dirname(new URL(import.meta.url).pathname), 'viewer-server.ts')
+      // Spawn self as a detached viewer-server process
       const { spawn } = await import('node:child_process')
+      // In compiled binary: process.execPath IS the soulkiller binary → spawn with 'runtime viewer-serve'
+      // In dev mode (bun): process.execPath is bun → spawn with the entry script + 'runtime viewer-serve'
+      const spawnArgs = process.env.BUN_BE_BUN
+        ? ['runtime', 'viewer-serve', viewName, viewScriptId]
+        : [process.argv[1], 'runtime', 'viewer-serve', viewName, viewScriptId]
       return new Promise<number>((resolve) => {
-        const child = spawn(process.execPath, [serverScript], {
+        const child = spawn(process.execPath, spawnArgs, {
           env: {
             ...process.env,
             BUN_BE_BUN: '1',
             SKILL_ROOT: skillRoot,
-            VIEWER_MODE: 'production',
-            VIEWER_VIEW: viewName,
-            VIEWER_SCRIPT_ID: viewScriptId,
           },
           stdio: ['ignore', 'pipe', 'ignore'],
           detached: true,
