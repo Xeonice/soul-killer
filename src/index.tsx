@@ -2,6 +2,9 @@
 import { render } from 'ink'
 import React from 'react'
 import { App } from './cli/app.js'
+import { runRuntime } from './cli/runtime.js'
+import { runUpdate } from './cli/updater.js'
+import { skillList, skillUpgrade } from './cli/skill-manager.js'
 
 // Pre-ink flag handling — intercept before React renders
 const args = process.argv.slice(2)
@@ -13,19 +16,16 @@ if (args.includes('--version') || args.includes('-v')) {
 }
 
 if (args.includes('--update')) {
-  const { runUpdate } = await import('./cli/updater.js')
   await runUpdate()
   process.exit(0)
 }
 
 if (args[0] === 'runtime') {
-  const { runRuntime } = await import('./cli/runtime.js')
   const code = await runRuntime(args.slice(1))
   process.exit(code)
 }
 
 if (args[0] === 'skill') {
-  const { skillList, skillUpgrade } = await import('./cli/skill-manager.js')
   const sub = args[1]
   if (sub === 'list') {
     process.exit(skillList())
