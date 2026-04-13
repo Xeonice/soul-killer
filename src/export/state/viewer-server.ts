@@ -10,6 +10,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { loadTreeData, watchSaveDir, type FileWatcher } from './viewer-data.js'
+import { files as viewerFiles } from './viewer-bundle.js'
 
 const DEFAULT_PORT = 6677
 const MAX_PORT_TRIES = 10
@@ -121,13 +122,9 @@ export async function startProductionServer(
   viewName: string,
   scriptId: string,
 ): Promise<ViewerServerResult> {
-  // Dynamic import — only resolves at build time when barrel exists
-  let files: Record<string, { content: string; mime: string }>
-  try {
-    const bundle = await import('./viewer-bundle.js')
-    files = bundle.files
-  } catch {
-    throw new Error('viewer-bundle.ts not found. Run "bun run build:release" first.')
+  const files = viewerFiles
+  if (Object.keys(files).length === 0) {
+    throw new Error('Viewer bundle is empty. Run "bun run build:release" to generate it.')
   }
 
   let boundPort = DEFAULT_PORT
