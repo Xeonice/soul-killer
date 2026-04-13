@@ -27,6 +27,7 @@ export interface MetaFile {
   scriptRef: string
   currentScene: string
   lastPlayedAt?: string
+  currentRoute?: string
 }
 
 /**
@@ -123,7 +124,8 @@ export function readMetaFile(path: string): MetaFile {
     throw new Error('meta.yaml missing current_scene')
   }
   const lastPlayedAt = typeof doc.last_played_at === 'string' ? doc.last_played_at : undefined
-  return { scriptRef, currentScene, lastPlayedAt }
+  const currentRoute = typeof doc.current_route === 'string' ? doc.current_route : undefined
+  return { scriptRef, currentScene, lastPlayedAt, currentRoute }
 }
 
 export function serializeStateFile(parsed: ParsedStateFile): string {
@@ -141,6 +143,9 @@ export function serializeMetaFile(meta: MetaFile): string {
   }
   if (meta.lastPlayedAt !== undefined) {
     doc.last_played_at = meta.lastPlayedAt
+  }
+  if (meta.currentRoute !== undefined) {
+    doc.current_route = meta.currentRoute
   }
   return serializeMiniYaml(doc)
 }

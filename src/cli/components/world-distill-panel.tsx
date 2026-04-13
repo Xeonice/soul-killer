@@ -3,7 +3,7 @@ import { Text, Box } from 'ink'
 import { PRIMARY, ACCENT, DARK, DIM } from '../animation/colors.js'
 import { isAnimationEnabled } from '../animation/use-animation.js'
 import { t } from '../../infra/i18n/index.js'
-import type { WorldDistillProgress, DimensionStats } from '../../world/distill.js'
+import type { WorldDistillProgress, DimensionStats, HistorySubProgress } from '../../world/distill.js'
 import { ALL_WORLD_DIMENSIONS, WORLD_DIMENSIONS } from '../../world/capture/world-dimensions.js'
 
 const SPINNER_CHARS = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
@@ -107,6 +107,9 @@ export function WorldDistillPanel({ progress, worldName }: WorldDistillPanelProp
               spinner={spinner}
             />
           )}
+          {progress.historySubProgress && (
+            <HistoryPassDisplay sub={progress.historySubProgress} spinner={spinner} />
+          )}
         </>
       )}
 
@@ -168,6 +171,35 @@ function GeneratedEntriesDisplay({ entries, currentDimension, isExtracting, spin
         <Text color={ACCENT}>
           {'▸ '}{currentDimension}{` ${spinner}`}
         </Text>
+      )}
+    </Box>
+  )
+}
+
+function HistoryPassDisplay({ sub, spinner }: { sub: HistorySubProgress; spinner: string }) {
+  const passLabel = sub.pass === 'A' ? 'Pass A — listing events'
+    : sub.pass === 'B' ? `Pass B — expanding events (${sub.eventsDone}/${sub.eventsTotal})`
+    : 'Pass C — long-term trends'
+  const passActive = sub.pass === 'A' || (sub.pass === 'B' && sub.eventsDone < sub.eventsTotal) || sub.pass === 'C'
+
+  return (
+    <Box flexDirection="column" paddingLeft={4}>
+      <Text color={ACCENT}>
+        {'▸ history — '}{passLabel}{passActive ? ` ${spinner}` : ' ✓'}
+      </Text>
+      {sub.pass === 'B' && sub.completedEvents && sub.completedEvents.length > 0 && (
+        <Box flexDirection="column" paddingLeft={2}>
+          {sub.completedEvents.slice(-3).map((name, i) => (
+            <Text key={i} color={PRIMARY}>
+              {'▸ '}{name}{' ✓'}
+            </Text>
+          ))}
+          {sub.currentEvent && sub.eventsDone < sub.eventsTotal && (
+            <Text color={ACCENT}>
+              {'▸ '}{sub.currentEvent}{` ${spinner}`}
+            </Text>
+          )}
+        </Box>
       )}
     </Box>
   )

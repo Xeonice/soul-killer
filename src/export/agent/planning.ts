@@ -2,7 +2,7 @@ import { ToolLoopAgent, stepCountIs, tool } from 'ai'
 import type { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import { z } from 'zod'
-import type { ExportPlan, ExportPlanCharacter, OnExportProgress, PreSelectedExportData } from './types.js'
+import type { ExportPlan, ExportPlanCharacter, RouteCandidate, OnExportProgress, PreSelectedExportData } from './types.js'
 import { PLANNING_SYSTEM_PROMPT, buildPlanningPrompt } from './prompts.js'
 import { runAgentLoop } from './agent-loop.js'
 import { logger } from '../../infra/utils/logger.js'
@@ -99,6 +99,7 @@ export async function runPlanningLoop(
       shared_axes: string[]
       flags: string[]
       prose_direction: string
+      route_candidates: RouteCandidate[]
     } | null,
     characters: [] as ExportPlanCharacter[],
     finalized: false,
@@ -114,6 +115,11 @@ export async function runPlanningLoop(
         shared_axes_2: z.string().describe('Second non-bond shared axis name (snake_case, different from first)'),
         flags: z.array(z.string()).describe('Key event flag name list (snake_case, 5-8 items)'),
         prose_direction: z.string().describe('Narrative style direction description'),
+        route_candidates: z.array(z.object({
+          slug: z.string().describe('Character soul slug (must match a pre-selected soul name)'),
+          name: z.string().describe('Character display name'),
+          reason: z.string().describe('Why this character is a good route focus (1-2 sentences)'),
+        })).describe('Top 2-3 characters recommended as route focus based on conflict depth and arc potential. Empty array if only 1 character.').default([]),
       }),
       inputExamples: [{
         input: {
@@ -125,7 +131,7 @@ export async function runPlanningLoop(
           prose_direction: 'Cold-realism cyberpunk noir, multi-perspective with sharp dialogue',
         },
       }],
-      execute: async ({ genre_direction, tone_direction, shared_axes_1, shared_axes_2, flags, prose_direction }) => {
+      execute: async ({ genre_direction, tone_direction, shared_axes_1, shared_axes_2, flags, prose_direction, route_candidates }) => {
         onProgress({ type: 'tool_start', tool: 'plan_story' })
         // Validate
         if (!genre_direction.trim()) {
@@ -160,8 +166,12 @@ export async function runPlanningLoop(
           shared_axes: [shared_axes_1, shared_axes_2],
           flags,
           prose_direction,
+          route_candidates: route_candidates ?? [],
         }
-        const summary = `genre=${genre_direction}, shared=[${shared_axes_1}, ${shared_axes_2}], ${flags.length} flags`
+        const routeSummary = route_candidates && route_candidates.length > 0
+          ? `, routes=[${route_candidates.map(r => r.name).join(', ')}]`
+          : ''
+        const summary = `genre=${genre_direction}, shared=[${shared_axes_1}, ${shared_axes_2}], ${flags.length} flags${routeSummary}`
         onProgress({ type: 'tool_end', tool: 'plan_story', result_summary: summary })
         return { ok: true, summary }
       },

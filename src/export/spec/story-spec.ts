@@ -155,6 +155,20 @@ export interface ActOption {
   endings_count: number
 }
 
+/**
+ * A character selected as a route focus character. Route branching uses
+ * these characters' affinity thresholds to determine which narrative
+ * route the player enters at the gate scene.
+ */
+export interface RouteCharacter {
+  /** Character's ASCII slug (matches souls/{slug}/) */
+  slug: string
+  /** Character's display name */
+  name: string
+  /** Why this character was selected as a route focus */
+  reason: string
+}
+
 export interface StorySpecConfig {
   /** Story name provided by the user (identity of this export) */
   story_name: string
@@ -184,6 +198,13 @@ export interface StorySpecConfig {
    * completely crash.
    */
   prose_style?: ProseStyle
+  /**
+   * Route focus characters selected by the export agent via
+   * `select_route_characters`. When present, Phase 1 generates a gate
+   * scene with affinity-based routing and per-route scene/ending branches.
+   * Optional: stories without routes are still valid linear narratives.
+   */
+  route_characters?: RouteCharacter[]
 }
 
 function formatCharactersBlock(characters: CharacterSpec[]): string {
@@ -764,8 +785,35 @@ function formatProseStyleFallbackSection(): string {
   return `\n## Prose Style Anchor (Fallback)\n\nThis story did not declare a prose style anchor via \`set_prose_style\` (legacy archive). Phase 1/2 LLM uses the following universal Chinese writing constraints as a fallback: all generated Chinese text must avoid these common translatese patterns.\n\n\`\`\`yaml\ntarget_language: zh\nvoice_anchor: "Restrained written Chinese, avoiding literal syntactic projections from English/Japanese"\nforbidden_patterns:\n${fallbackYaml}\n\`\`\`\n`
 }
 
+function formatRoutesSection(routeCharacters: RouteCharacter[]): string {
+  const charList = routeCharacters
+    .map((rc) => `- **${rc.name}** (slug: \`${rc.slug}\`): ${rc.reason}`)
+    .join('\n')
+
+  return `
+## Routes
+
+This story uses affinity-gate route branching. The following characters were selected as route focus characters by the export agent via \`select_route_characters\`:
+
+${charList}
+
+### Route Structure
+
+- **Common scenes**: Shared by all players in early acts. Choices build affinity toward route characters and set key flags.
+- **Gate scene**: A scene with type \`"affinity_gate"\` placed at the branching point. Its \`routing\` array is evaluated in order; the first matching condition determines the player's route. The last entry must use \`condition: "default"\`.
+- **Route scenes**: Tagged with a \`route\` field. Each route is a linear sequence of scenes where choices affect affinity for route-specific endings. \`next\` references stay within the same route.
+- **Route endings**: Tagged with a \`route\` field. Each route has its own set of endings. Endings without a \`route\` field apply to all routes.
+
+Phase 1 must generate:
+1. Common scenes (no \`route\` field)
+2. One gate scene (type \`"affinity_gate"\`)
+3. Per-route scene sequences (each scene tagged with \`route: "<route_id>"\`)
+4. Per-route endings (each ending tagged with \`route: "<route_id>"\`) plus optional universal endings
+`
+}
+
 export function generateStorySpec(config: StorySpecConfig): string {
-  const { story_name, user_direction, genre, tone, constraints, acts_options, default_acts, characters, story_state, prose_style } = config
+  const { story_name, user_direction, genre, tone, constraints, acts_options, default_acts, characters, story_state, prose_style, route_characters } = config
 
   const isMultiCharacter = !!characters && characters.length > 1
 
@@ -884,7 +932,7 @@ State effect format examples: \`trust +1, understanding +2\` or \`shared_secret 
 - Character behavior must align with the personality described in souls/{character_name}/identity.md
 - Speech patterns must conform to souls/{character_name}/style.md
 - Characters do not unconditionally trust the user; trust must be built through choices
-${storyStateSection}${proseStyleSection}${castSection}${stateSection}${endingSection}
+${storyStateSection}${proseStyleSection}${castSection}${stateSection}${endingSection}${route_characters && route_characters.length > 0 ? formatRoutesSection(route_characters) : ''}
 ## Act Transitions
 
 - Every act transition must have transitional narration (summarizing the emotional aftermath of the previous act)

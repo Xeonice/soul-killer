@@ -125,6 +125,40 @@ Step 3: Export the Game
 └─────────────────────────────────────┘
 ```
 
+## Branch Tree Visualization During Play
+
+Exported `.skill` archives automatically start a local branch tree visualization server during play, helping you track your current story progress.
+
+```
+Auto-starts during play → open http://localhost:6677 in browser
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  scene-101 ── scene-102 ── scene-103 ──···── scene-403          │
+│  (common route)                                   │              │
+│                                                   ▼              │
+│                                              ◆ GATE ◆           │
+│                                             ╱    │    ╲          │
+│                                  route-a ╱   route-b  ╲ route-c │
+│                                        ╱       │        ╲        │
+│                                  scene-a01  scene-b01  scene-c01 │
+│                                     │          │          │      │
+│                                    ···        ···        ···     │
+│                                                                 │
+│  ● Visited  ● Current  ○ Unexplored  ★ Your choice  ◆ Gate     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Features:**
+
+- **Real-time updates** — Browser auto-refreshes after each choice, new nodes light up, chosen paths highlight
+- **Affinity Gate** — Diamond nodes mark route branching points; the system auto-routes based on accumulated affinity
+- **Route coloring** — Different character routes shown in distinct colors (cyan / magenta / yellow / green)
+- **Progress stats** — Top-right shows explored scenes, choices made, endings found
+- **Drag to pan** — Mouse drag to navigate the full branch tree
+- **Hover to preview** — Hover nodes to see scene text and status
+
+> The tree server auto-shuts down after 2 hours of inactivity.
+
 ## System Maintenance
 
 ```bash

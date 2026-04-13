@@ -14,6 +14,7 @@ import {
   readMetaFile,
   writeSaveTransaction,
 } from './io.js'
+import { copyHistory, historyPath } from './history.js'
 
 export const MANUAL_SAVE_LIMIT = 3
 
@@ -95,6 +96,12 @@ export function runSave(
       currentScene: autoMeta.currentScene,
       lastPlayedAt: new Date().toISOString(),
     }
+  )
+
+  // Copy history.log to manual save
+  copyHistory(
+    historyPath(autoPaths.stateYamlPath),
+    historyPath(manualPaths.stateYamlPath)
   )
 
   return {

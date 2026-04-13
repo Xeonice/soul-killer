@@ -28,6 +28,14 @@ export interface DimensionStats {
   [dimension: string]: number
 }
 
+export interface HistorySubProgress {
+  pass: 'A' | 'B' | 'C'
+  eventsDone: number
+  eventsTotal: number
+  currentEvent?: string
+  completedEvents?: string[]
+}
+
 export interface WorldDistillProgress {
   phase: DistillPhase
   current: number
@@ -37,6 +45,7 @@ export interface WorldDistillProgress {
   entryName?: string
   entryDimension?: string
   generatedEntries?: { name: string; dimension?: string; scope: string }[]
+  historySubProgress?: HistorySubProgress
 }
 
 interface ClassifiedChunk {
@@ -348,6 +357,7 @@ Respond ONLY with the JSON array.`,
       total: 3,
       message: 'history: Pass A — listing timeline events...',
       entryDimension: 'history',
+      historySubProgress: { pass: 'A', eventsDone: 0, eventsTotal: 0 },
     } as WorldDistillProgress)
     let passAItems: PassAItem[] = []
     try {
@@ -400,6 +410,14 @@ Output a JSON array of objects. No other text. No markdown fences.`,
       const parsed = JSON.parse(passAJson)
       passAItems = Array.isArray(parsed) ? parsed : []
       agentLog?.distillBatch('history:pass-a', 1, 1, Date.now() - passAStart, passAText.length)
+      this.emit('progress', {
+        phase: 'extract',
+        current: 0,
+        total: 3,
+        message: `history: Pass A complete — ${passAItems.length} events found`,
+        entryDimension: 'history',
+        historySubProgress: { pass: 'A', eventsDone: passAItems.length, eventsTotal: passAItems.length },
+      } as WorldDistillProgress)
     } catch (err) {
       agentLog?.toolInternal('ERROR history:pass-a', err instanceof Error ? err.message : String(err))
       passAItems = []
@@ -457,10 +475,12 @@ Output a JSON array of objects. No other text. No markdown fences.`,
     const eventsEntries: GeneratedEntry[] = []
     const passBStart = Date.now()
     let passBDone = 0
+    const passBCompletedNames: string[] = []
     for (let i = 0; i < passBTasks.length; i += HISTORY_PASS_B_CONCURRENCY) {
       const batch = passBTasks.slice(i, i + HISTORY_PASS_B_CONCURRENCY)
       const batchResults = await Promise.all(
         batch.map(async ({ item }) => {
+          const eventStart = Date.now()
           try {
             const { text } = await generateText({
               model: this.model,
@@ -504,12 +524,32 @@ ${combinedText.slice(0, 6000)}`,
               sort_key: item.sort_key,
               ...(item.display_time ? { display_time: item.display_time } : {}),
             }
+            // Per-event progress
+            passBDone++
+            passBCompletedNames.push(item.name)
+            agentLog?.distillBatch(`history:pass-b:${item.name}`, passBDone, passBTasks.length, Date.now() - eventStart, body.length)
+            this.emit('progress', {
+              phase: 'extract',
+              current: 1,
+              total: 3,
+              message: `history: Pass B — ${item.name} (${passBDone}/${passBTasks.length})`,
+              entryDimension: 'history',
+              historySubProgress: {
+                pass: 'B',
+                eventsDone: passBDone,
+                eventsTotal: passBTasks.length,
+                currentEvent: item.name,
+                completedEvents: [...passBCompletedNames],
+              },
+            } as WorldDistillProgress)
+
             return {
               meta,
               content: body,
               chronicleType: 'events' as ChronicleKind,
             }
           } catch (err) {
+            passBDone++
             agentLog?.toolInternal(`ERROR history:pass-b:${item.name}`, err instanceof Error ? err.message : String(err))
             return null
           }
@@ -518,14 +558,6 @@ ${combinedText.slice(0, 6000)}`,
       for (const r of batchResults) {
         if (r) eventsEntries.push(r)
       }
-      passBDone += batch.length
-      this.emit('progress', {
-        phase: 'extract',
-        current: 1,
-        total: 3,
-        message: `history: Pass B — expanding events (${passBDone}/${passBTasks.length})`,
-        entryDimension: 'history',
-      } as WorldDistillProgress)
     }
     agentLog?.distillBatch('history:pass-b', 1, 1, Date.now() - passBStart, eventsEntries.length)
 
@@ -536,6 +568,7 @@ ${combinedText.slice(0, 6000)}`,
       total: 3,
       message: 'history: Pass C — extracting long-term trends...',
       entryDimension: 'history',
+      historySubProgress: { pass: 'C', eventsDone: 0, eventsTotal: 0 },
     } as WorldDistillProgress)
     const passCEntries: GeneratedEntry[] = []
     try {

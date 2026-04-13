@@ -18,6 +18,9 @@ import { runRebuild } from './rebuild.js'
 import { runReset } from './reset.js'
 import { runList } from './list.js'
 import { runSave } from './save.js'
+import { runTree, runTreeStop } from './tree.js'
+import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild } from './script-builder.js'
+import { runRoute } from './route.js'
 import type { ChangeEntry } from './schema.js'
 import type { SaveType } from './io.js'
 
@@ -30,6 +33,9 @@ const SUBCOMMANDS = [
   'reset',
   'save',
   'list',
+  'tree',
+  'script',
+  'route',
   '--help',
   '-h',
 ] as const
@@ -51,6 +57,13 @@ function printHelp(): void {
       '  reset <script-id> [<save-type>]                Wholesale reset to initial_state',
       '  save <script-id> [--overwrite <timestamp>]     Snapshot auto save to manual/',
       '  list <script-id>                               List all saves for a script (JSON)',
+      '  tree <script-id>                               Start branch tree visualization server',
+      '  tree --stop                                    Stop the visualization server',
+      '  script plan <id>                               Validate + enrich plan.json',
+      '  script scene <id> <scene-id>                   Validate + promote a scene draft',
+      '  script ending <id> <ending-id>                 Validate + promote an ending draft',
+      '  script build <id>                              Merge plan+scenes+endings into script.json',
+      '  route <script-id> <gate-scene-id>               Evaluate affinity gate routing',
       '',
       'Save types: auto (default), manual:<timestamp>',
       '',
@@ -219,6 +232,94 @@ export async function runCli(argv: string[]): Promise<number> {
       const result = runList(skillRoot, scriptId)
       process.stdout.write(JSON.stringify(result, null, 2) + '\n')
       return 0
+    }
+
+    if (sub === 'tree') {
+      if (argv[1] === '--stop') {
+        const result = runTreeStop(skillRoot)
+        process.stdout.write(
+          result.action === 'stopped' ? 'TREE_STOPPED\n' : 'TREE_NOT_RUNNING\n'
+        )
+        return 0
+      }
+      const scriptId = argv[1]
+      if (scriptId === undefined) {
+        process.stderr.write('usage: state tree <script-id>  or  state tree --stop\n')
+        return 2
+      }
+      const result = await runTree(skillRoot, scriptId)
+      process.stdout.write(`TREE_URL ${result.url}\n`)
+      if (result.action === 'started') {
+        process.stdout.write(`TREE_PID ${result.pid}\n`)
+      }
+      return 0
+    }
+
+    if (sub === 'route') {
+      const scriptId = argv[1]
+      const gateSceneId = argv[2]
+      if (!scriptId || !gateSceneId) {
+        process.stderr.write('usage: state route <script-id> <gate-scene-id>\n')
+        return 2
+      }
+      const result = runRoute(skillRoot, scriptId, gateSceneId)
+      if (!result.ok) {
+        process.stderr.write(`error: ${result.error}\n`)
+        return 1
+      }
+      process.stdout.write(`ROUTE ${result.routeId} → ${result.nextScene}\n`)
+      return 0
+    }
+
+    if (sub === 'script') {
+      const subSub = argv[1]
+      const id = argv[2]
+
+      if (subSub === 'plan') {
+        if (!id) { process.stderr.write('usage: state script plan <id>\n'); return 2 }
+        const result = runScriptPlan(skillRoot, id)
+        if (!result.ok) { process.stderr.write(`error: ${result.error}\n`); return 1 }
+        const lines = [
+          'PLAN_OK',
+          `  scenes: ${result.scenes}`,
+          `  fields: ${result.fields}`,
+          `  acts: ${result.acts}`,
+          `  endings: ${result.endings}`,
+          `  generation_order: ${result.generationOrder.join(',')}`,
+          `  convergence_points: ${result.convergencePoints.join(',') || '(none)'}`,
+        ]
+        process.stdout.write(lines.join('\n') + '\n')
+        return 0
+      }
+
+      if (subSub === 'scene') {
+        const sceneId = argv[3]
+        if (!id || !sceneId) { process.stderr.write('usage: state script scene <id> <scene-id>\n'); return 2 }
+        const result = runScriptScene(skillRoot, id, sceneId)
+        if (!result.ok) { process.stderr.write(`error: ${result.error}\n`); return 1 }
+        process.stdout.write(`SCENE_OK ${result.sceneId} choices=${result.choices} keys=${result.consequenceKeys}\n`)
+        return 0
+      }
+
+      if (subSub === 'ending') {
+        const endingId = argv[3]
+        if (!id || !endingId) { process.stderr.write('usage: state script ending <id> <ending-id>\n'); return 2 }
+        const result = runScriptEnding(skillRoot, id, endingId)
+        if (!result.ok) { process.stderr.write(`error: ${result.error}\n`); return 1 }
+        process.stdout.write(`ENDING_OK ${result.endingId}\n`)
+        return 0
+      }
+
+      if (subSub === 'build') {
+        if (!id) { process.stderr.write('usage: state script build <id>\n'); return 2 }
+        const result = runScriptBuild(skillRoot, id)
+        if (!result.ok) { process.stderr.write(`error: ${result.error}\n`); return 1 }
+        process.stdout.write(`BUILD_OK script-${result.scriptId}.json scenes=${result.scenes} endings=${result.endings} size=${Math.round(result.sizeBytes / 1024)}KB\n`)
+        return 0
+      }
+
+      process.stderr.write('usage: state script <plan|scene|ending|build> ...\n')
+      return 2
     }
 
     // Unreachable

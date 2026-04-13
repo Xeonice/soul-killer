@@ -11,6 +11,7 @@ import { ExportBuilder } from './types.js'
 import { runPlanningLoop } from './planning.js'
 import { runStorySetup } from './story-setup.js'
 import { runCharacterLoop } from './character.js'
+import { runRouteSelection } from './route-selection.js'
 import { finalizeAndPackage } from './finalize.js'
 import { logger } from '../../infra/utils/logger.js'
 import { AgentLogger } from '../../infra/utils/agent-logger.js'
@@ -86,6 +87,10 @@ export async function runExportAgent(
   // Step 2: Character Loop (per-character add + axes)
   const charsOk = await runCharacterLoop(model, plan, preSelected, builder, onProgress, agentLog, providerOpts)
   if (!charsOk) { agentLog.close(); return }
+
+  // Step 2.5: Route Selection (if plan has route_candidates)
+  const routeOk = await runRouteSelection(plan, builder, onProgress, askUser)
+  if (!routeOk) { agentLog.close(); return }
 
   // Step 3: Finalize (pure code packaging)
   const finalOk = await finalizeAndPackage(builder, preSelected, onProgress, agentLog)

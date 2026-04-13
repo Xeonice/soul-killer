@@ -33,10 +33,19 @@ export interface ScriptChoice {
   next?: string
 }
 
+export interface ScriptRouting {
+  route_id: string
+  condition: unknown
+  next: string
+}
+
 export interface ScriptScene {
   id: string
   text: string
   choices: ScriptChoice[]
+  type?: string
+  routing?: ScriptRouting[]
+  route?: string
 }
 
 export interface ParsedScript {
@@ -121,12 +130,28 @@ function parseScene(sceneId: string, raw: unknown): ScriptScene {
     throw new ScriptLoadError(`scene "${sceneId}" must be an object`)
   }
   const text = typeof raw.text === 'string' ? raw.text : ''
+  const sceneType = typeof raw.type === 'string' ? raw.type : undefined
+  const route = typeof raw.route === 'string' ? raw.route : undefined
+
+  // Gate scenes: choices defaults to [], parse routing
+  if (sceneType === 'affinity_gate') {
+    const choicesRaw = raw.choices
+    const choices: ScriptChoice[] = Array.isArray(choicesRaw)
+      ? choicesRaw.map((c, idx) => parseChoice(sceneId, idx, c))
+      : []
+    const routing = Array.isArray(raw.routing)
+      ? (raw.routing as ScriptRouting[])
+      : undefined
+    return { id: sceneId, text, choices, type: sceneType, routing, route }
+  }
+
+  // Normal scenes: choices required
   const choicesRaw = raw.choices
   if (!Array.isArray(choicesRaw)) {
     throw new ScriptLoadError(`scene "${sceneId}".choices must be an array`)
   }
   const choices: ScriptChoice[] = choicesRaw.map((c, idx) => parseChoice(sceneId, idx, c))
-  return { id: sceneId, text, choices }
+  return { id: sceneId, text, choices, ...(sceneType ? { type: sceneType } : {}), ...(route ? { route } : {}) }
 }
 
 function parseChoice(sceneId: string, idx: number, raw: unknown): ScriptChoice {

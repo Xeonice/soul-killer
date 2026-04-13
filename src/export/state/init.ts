@@ -14,6 +14,7 @@ import {
   writeSaveTransaction,
   type MetaFile,
 } from './io.js'
+import { initHistory, historyPath } from './history.js'
 
 export interface InitResult {
   scriptId: string
@@ -59,6 +60,9 @@ export function runInit(skillRoot: string, scriptId: string): InitResult {
     },
     meta
   )
+
+  // Create empty history.log for this save
+  initHistory(historyPath(paths.stateYamlPath))
 
   return {
     scriptId: script.id,

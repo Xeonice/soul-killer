@@ -34,7 +34,7 @@ type ActiveZoneState =
    */
   | { type: 'idle'; reasoning?: { tokens: number; chars: number } }
   | { type: 'tool'; tool: string; args?: Record<string, unknown> }
-  | { type: 'select'; question: string; options: AskUserOption[]; cursor: number; multi?: boolean; selected?: number[] }
+  | { type: 'select'; question: string; options: AskUserOption[]; cursor: number; multi?: boolean; selected?: number[]; maxSelect?: number }
   | { type: 'text_input'; question: string; value: string; items: string[] }
   | { type: 'plan_review'; plan: ExportPlan; storyDirection?: string; exportLanguage?: string }
   | { type: 'packaging'; steps: { name: string; status: 'pending' | 'running' | 'done' }[] }

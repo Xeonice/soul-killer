@@ -15,6 +15,7 @@ import {
   type MetaFile,
   type SaveType,
 } from './io.js'
+import { clearHistory, historyPath } from './history.js'
 
 export interface ResetResult {
   scriptId: string
@@ -42,6 +43,9 @@ export function runReset(skillRoot: string, scriptId: string, saveType: SaveType
     },
     newMeta
   )
+
+  // Clear choice history
+  clearHistory(historyPath(paths.stateYamlPath))
 
   return {
     scriptId: script.id,

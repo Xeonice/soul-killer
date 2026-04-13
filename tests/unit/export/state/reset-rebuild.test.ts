@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { runInit } from '../../../../src/export/state/init.js'
 import { runApply } from '../../../../src/export/state/apply.js'
@@ -43,6 +43,16 @@ describe('runReset', () => {
     expect(parsed.state['affinity.judy.trust']).toBe(3)
     expect(parsed.state['flags.met_johnny']).toBe(false)
     expect(parsed.state['custom.location']).toBe('bar')
+  })
+
+  it('clears history.log on reset', () => {
+    fixture = createFixture()
+    runInit(fixture.skillRoot, 'script-001')
+    runApply(fixture.skillRoot, 'script-001', 'scene-001', 'choice-1')
+    runReset(fixture.skillRoot, 'script-001')
+    const hPath = join(fixture.skillRoot, 'runtime/saves/script-001/auto/history.log')
+    const content = readFileSync(hPath, 'utf8')
+    expect(content).toBe('')
   })
 
   it('updates meta.yaml current_scene back to first scene', () => {

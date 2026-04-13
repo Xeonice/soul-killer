@@ -2,7 +2,7 @@ import { ToolLoopAgent, stepCountIs, tool } from 'ai'
 import type { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import { z } from 'zod'
-import type { ActOption, StoryStateFlag } from '../spec/story-spec.js'
+import type { ActOption, RouteCharacter, StoryStateFlag } from '../spec/story-spec.js'
 import type { ProseStyleForbiddenPattern } from '../support/prose-style-index.js'
 import { formatPatternsForToolDescription } from '../support/prose-style-index.js'
 import type { ExportPlan, OnExportProgress, PreSelectedExportData, AskUserHandler } from './types.js'
@@ -58,7 +58,12 @@ export function makeStorySetupTools(
         genre: z.string().describe('Story genre, e.g. "urban fantasy / psychological drama"'),
         tone: z.string().describe('Tone reflecting the unique character combination; avoid generic words'),
         constraints: z.array(z.string()).describe('Constraint list, must include at least one tradeoff constraint'),
-        acts_options_csv: z.string().describe('2-3 length presets, format: acts:label:rounds_total:endings_count, pipe-separated. E.g. "3:short:24-36:4|5:medium:40-60:5|7:long:56-84:6"'),
+        acts_options: z.array(z.object({
+          acts: z.number().describe('Number of acts'),
+          label: z.string().describe('Short label, e.g. "short", "medium", "long"'),
+          rounds_total: z.string().describe('Round range, e.g. "24-36"'),
+          endings_count: z.number().describe('Number of endings'),
+        })).describe('2-3 length presets for the story'),
         default_acts: z.number().describe('Recommended default, must equal one of the acts values in acts_options'),
       }),
       inputExamples: [{
@@ -70,24 +75,23 @@ export function makeStorySetupTools(
             'The protagonist must face at least one irreversible betrayal per act',
             'No character may achieve their stated goal without sacrificing another',
           ],
-          acts_options_csv: '3:short:24-36:4|5:medium:40-60:5|7:long:56-84:6',
+          acts_options: [
+            { acts: 3, label: 'short', rounds_total: '24-36', endings_count: 4 },
+            { acts: 5, label: 'medium', rounds_total: '40-60', endings_count: 5 },
+            { acts: 7, label: 'long', rounds_total: '56-84', endings_count: 6 },
+          ],
           default_acts: 5,
         },
       }],
-      execute: async ({ genre, tone, constraints, acts_options_csv, default_acts }) => {
+      execute: async ({ genre, tone, constraints, acts_options: rawActsOptions, default_acts }) => {
         try {
           onProgress({ type: 'tool_start', tool: 'set_story_metadata' })
-          // Parse acts_options_csv into ActOption[]
-          const acts_options: ActOption[] = acts_options_csv.split('|').map((entry) => {
-            const parts = entry.trim().split(':')
-            if (parts.length !== 4) throw new Error(`acts_options format error: each entry needs 4 fields (acts:label:rounds_total:endings_count), got: "${entry}"`)
-            return {
-              acts: Number(parts[0]),
-              label_zh: parts[1],
-              rounds_total: parts[2],
-              endings_count: Number(parts[3]),
-            }
-          })
+          const acts_options: ActOption[] = rawActsOptions.map((o) => ({
+            acts: o.acts,
+            label_zh: o.label,
+            rounds_total: o.rounds_total,
+            endings_count: o.endings_count,
+          }))
           builder.setMetadata({ genre, tone, constraints, acts_options, default_acts })
           const summary = `Metadata saved: ${acts_options.length} length options (default ${default_acts} acts)`
           onProgress({ type: 'tool_end', tool: 'set_story_metadata', result_summary: summary })
@@ -125,23 +129,26 @@ export function makeStorySetupTools(
       inputSchema: z.object({
         shared_axis_1: z.string().describe('First non-bond shared axis name, snake_case. E.g. "trust"'),
         shared_axis_2: z.string().describe('Second non-bond shared axis name, snake_case, different from the first. E.g. "rivalry"'),
-        flags_csv: z.string().describe('Flag list, format: name:desc:initial(true/false), pipe-separated. E.g. "met_johnny:Player first meets Johnny:false|chose_rebellion:Player chooses rebellion:false"'),
+        flags: z.array(z.object({
+          name: z.string().describe('Flag name, snake_case. E.g. "met_johnny"'),
+          desc: z.string().describe('Description of the flag trigger condition'),
+          initial: z.boolean().describe('Initial value, almost always false'),
+        })).describe('Key event flags (5-8 recommended)'),
       }),
-      execute: async ({ shared_axis_1, shared_axis_2, flags_csv }) => {
+      inputExamples: [{
+        input: {
+          shared_axis_1: 'trust',
+          shared_axis_2: 'rivalry',
+          flags: [
+            { name: 'met_johnny', desc: 'Player first meets Johnny', initial: false },
+            { name: 'chose_rebellion', desc: 'Player chooses the rebellion path', initial: false },
+          ],
+        },
+      }],
+      execute: async ({ shared_axis_1, shared_axis_2, flags }) => {
         try {
           onProgress({ type: 'tool_start', tool: 'set_story_state' })
-          // Combine into tuple
           const shared_axes_custom: [string, string] = [shared_axis_1, shared_axis_2]
-          // Parse flags_csv into StoryStateFlag[]
-          const flags: StoryStateFlag[] = flags_csv.split('|').map((entry) => {
-            const parts = entry.trim().split(':')
-            if (parts.length < 3) throw new Error(`flags format error: each entry needs 3 fields (name:desc:initial), got: "${entry}"`)
-            const name = parts[0]
-            const initial = parts[parts.length - 1] === 'true'
-            // desc may contain colons, so join middle parts
-            const desc = parts.slice(1, parts.length - 1).join(':')
-            return { name, desc, initial }
-          })
           builder.setStoryState({ shared_axes_custom, flags })
           const summary =
             `Story state set: shared_axes=[${shared_axes_custom.join(', ')}], ` +
@@ -273,6 +280,48 @@ export function makeStorySetupTools(
             tool: 'set_prose_style',
             result_summary: `error: ${errMsg}`,
           })
+          return { error: errMsg }
+        }
+      },
+    }),
+
+    select_route_characters: tool({
+      description:
+        'Select focus characters for route branching. Called after all add_character calls.\n' +
+        'Agent should analyze character data and recommend 2-3 characters with interesting\n' +
+        'conflict/growth potential. User confirms the pre-selected list.\n' +
+        'The selected characters determine route branching: Phase 1 generates a gate scene\n' +
+        'with affinity-based routing conditions and per-route scene/ending branches.',
+      inputSchema: z.object({
+        characters: z.array(z.object({
+          slug: z.string().describe('Character ASCII slug (matches souls/{slug}/ directory)'),
+          name: z.string().describe('Character display name'),
+          reason: z.string().describe('Why this character is a good route focus (conflict/growth potential)'),
+        })).min(2).max(5).describe('2-5 characters selected as route focus'),
+      }),
+      inputExamples: [{
+        input: {
+          characters: [
+            { slug: 'saber', name: 'Saber', reason: 'Central conflict between duty and personal desire creates a natural branching point' },
+            { slug: 'rin', name: 'Rin', reason: 'Alliance vs rivalry dynamic with protagonist offers meaningful route divergence' },
+          ],
+        },
+      }],
+      execute: async ({ characters: routeChars }) => {
+        try {
+          onProgress({ type: 'tool_start', tool: 'select_route_characters' })
+          const routeCharacters: RouteCharacter[] = routeChars.map((rc) => ({
+            slug: rc.slug,
+            name: rc.name,
+            reason: rc.reason,
+          }))
+          builder.setRouteCharacters(routeCharacters)
+          const summary = `Route characters selected: ${routeCharacters.map((rc) => rc.name).join(', ')}`
+          onProgress({ type: 'tool_end', tool: 'select_route_characters', result_summary: summary })
+          return { ok: true, summary }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          onProgress({ type: 'tool_end', tool: 'select_route_characters', result_summary: `error: ${errMsg}` })
           return { error: errMsg }
         }
       },

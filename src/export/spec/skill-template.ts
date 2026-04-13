@@ -39,6 +39,8 @@ export interface SkillTemplateConfig {
    */
   expectedFileCount?: number
   expectedTextSizeKb?: number
+  /** Route focus characters. When non-empty, SKILL.md Phase 1 uses mandatory route instructions. */
+  routeCharacters?: Array<{ slug: string; name: string }>
 }
 
 /** Phase 1 full-read enforcement — budget anchor options. */
@@ -132,90 +134,21 @@ The script must follow story-spec.md's:
 - Choice tradeoff constraints (each choice must produce differentiated effects on different characters)
 - Character appearance timing (${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').map((c) => `${c.name} starting from ${c.appears_from}`).join(', ') || 'all characters present throughout'})
 
-## Script Persistence (Mandatory)
+## Script Building (Incremental)
 
-After script generation is complete, you **must** use the Write tool to save the complete script in **JSON format** to:
+Script generation uses an incremental plan-then-build approach. You do NOT write the complete script in a single call. Instead:
 
-\`\`\`
-\${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json
-\`\`\`
+1. Write a **plan** (narrative blueprint, no scene text) -> validate with CLI
+2. Write each **scene** individually -> validate with CLI
+3. Write each **ending** individually -> validate with CLI
+4. CLI **builds** the final script.json from all pieces
 
-\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary (e.g., \`a3f9c2e1\`).
+Build directory: \`\${CLAUDE_SKILL_DIR}/runtime/scripts/.build-<id>/\`
+Final output: \`\${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json\`
 
-**Important: This is JSON, not YAML**. The top level is a JSON object containing header fields + state_schema + initial_state + scenes + endings:
+\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary.
 
-\`\`\`json
-{
-  "id": "<8-char short hash, matching the filename>",
-  "title": "<short title you give this script>",
-  "generated_at": "<ISO 8601 timestamp>",
-  "user_direction": "<Phase 0 user direction text, empty string if none>",
-  "acts": 3,
-
-  "state_schema": {
-    "affinity.<char_slug>.bond": { "type": "int", "desc": "...", "default": 5, "range": [0, 10] },
-    "affinity.<char_slug>.trust": { "type": "int", "desc": "...", "default": 3, "range": [0, 10] },
-    "flags.<event_name>": { "type": "bool", "desc": "...", "default": false }
-  },
-
-  "initial_state": {
-    "affinity.<char_slug>.bond": 5,
-    "affinity.<char_slug>.trust": 3,
-    "flags.<event_name>": false
-  },
-
-  "scenes": {
-    "scene-001": {
-      "text": "<full narration + dialogue as a single text block>",
-      "choices": [
-        {
-          "id": "choice-1",
-          "text": "<option A text>",
-          "consequences": { "affinity.<char_slug>.trust": 2 },
-          "next": "scene-002"
-        },
-        {
-          "id": "choice-2",
-          "text": "<option B text>",
-          "consequences": { "flags.<event_name>": true },
-          "next": "scene-003"
-        }
-      ]
-    }
-  },
-
-  "endings": [
-    {
-      "id": "ending-A",
-      "title": "<ending title>",
-      "condition": { "all_of": [{ "key": "affinity.<char_slug>.trust", "op": ">=", "value": 7 }] },
-      "body": "<ending narration>"
-    },
-    {
-      "id": "ending-default",
-      "title": "<fallthrough ending>",
-      "condition": "default",
-      "body": "<ending narration>"
-    }
-  ]
-}
-\`\`\`
-
-**Write call requirements**:
-- Write the complete file in a single call — do not append in segments
-- **Must be valid JSON** — matched braces, comma-separated, double-quoted strings, no comments (JSON has no comment syntax)
-- **Do not** write YAML frontmatter (\`---\` delimiter lines)
-- After writing, output a confirmation to the user: "Script saved as \`script-<id>.json\`"
-- The script remains in your context after writing; Phase 2 uses it directly
-
-**Write failure fallback**:
-- If the Write tool call fails (permissions, disk issues, etc.), output the error message
-- Still enter Phase 2 to run the script (the script is available in context)
-- Inform the user: "This script could not be persisted; it will not be reproducible on retry"
-
-## Phase 1 Creation Steps (Strict Sequential Order)
-
-Follow these **8 steps (Step 0 - Step 7)** to create script.json. **Do not skip any step**:
+## Phase 1 Creation Steps
 
 **Step 0: Data Loading Report (Mandatory)**
 
@@ -250,119 +183,124 @@ If any single item in the report has a suspiciously low line count (e.g., identi
 
 **You may only proceed to Step 1 after the report is fully output**.
 
-**Step 1: Design state_schema (Strict Three-Layer Structure)**
+**Step A: Plan**
 
 **Precondition check**: If you have not yet output Step 0's data loading report, **stop immediately and go back to do Step 0**.
 
-Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the **Story State** section, and extract:
-  - \`shared_axes_custom: [a, b]\` — the story's 2 story-level shared axis names (plus \`bond\` which is platform-fixed)
-  - \`flags: [...]\` — the story's key event flag list
+Design the narrative blueprint. This is structure only — no scene text.
 
-Then generate fields for each character (order: Layer 1 shared -> Layer 2 specific -> Layer 3 flags):
+1. Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the **Story State** section, and extract:
+   - \`shared_axes_custom: [a, b]\` — the story's 2 story-level shared axis names (plus \`bond\` which is platform-fixed)
+   - \`flags: [...]\` — the story's key event flag list
+2. Design state_schema following the "state_schema Creation Constraints" section above:
+   - **Layer 1: Shared axes (3 per character, no opt-out)**: \`"affinity.<char_slug>.bond"\`, \`"affinity.<char_slug>.<a>"\`, \`"affinity.<char_slug>.<b>"\`. Each field includes desc / type=int / range=[0, 10] / default. **default**: Read story-spec's \`characters[i].shared_initial_overrides\`. If a character has an override for that axis, use the override value; otherwise use the global default of 5
+   - **Layer 2: Character-specific axes (from story-spec's \`characters[i].axes\` list)**: 0-2 per character, each translated to \`"affinity.<char_slug>.<axis.english>"\`. Each field includes desc / type=int / range=[0, 10] / default=axis.initial
+   - **Layer 3: Flags (copied verbatim from story-spec's Story State)**: Every flag in story-spec must have a corresponding \`"flags.<name>"\` field. You **must not** add, remove, or rename flags
+3. Write initial_state (field set strictly == state_schema)
+4. **MANDATORY PREP: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. These are hard constraints on this story's text, not suggestions. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
+5. Plan the narrative arc, act structure, and character arcs
+6. For each scene: write outline, cast, emotional_beat, choices (id/text/intent/next), continuity, context_refs
+   - **choices <= 3 per scene** (the CLI will reject more than 3)
+   - context_refs: list scene-ids that this scene needs to reference for narrative callbacks (non-predecessor scenes only; predecessors are auto-computed)
+   - Every \`choice.consequences\` key must be **character-for-character copied** from state_schema (exact literal string match). Values must conform to schema.type semantics (int = delta, bool/enum/string = absolute overwrite). **Flag references must strictly be within story-spec's flags whitelist**
+   - Character appearance timing: ${characters.filter((c) => c.appears_from && c.appears_from !== 'act_1').map((c) => `${c.name} starting from ${c.appears_from}`).join(', ') || 'all characters present throughout'}
+7. For each ending: write id, title, condition, intent (NO body — that comes later)
+   - Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above. Every key referenced in a condition must exist in state_schema
+   - **The last ending must** use \`condition: default\` as the fallthrough
+   - Cross-character aggregation (\`all_chars\` / \`any_char\`) \`axis\` may only be a shared axis (bond or one of the 2 from story-spec's shared_axes_custom)
 
-- **Layer 1: Shared axes (3 per character, no opt-out)**
-  - \`"affinity.<char_slug>.bond"\`
-  - \`"affinity.<char_slug>.<a>"\`
-  - \`"affinity.<char_slug>.<b>"\`
-  - Each field includes desc / type=int / range=[0, 10] / default
-  - **default**: Read story-spec's \`characters[i].shared_initial_overrides\`. If a character has an override for that axis, use the override value; otherwise use the global default of 5
+**Route Structure (if story-spec defines routes):**
+- Common route scenes: shared by all players, choices build affinity + set key flags
+- Gate scene: type \`"affinity_gate"\` with routing conditions (affinity thresholds + flag checks)
+  - Routing entries evaluated in order, first match wins
+  - Last entry must be \`condition: "default"\`
+  - Each routing entry has route_id + condition + next
+- Route scenes: tagged with \`route\` field, linear within each route (choices affect affinity for endings, \`next\` stays within route)
+- Route endings: tagged with \`route\` field, each route has its own endings
 
-- **Layer 2: Character-specific axes (from story-spec's \`characters[i].axes\` list)**
-  - 0-2 per character, each translated to \`"affinity.<char_slug>.<axis.english>"\`
-  - Each field includes desc / type=int / range=[0, 10] / default=axis.initial
+In the plan's scenes, the gate scene looks like:
+\`\`\`json
+{
+  "scene-gate": {
+    "type": "affinity_gate",
+    "outline": "Route branching point",
+    "routing": [
+      { "route_id": "route-a", "condition": { "all_of": ["..."] }, "next": "scene-a01" },
+      { "route_id": "route-b", "condition": "default", "next": "scene-b01" }
+    ]
+  }
+}
+\`\`\`
 
-- **Layer 3: Flags (copied verbatim from story-spec's Story State)**
-  - Every flag in story-spec must have a corresponding \`"flags.<name>"\` field in state_schema
-  - Each field includes desc (copied from story-spec's desc) / type=bool / default=story-spec's initial
-  - You **must not** add, remove, or rename flags; you **must not** create flags not declared in story-spec
+8. Write the plan to \`.build-<id>/plan.json\`
+9. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script plan <id>\`
+10. The CLI will:
+    - Validate JSON syntax, schema, graph integrity
+    - Auto-compute predecessors and is_convergence for each scene
+    - Compute generation_order (topological sort)
+    - Write the enriched plan back
+11. Read PLAN_OK output: note generation_order and convergence_points
+12. If error -> read error message -> fix plan -> re-Write -> retry
 
-Strictly follow the naming rules and type set from the "state_schema Creation Constraints" section above.
+**Step B: Generate Scenes (in generation_order)**
 
-**Step 2: Write initial_state**
-- Field set **strictly ==** state_schema field set
-- Each field value is taken from schema.default (shared axes also use default — no need to re-check overrides since they were already reflected in default during Step 1)
+Generate each scene following the order from PLAN_OK. For each scene-id:
 
-**Step 3: Write scenes**
+1. Read \`.build-<id>/plan.json\`:
+   - This scene's outline, cast, emotional_beat, choices
+   - narrative.character_arcs for characters in this scene
+   - This scene's is_convergence flag
+2. Read all predecessor scenes: \`.build-<id>/scenes/<pred>.json\` for each pred in this scene's predecessors
+3. Read context_refs scenes: \`.build-<id>/scenes/<ref>.json\` for refs not already in predecessors
+4. **If is_convergence == true**: This scene is reached from multiple paths. Your narration MUST NOT reference events or dialogue from any specific predecessor. Write path-neutral prose.
+5. **Gate scenes** (type \`"affinity_gate"\`): auto-generated from the plan. Write the routing JSON only — no narration text needed (optional short narration is allowed). The gate's \`routing\` array is copied verbatim from plan.json.
+6. Generate the scene JSON:
+   \`\`\`json
+   {
+     "text": "full narration + dialogue",
+     "choices": [
+       { "id": "c1", "text": "option text", "consequences": { "affinity.<char_slug>.trust": 2 }, "next": "scene-002" }
+     ]
+   }
+   \`\`\`
+   - **Prose constraints**: narration and dialogue must comply with prose_style:
+     - Every \`bad\` pattern in \`forbidden_patterns\` is a hard red line that must not appear
+     - \`ip_specific\` defines terminology and naming conventions that must be followed when writing for the corresponding character
+     - If a character has a \`character_voice_summary\`, use that summary as the voice anchor, taking priority over non-target-language source text in style.md
+6. Write to \`.build-<id>/draft/<scene-id>.json\`
+7. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script scene <id> <scene-id>\`
+8. If error -> read error -> fix draft -> re-Write -> retry (max 3 times)
 
-**MANDATORY PREP before writing any narration/dialogue: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. These are hard constraints on this story's text, not suggestions. Step 5.g will verify your output against each one. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
+**Step C: Generate Endings (after ALL scenes)**
 
-- Each scene contains \`id\` / \`cast\` / \`narration\` / \`dialogue\` / \`choices\`
-- Every \`choice.consequences\` key must be **character-for-character copied** from state_schema (exact literal string match)
-- Values must conform to schema.type semantics (int = delta, bool/enum/string = absolute overwrite)
-- Transitions use \`next: "scene-id"\`
-- **Important**: consequences may only reference fields declared in state_schema. **Flag references must strictly be within story-spec's flags whitelist**
-- **Prose constraints**: narration and dialogue must comply with prose_style:
-  - Every \`bad\` pattern in \`forbidden_patterns\` is a hard red line that must not appear
-  - \`ip_specific\` defines terminology and naming conventions that must be followed when writing for the corresponding character
-  - If a character has a \`character_voice_summary\`, use that summary as the voice anchor, taking priority over non-target-language source text in style.md
+After every scene is generated, create ending bodies based on actual scene content:
 
-**Step 4: Write endings**
-- Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above
-- Every key referenced in a condition must exist in state_schema
-- **The last ending must** use \`condition: default\` as the fallthrough
-- Cross-character aggregation (\`all_chars\` / \`any_char\`) \`axis\` may only be a shared axis (bond or one of the 2 from story-spec's shared_axes_custom)
+1. For each ending in plan:
+   - Read plan.json for this ending's intent and condition
+   - Read character_arcs to find key_scenes for relevant characters
+   - Read those key_scenes from \`.build-<id>/scenes/\`
+   - Generate the ending body based on intent + actual scene content
+2. Write to \`.build-<id>/draft/<ending-id>.json\`:
+   \`\`\`json
+   { "id": "ending-A", "title": "...", "condition": {...}, "body": "ending narration..." }
+   \`\`\`
+3. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script ending <id> <ending-id>\`
+4. If error -> fix -> retry
 
-**Step 5: Eight-Fold Self-Check**
+**Step D: Build**
 
-Self-check is a **veto process** — failure on any single check requires going back to Steps 0-4 to fix, then restarting the entire self-check.
+Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script build <id>\`
 
-- **Step 5.a — Shared axes completeness**
-  - Expected shared axis set = \`{bond, a, b}\` (from story-spec read in Step 1)
-  - For each character slug, verify state_schema contains all 3 shared axis fields
-  - Missing -> go back to Step 1 to add them -> restart self-check
+This merges plan + scenes + endings into \`runtime/scripts/script-<id>.json\` and cleans up the build directory. The final format is identical to a standard script.json.
 
-- **Step 5.b — Flags set consistency**
-  - Expected flags name set = story-spec Story State's flags name set
-  - The name set of all \`"flags.<name>"\` keys in state_schema must be strictly equal
-  - Missing / extra / renamed -> go back to Step 1 to fix the flags section -> restart self-check
+**Step E: Self-Check (Simplified)**
 
-- **Step 5.c — Consequences key whitelist**
-  - Collect all keys referenced in consequences and condition nodes across scenes/endings
-  - Every key must exist in state_schema (literal equality)
-  - Not found -> go back to Step 3 or Step 4 to fix (note: **do not** add new fields to schema to "satisfy" a reference — fix the reference key to match an existing field instead)
+Most validation is already done incrementally by the CLI. Only two checks remain:
 
-- **Step 5.d — Aggregation DSL axis restriction**
-  - Find all \`all_chars\` / \`any_char\` nodes
-  - Each node's \`axis\` field must be a shared axis name (bond / a / b)
-  - Not a shared axis -> go back to Step 4 to fix
+- **Prose style verification**: Re-read story-spec.md's forbidden_patterns. Scan your generated scene text for violations. If found, use Edit to fix the scene files before they were built (note: after build, the source scenes are cleaned up — if prose issues are found, you must rebuild).
+- **Data coverage**: Verify source material coverage matches Step 0's loading report.
 
-- **Step 5.e — Flags reference whitelist**
-  - In scene consequences, every \`"flags.<name>"\` key's name must be in story-spec's flags whitelist
-  - Not found -> go back to Step 3 to fix the scene (do not add a new flag — choose an existing flag or remove the consequence)
-
-- **Step 5.f — initial_state field set**
-  - state_schema key set = initial_state key set
-  - Misaligned -> go back to Step 2 to fix
-
-- **Step 5.g — Prose style anti-pattern verification**
-  - Open story-spec.md's "Prose Style Anchor" section
-  - For **every** narration and dialogue passage you wrote, check against each \`forbidden_patterns\` entry:
-    - If a structure similar to a \`bad\` pattern appears -> rewrite using the corresponding \`good\` example
-    - If a forbidden translation from \`ip_specific\` was used -> replace with the canonical form
-  - Violation count > 0 -> go back to Step 3 to rewrite affected scenes -> re-run 5.g
-  - **Most commonly missed issues**: English-style measurement clauses, possessive parallel structures, literal metaphor translations, literal gesture translations
-
-- **Step 5.h — Data coverage completeness**
-  - Cross-reference against Step 0's data loading report, verifying each item:
-    - Every character's identity.md is in the report with line count **> 50** (typical > 80)
-    - Every character's style.md is in the report with line count **> 40** (typical > 60)
-    - Every character's behaviors/*.md is in the report, each with line count **> 20** (typical > 30)
-    - Every character's capabilities.md / milestones.md either has a line count or is explicitly \`(not present)\`
-    - story-spec.md is in the report with reasonable line count (> 100)
-    - World dimension files are in the report, covering at least the dimensions the story actually uses
-  - **If any single item's line count is below the thresholds**: most likely \`offset/limit\` parameters slipped through -> immediately re-Read that file (**without any pagination parameters**) -> update Step 0's data loading report -> re-run 5.h
-  - **Detecting data drift**: if Step 0 report's total file count differs from Phase 1's budget declaration file count by > 2, use \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` to verify actual file count, Read any missing items, then re-run 5.h
-
-Every failed self-check requires going back to the corresponding step to fix, then re-running the complete self-check flow. **Only after passing all 8 checks** may you proceed to Step 6.
-
-**Step 6: Write**
-- After passing all self-checks, use the Write tool to write the complete JSON to \`runtime/scripts/script-<id>.json\` in a single call
-- The output must be valid JSON (matched braces, double-quoted strings, comma-separated, no comments), **not YAML**
-
-**Step 7: Enter Phase 2**
-- Output a confirmation message and enter Phase 2 to run the script
-
-After writing succeeds (or failure fallback is complete), enter Phase 2.
+After self-check passes, enter Phase 2.
 
 # Phase 2: Run Multi-Character Story
 
@@ -396,7 +334,7 @@ For each scene you must output:
 
 Then use AskUserQuestion to present choices:
 - question: situational prompt for the current scene
-- options: the script's choices for this scene **+ append "💾 Save current progress" at the end**
+- options: the script's choices for this scene (**choices <= 3 per scene**) **+ append "💾 Save current progress" at the end**
 - multiSelect: false
 
 ## State Tracking Rules (Multi-Character)
@@ -433,6 +371,15 @@ ${initialState}
 - User enters free text -> respond in character as the most contextually relevant present character,
   then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
 - Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
+
+### Affinity Gate Handling
+
+When the current scene has type \`"affinity_gate"\`:
+1. If the gate has text, render it as narration
+2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state route <script-id> <gate-scene-id>\`
+3. Parse output: \`ROUTE <route_id> → <next-scene-id>\`
+4. Narrate the route entry naturally (e.g., a brief transition sentence fitting the story mood)
+5. Immediately render the next scene (no AskUserQuestion for gates — gates are automatic transitions)
 
 ### You Only Stop Rendering in 4 Situations
 
@@ -501,7 +448,12 @@ When entering Phase 2 for the first time, call **init** instead of apply:
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
 \`\`\`
 
-The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. Then begin rendering the first scene. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
+The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
+
+**Before rendering the first scene**, call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
+"分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
+
+Then begin rendering the first scene.
 
 ## Character Entrance Rules
 
@@ -548,7 +500,8 @@ Weave details naturally into narration and character dialogue — do not present
 ## Ending Determination Rules
 
 When reaching the final stage of the story, match endings based on accumulated multi-character affinity state:
-- Check each ending's trigger condition from highest to lowest priority as defined in the script
+- Read \`meta.yaml\`'s \`current_route\` field (if present). Only evaluate endings whose \`route\` field matches \`current_route\`. If no \`route\` field exists on an ending, it applies to all routes
+- Check each eligible ending's trigger condition from highest to lowest priority as defined in the script
 - Conditions may involve combinations of multiple characters' affinity axes and flags
 - The first satisfied condition triggers the corresponding ending
 - If no condition is met, trigger the default ending (the last one)
@@ -639,7 +592,7 @@ If the user wants to play an entirely new story (not replay the current script),
 ## Control Flow Self-Pausing (Strictly Prohibited)
 - **Never** insert "continue?", "next step", "shall I expand scene-X?" or similar meta-confirmations
 - **Never** self-rate-limit because "the response seems too long" / "to avoid verbosity" / "let me pause here". Length is not your decision axis; scene boundaries are
-- **Never** mix control flow options like "Continue" / "Status" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array **+ one trailing "💾 Save current progress"** (the only allowed non-script option)
+- **Never** mix control flow options like "Continue" / "Status" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array **+ "💾 Save current progress"** (the only allowed non-script option)
 - **Never** stop writing after apply_consequences completes without rendering the next scene. apply_consequences -> render next scene is **a single atomic action**
 - **Never** omit the "💾 Save current progress" option. Every AskUserQuestion **must** include this option at the end
 
@@ -718,96 +671,24 @@ Using the above materials and the user_direction collected in Phase 0 (if any), 
 - All time anchors referenced in the script (years, eras, battle numbers, etc.) must match the \`display_time\` in \`history/timeline.md\` sections
 - Do not fabricate event details that conflict with \`history/events/\` descriptions
 
-## Script Persistence (Mandatory)
+## Script Building (Incremental)
 
-After script generation is complete, you **must** use the Write tool to save the complete script in **JSON format** to:
+Script generation uses an incremental plan-then-build approach. You do NOT write the complete script in a single call. Instead:
 
-\`\`\`
-\${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json
-\`\`\`
+1. Write a **plan** (narrative blueprint, no scene text) -> validate with CLI
+2. Write each **scene** individually -> validate with CLI
+3. Write each **ending** individually -> validate with CLI
+4. CLI **builds** the final script.json from all pieces
 
-\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary (e.g., \`a3f9c2e1\`).
+Build directory: \`\${CLAUDE_SKILL_DIR}/runtime/scripts/.build-<id>/\`
+Final output: \`\${CLAUDE_SKILL_DIR}/runtime/scripts/script-<id>.json\`
 
-**Important: This is JSON, not YAML**. The top level is a JSON object:
-
-\`\`\`json
-{
-  "id": "<8-char short hash>",
-  "title": "<short script title>",
-  "generated_at": "<ISO 8601 timestamp>",
-  "user_direction": "<Phase 0 user direction text, empty string if none>",
-  "acts": 3,
-
-  "state_schema": {
-    "axes.trust": { "type": "int", "desc": "...", "default": 3, "range": [0, 10] },
-    "flags.shared_secret": { "type": "bool", "desc": "...", "default": false }
-  },
-
-  "initial_state": {
-    "axes.trust": 3,
-    "flags.shared_secret": false
-  },
-
-  "scenes": {
-    "scene-001": {
-      "text": "<full narration + dialogue as a single text block>",
-      "choices": [
-        {
-          "id": "choice-1",
-          "text": "<option A>",
-          "consequences": { "axes.trust": 2 },
-          "next": "scene-002"
-        },
-        {
-          "id": "choice-2",
-          "text": "<option B>",
-          "consequences": { "flags.shared_secret": true },
-          "next": "scene-003"
-        }
-      ]
-    }
-  },
-
-  "endings": [
-    {
-      "id": "ending-A",
-      "title": "<ending title>",
-      "condition": {
-        "all_of": [
-          { "key": "<schema field literal key>", "op": ">=", "value": 7 },
-          { "key": "<flag field literal key>", "op": "==", "value": true }
-        ]
-      },
-      "body": "<ending narration>"
-    },
-    {
-      "id": "ending-default",
-      "title": "Default ending",
-      "condition": "default",
-      "body": "<fallthrough ending narration>"
-    }
-  ]
-}
-\`\`\`
+\`<id>\` is an 8-character short hash generated from the current timestamp and user_direction summary.
 
 For detailed schema declaration rules, naming constraints, and type sets, see the "state_schema Creation Constraints" section above.
 For the complete condition DSL syntax, see the "Endings Condition Structured DSL" section above.
 
-**Write call requirements**:
-- Write the complete file in a single call — do not append in segments
-- **Must be valid JSON** — matched braces, comma-separated, double-quoted strings, no comments
-- **Do not** write YAML frontmatter (\`---\` delimiter lines)
-- After writing, output a confirmation to the user: "Script saved as \`script-<id>.json\`"
-- The script remains in your context after writing; Phase 2 uses it directly
-
-**Write failure fallback**:
-- If the Write tool call fails, output the error message
-- Still enter Phase 2 to run the script (the script is available in context)
-- Inform the user: "This script could not be persisted; it will not be reproducible on retry"
-
-## Phase 1 Creation Steps (Strict Sequential Order)
-
-Follow these **8 steps (Step 0 - Step 7)** to create script.json. **Do not skip any step**:
+## Phase 1 Creation Steps
 
 **Step 0: Data Loading Report (Mandatory)**
 
@@ -839,77 +720,117 @@ If any single item has a suspiciously low line count (e.g., identity.md with onl
 
 **You may only proceed to Step 1 after the report is fully output**.
 
-**Step 1: Design state_schema**
+**Step A: Plan**
 
 **Precondition check**: If you have not yet output Step 0's data loading report, **stop immediately and go back to do Step 0**.
 
-- First read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`'s Story State section (yaml fenced block) to extract:
-  - \`flags\` list (name / desc / initial) — this is the flag whitelist you can use
-- Translate axes from story-spec into \`axes.<axis>\` or \`affinity.<character>.<axis>\` schema fields
-- Copy every flag declared in Story State verbatim to state_schema's \`flags.<name>\` (**no more, no fewer**)
-- Write each field in full: desc / type / default / range or values
-- Strictly follow the naming rules and type set from the "state_schema Creation Constraints" section above
+Design the narrative blueprint. This is structure only — no scene text.
 
-**Step 2: Write initial_state**
-- Field set **strictly ==** state_schema field set
-- Each field value is taken from schema.default
+1. Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`'s Story State section to extract:
+   - \`flags\` list (name / desc / initial) — this is the flag whitelist you can use
+   - Translate axes from story-spec into \`axes.<axis>\` or \`affinity.<character>.<axis>\` schema fields
+   - Copy every flag declared in Story State verbatim to state_schema's \`flags.<name>\` (**no more, no fewer**)
+   - Strictly follow the naming rules and type set from the "state_schema Creation Constraints" section above
+2. Write initial_state (field set strictly == state_schema)
+3. **MANDATORY PREP: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. These are hard constraints on this story's text, not suggestions. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
+4. Plan the narrative arc, act structure, and character arcs
+5. For each scene: write outline, cast, emotional_beat, choices (id/text/intent/next), continuity, context_refs
+   - **choices <= 3 per scene** (the CLI will reject more than 3)
+   - context_refs: list scene-ids that this scene needs to reference for narrative callbacks (non-predecessor scenes only; predecessors are auto-computed)
+   - Every \`choice.consequences\` key must be **character-for-character copied** from state_schema. Values must conform to schema.type (int = delta, bool/enum/string = overwrite). **Flag references must strictly be within story-spec's flags whitelist**
+6. For each ending: write id, title, condition, intent (NO body — that comes later)
+   - Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above
+   - **The last ending must** use \`condition: default\` as the fallthrough
 
-**Step 3: Write scenes**
+**Route Structure (if story-spec defines routes):**
+- Common route scenes: shared by all players, choices build affinity + set key flags
+- Gate scene: type \`"affinity_gate"\` with routing conditions (affinity thresholds + flag checks)
+  - Routing entries evaluated in order, first match wins
+  - Last entry must be \`condition: "default"\`
+  - Each routing entry has route_id + condition + next
+- Route scenes: tagged with \`route\` field, linear within each route (choices affect affinity for endings, \`next\` stays within route)
+- Route endings: tagged with \`route\` field, each route has its own endings
 
-**MANDATORY PREP before writing any narration/dialogue: Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`, locate the "Prose Style Anchor" section, and absorb every \`forbidden_patterns\` and \`ip_specific\` entry**. Step 5.d will verify against each one. If story-spec contains a fallback section (legacy), use the fallback's generic anti-pattern library as constraints.
+In the plan's scenes, the gate scene looks like:
+\`\`\`json
+{
+  "scene-gate": {
+    "type": "affinity_gate",
+    "outline": "Route branching point",
+    "routing": [
+      { "route_id": "route-a", "condition": { "all_of": ["..."] }, "next": "scene-a01" },
+      { "route_id": "route-b", "condition": "default", "next": "scene-b01" }
+    ]
+  }
+}
+\`\`\`
 
-- Every \`choice.consequences\` key must be **character-for-character copied** from state_schema
-- Values must conform to schema.type (int = delta, bool/enum/string = overwrite)
-- **Prose constraints**: narration and dialogue must comply with prose_style's forbidden_patterns and ip_specific
+7. Write the plan to \`.build-<id>/plan.json\`
+8. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script plan <id>\`
+9. The CLI will:
+   - Validate JSON syntax, schema, graph integrity
+   - Auto-compute predecessors and is_convergence for each scene
+   - Compute generation_order (topological sort)
+   - Write the enriched plan back
+10. Read PLAN_OK output: note generation_order and convergence_points
+11. If error -> read error message -> fix plan -> re-Write -> retry
 
-**Step 4: Write endings**
-- Each ending's \`condition\` must use the format from the "Endings Condition Structured DSL" section above
-- **The last ending must** use \`condition: default\` as the fallthrough
+**Step B: Generate Scenes (in generation_order)**
 
-**Step 5: Self-Check (Multiple Rounds)**
+Generate each scene following the order from PLAN_OK. For each scene-id:
 
-**Step 5.a — Consequences key whitelist**
-- Collect all keys referenced in scene consequences
-- Compare against state_schema's literal key list, one by one
-- Mismatch -> go back to Step 3 to rewrite -> re-run self-check
+1. Read \`.build-<id>/plan.json\`:
+   - This scene's outline, cast, emotional_beat, choices
+   - narrative.character_arcs for characters in this scene
+   - This scene's is_convergence flag
+2. Read all predecessor scenes: \`.build-<id>/scenes/<pred>.json\` for each pred in this scene's predecessors
+3. Read context_refs scenes: \`.build-<id>/scenes/<ref>.json\` for refs not already in predecessors
+4. **If is_convergence == true**: This scene is reached from multiple paths. Your narration MUST NOT reference events or dialogue from any specific predecessor. Write path-neutral prose.
+5. **Gate scenes** (type \`"affinity_gate"\`): auto-generated from the plan. Write the routing JSON only — no narration text needed (optional short narration is allowed). The gate's \`routing\` array is copied verbatim from plan.json.
+6. Generate the scene JSON:
+   \`\`\`json
+   {
+     "text": "full narration + dialogue",
+     "choices": [
+       { "id": "c1", "text": "option text", "consequences": { "axes.trust": 2 }, "next": "scene-002" }
+     ]
+   }
+   \`\`\`
+   - **Prose constraints**: narration and dialogue must comply with prose_style's forbidden_patterns and ip_specific
+8. Write to \`.build-<id>/draft/<scene-id>.json\`
+9. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script scene <id> <scene-id>\`
+10. If error -> read error -> fix draft -> re-Write -> retry (max 3 times)
 
-**Step 5.b — Flags reference whitelist**
-- Collect all \`flags.<name>\` references (from consequences + conditions)
-- Compare against the flags list declared in story-spec's Story State section
-- Any flag not in the whitelist -> go back to Step 3 or 4 to remove/replace -> re-run self-check
+**Step C: Generate Endings (after ALL scenes)**
 
-**Step 5.c — initial_state field set alignment**
-- \`initial_state\` field set must **strictly ==** state_schema field set
-- Mismatch -> go back to Step 2 to fix -> re-run self-check
+After every scene is generated, create ending bodies based on actual scene content:
 
-**Step 5.d — Prose style anti-pattern verification**
-- Open story-spec.md's "Prose Style Anchor" section
-- For **every** narration and dialogue passage you wrote, check against each \`forbidden_patterns\` entry:
-  - If a structure similar to a \`bad\` pattern appears -> rewrite using the corresponding \`good\` example
-  - If a forbidden translation from \`ip_specific\` was used -> replace with the canonical form
-- Violation count > 0 -> go back to Step 3 to rewrite -> re-run 5.d
-- **Most commonly missed issues**: English-style measurement clauses, possessive parallel structures, literal metaphor translations, literal gesture translations, literal negation
+1. For each ending in plan:
+   - Read plan.json for this ending's intent and condition
+   - Read character_arcs to find key_scenes for relevant characters
+   - Read those key_scenes from \`.build-<id>/scenes/\`
+   - Generate the ending body based on intent + actual scene content
+2. Write to \`.build-<id>/draft/<ending-id>.json\`:
+   \`\`\`json
+   { "id": "ending-A", "title": "...", "condition": {...}, "body": "ending narration..." }
+   \`\`\`
+3. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script ending <id> <ending-id>\`
+4. If error -> fix -> retry
 
-**Step 5.e — Data coverage completeness**
-- Cross-reference against Step 0's data loading report, verifying each item:
-  - identity.md line count **> 50** (typical > 80)
-  - style.md line count **> 40** (typical > 60)
-  - Each behaviors/*.md line count **> 20** (typical > 30)
-  - capabilities.md / milestones.md either has a line count or is explicitly \`(not present)\`
-  - story-spec.md line count > 100
-  - World files are in the report, covering at least the dimensions the story actually uses
-- **If any single item's line count is below the thresholds**: most likely \`offset/limit\` parameters slipped through -> immediately re-Read that file (**without any pagination parameters**) -> update Step 0's data loading report -> re-run 5.e
-- **Detecting data drift**: if Step 0 report's total file count differs from Phase 1's budget declaration file count by > 2, use \`Glob \${CLAUDE_SKILL_DIR}/**/*.md\` to verify actual file count, Read any missing items, then re-run 5.e
+**Step D: Build**
 
-**Self-check failure handling**: any failed check requires going back to the corresponding Step to fix, then re-running 5.a-5.e in full. **Only after all checks pass may you proceed to Step 6 Write**.
+Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script build <id>\`
 
-**Step 6: Write**
-- After self-checks pass, use the Write tool to write the complete JSON to \`runtime/scripts/script-<id>.json\` in a single call
-- The output must be valid JSON (matched braces, double-quoted strings, comma-separated, no comments), **not YAML**
+This merges plan + scenes + endings into \`runtime/scripts/script-<id>.json\` and cleans up the build directory. The final format is identical to a standard script.json.
 
-**Step 7: Enter Phase 2**
+**Step E: Self-Check (Simplified)**
 
-After writing succeeds (or failure fallback is complete), enter Phase 2.
+Most validation is already done incrementally by the CLI. Only two checks remain:
+
+- **Prose style verification**: Re-read story-spec.md's forbidden_patterns. Scan your generated scene text for violations. If found, use Edit to fix the scene files before they were built (note: after build, the source scenes are cleaned up — if prose issues are found, you must rebuild).
+- **Data coverage**: Verify source material coverage matches Step 0's loading report.
+
+After self-check passes, enter Phase 2.
 
 # Phase 2: Run Story
 
@@ -940,7 +861,7 @@ For each scene you must output:
 
 Then use AskUserQuestion to present choices:
 - question: situational prompt for the current scene (e.g., "What will you do?")
-- options: the script's choices for this scene **+ append "💾 Save current progress" at the end**
+- options: the script's choices for this scene (**choices <= 3 per scene**) **+ append "💾 Save current progress" at the end**
 - multiSelect: false
 
 ## State Tracking Rules
@@ -965,6 +886,15 @@ You must internally maintain a state object in the following format:
 - User enters free text -> respond in character within the current scene,
   then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
 - Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
+
+### Affinity Gate Handling
+
+When the current scene has type \`"affinity_gate"\`:
+1. If the gate has text, render it as narration
+2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state route <script-id> <gate-scene-id>\`
+3. Parse output: \`ROUTE <route_id> → <next-scene-id>\`
+4. Narrate the route entry naturally (e.g., a brief transition sentence fitting the story mood)
+5. Immediately render the next scene (no AskUserQuestion for gates — gates are automatic transitions)
 
 ### You Only Stop Rendering in 4 Situations
 
@@ -1033,7 +963,12 @@ When entering Phase 2 for the first time, call **init** instead of apply:
 bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
 \`\`\`
 
-The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass, then begin rendering the first scene. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
+The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
+
+**Before rendering the first scene**, call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
+"分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
+
+Then begin rendering the first scene.
 
 ## Act Transition Rules
 
@@ -1059,7 +994,8 @@ read relevant .md files from dimension subdirectories under \`\${CLAUDE_SKILL_DI
 ## Ending Determination Rules
 
 When reaching the final stage of the story, match endings based on accumulated state:
-- Check each ending's trigger condition from highest to lowest priority as defined in the script
+- Read \`meta.yaml\`'s \`current_route\` field (if present). Only evaluate endings whose \`route\` field matches \`current_route\`. If no \`route\` field exists on an ending, it applies to all routes
+- Check each eligible ending's trigger condition from highest to lowest priority as defined in the script
 - The first satisfied condition triggers the corresponding ending
 
 ## Ending Display Rules
@@ -1111,8 +1047,9 @@ If the user wants to play an entirely new story (not replay the current script),
 ## Control Flow Self-Pausing (Strictly Prohibited)
 - **Never** insert "continue?", "next step", "shall I expand scene-X?" or similar meta-confirmations
 - **Never** self-rate-limit because "the response seems too long" / "to avoid verbosity" / "let me pause here". Length is not your decision axis; scene boundaries are
-- **Never** mix control flow options like "Continue" / "Status" / "Save" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array
+- **Never** mix control flow options like "Continue" / "Status" / "Next step" into AskUserQuestion options. Options **must be** a verbatim copy of the current scene's script choices array **+ "💾 Save current progress"** (the only allowed non-script option)
 - **Never** stop writing after apply_consequences completes without rendering the next scene. apply_consequences -> render next scene is **a single atomic action**
+- **Never** omit the "💾 Save current progress" option. Every AskUserQuestion **must** include this option at the end
 
 ## Progress/Save Exposure (Fourth Wall)
 - **Never** show the user "story has entered Act N" / "mid-Act 3" / "X% complete" or similar progress indicators
@@ -1865,7 +1802,10 @@ export function generateSkillMd(config: SkillTemplateConfig): string {
     default_acts,
     expectedFileCount,
     expectedTextSizeKb,
+    routeCharacters,
   } = config
+
+  const hasRoutes = !!routeCharacters && routeCharacters.length > 0
 
   const isMultiCharacter = !!characters && characters.length > 1
   // For the multi-character intro display, we use the original (possibly CJK) name.
@@ -1953,7 +1893,7 @@ Execution has five phases: Phase -1 (Script Library Menu) -> Phase 0 (Length & S
     ? `\n## Character Path Mapping (Important)\n\nAll character file paths in this skill use ASCII slugs because the Anthropic Skill spec requires archive paths to be ASCII-only. When you need to read a character's identity / style / capabilities / milestones / behaviors, you **must** use the slug from the table below:\n\n${characters.map((c) => `- **${c.display_name ?? c.name}** → \`souls/${c.slug}/\``).join('\n')}\n\nFor example: to read ${characters[0]!.display_name ?? characters[0]!.name}'s identity, call \`Read \${CLAUDE_SKILL_DIR}/souls/${characters[0]!.slug}/identity.md\`.\n\nWhen the rest of this document refers to \`souls/{character}/...\`, {character} is a placeholder — **use the slug from the table above for the actual path**.\n`
     : ''
 
-  const enginePart = isMultiCharacter
+  let enginePart = isMultiCharacter
     ? buildMultiCharacterEngine(characters!, { expectedFileCount, expectedTextSizeKb })
     : buildSingleCharacterEngine(
         storyName,
@@ -1962,6 +1902,16 @@ Execution has five phases: Phase -1 (Script Library Menu) -> Phase 0 (Length & S
         protagonistDisplayName,
         { expectedFileCount, expectedTextSizeKb },
       )
+
+  // When routes are defined, strengthen route instructions from conditional to mandatory
+  if (hasRoutes) {
+    const routeNames = routeCharacters!.map(r => r.name).join(', ')
+    const routeCount = routeCharacters!.length
+    enginePart = enginePart.replace(
+      /\*\*Route Structure \(if story-spec defines routes\):\*\*/g,
+      `**Route Structure (MANDATORY — story-spec defines ${routeCount} routes: ${routeNames}):**\n\n**You MUST create an affinity_gate scene and ${routeCount} route-specific scene groups. A plan without routes will be REJECTED by the CLI validator.**`,
+    )
+  }
 
   return `---
 name: ${skillName}

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runInit } from '../../../../src/export/state/init.js'
 import { runApply } from '../../../../src/export/state/apply.js'
@@ -186,6 +186,19 @@ describe('runSave', () => {
       'utf8'
     )
     expect(autoStateAfter).toBe(autoStateBefore)
+  })
+
+  it('copies history.log to manual save', () => {
+    fixture = createFixture()
+    runInit(fixture.skillRoot, 'script-001')
+    runApply(fixture.skillRoot, 'script-001', 'scene-001', 'choice-1')
+    const saveResult = runSave(fixture.skillRoot, 'script-001')
+    expect(saveResult.ok).toBe(true)
+    if (!saveResult.ok) return
+    const manualHistoryPath = join(fixture.skillRoot, 'runtime/saves/script-001/manual', saveResult.timestamp, 'history.log')
+    expect(existsSync(manualHistoryPath)).toBe(true)
+    const content = readFileSync(manualHistoryPath, 'utf8')
+    expect(content).toBe('scene-001:choice-1\n')
   })
 
   it('manual save limit is 3', () => {

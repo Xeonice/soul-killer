@@ -116,6 +116,35 @@ export function defaultScript(): FixtureScript {
   }
 }
 
+export function cyclicScript(): FixtureScript {
+  return {
+    id: 'script-cycle',
+    state_schema: {
+      'flags.visited': { type: 'bool', desc: 'visited', default: false },
+    },
+    initial_state: { 'flags.visited': false },
+    scenes: {
+      'scene-a': {
+        text: 'start',
+        choices: [
+          { id: 'choice-1', text: 'go to b', consequences: { 'flags.visited': true }, next: 'scene-b' },
+        ],
+      },
+      'scene-b': {
+        text: 'middle',
+        choices: [
+          { id: 'choice-1', text: 'back to a', consequences: {}, next: 'scene-a' },
+          { id: 'choice-2', text: 'go to c', consequences: {}, next: 'scene-c' },
+        ],
+      },
+      'scene-c': {
+        text: 'end',
+        choices: [{ id: 'choice-1', text: 'finish', consequences: {} }],
+      },
+    },
+  }
+}
+
 export function createFixture(script: FixtureScript = defaultScript()): Fixture {
   const skillRoot = mkdtempSync(join(tmpdir(), 'soulkiller-state-'))
   mkdirSync(join(skillRoot, 'runtime', 'scripts'), { recursive: true })

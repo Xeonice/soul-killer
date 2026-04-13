@@ -273,6 +273,7 @@ export function packageSkill(config: PackageConfig): PackageResult {
     default_acts: story_spec.default_acts,
     expectedFileCount,
     expectedTextSizeKb,
+    routeCharacters: story_spec.route_characters?.map(r => ({ slug: r.slug, name: r.name })),
   })
   unprefixedFiles['SKILL.md'] = strToU8(skillContent)
 

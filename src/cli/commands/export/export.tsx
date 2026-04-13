@@ -119,11 +119,28 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   }, [])
 
   const handleAskUser = useCallback(
-    (question: string, options?: AskUserOption[], allowFreeInput?: boolean, _multiSelect?: boolean): Promise<string> => {
+    (question: string, options?: AskUserOption[], allowFreeInput?: boolean, multiSelect?: boolean, maxSelect?: number): Promise<string> => {
       return new Promise((resolve) => {
         askResolverRef.current = resolve
 
-        if (allowFreeInput && (!options || options.length === 0)) {
+        if (options && options.length > 0) {
+          // Multi-select or single-select mode with options
+          const preSelected = options
+            .map((o, i) => (o.preSelected ? i : -1))
+            .filter((i) => i >= 0)
+          setPanelState((prev) => ({
+            ...prev,
+            activeZone: {
+              type: 'select',
+              question,
+              options: options.map((o) => ({ label: o.label, description: o.description })),
+              cursor: 0,
+              multi: multiSelect ?? false,
+              selected: preSelected,
+              maxSelect,
+            },
+          }))
+        } else if (allowFreeInput) {
           // Free text input mode (agent-triggered)
           setTextInputActive(true)
           setTextInputPrompt(question)
@@ -415,7 +432,11 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         if (!prev.activeZone.multi) return prev
         const currentSelected = prev.activeZone.selected ?? []
         const cursor = prev.activeZone.cursor
-        const newSelected = currentSelected.includes(cursor)
+        const isDeselect = currentSelected.includes(cursor)
+        if (!isDeselect && prev.activeZone.maxSelect && currentSelected.length >= prev.activeZone.maxSelect) {
+          return prev // Already at max — ignore toggle
+        }
+        const newSelected = isDeselect
           ? currentSelected.filter((i) => i !== cursor)
           : [...currentSelected, cursor]
         return { ...prev, activeZone: { ...prev.activeZone, selected: newSelected } }

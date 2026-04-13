@@ -17,6 +17,7 @@ import {
   writeSaveTransaction,
   type MetaFile,
 } from './io.js'
+import { appendHistory, historyPath } from './history.js'
 
 export interface ApplyResult {
   scriptId: string
@@ -72,6 +73,9 @@ export function runApply(
     { currentScene: nextScene, state: working },
     newMeta
   )
+
+  // Append to choice history (non-critical, failure is silently ignored)
+  appendHistory(historyPath(paths.stateYamlPath), sceneId, choiceId)
 
   return {
     scriptId: meta.scriptRef,

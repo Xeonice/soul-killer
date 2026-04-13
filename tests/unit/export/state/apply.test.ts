@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { runInit } from '../../../../src/export/state/init.js'
 import { runApply } from '../../../../src/export/state/apply.js'
@@ -121,6 +121,16 @@ describe('runApply', () => {
     expect(() =>
       runApply(fixture!.skillRoot, 'script-001', 'scene-001', 'choice-1')
     ).toThrow(/unknown state key/)
+  })
+
+  it('appends to history.log after apply', () => {
+    fixture = createFixture()
+    runInit(fixture.skillRoot, 'script-001')
+    runApply(fixture.skillRoot, 'script-001', 'scene-001', 'choice-1')
+    const hPath = join(fixture.skillRoot, 'runtime/saves/script-001/auto/history.log')
+    expect(existsSync(hPath)).toBe(true)
+    const content = readFileSync(hPath, 'utf8')
+    expect(content).toBe('scene-001:choice-1\n')
   })
 
   it('rejects enum value not in values list', () => {

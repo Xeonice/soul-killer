@@ -277,4 +277,95 @@ describe('runCli — CLI dispatcher', () => {
       expect(parsed.manual).toEqual([])
     })
   })
+
+  describe('tree', () => {
+    it('dispatches tree --stop when no server running', async () => {
+      fixture = createFixture()
+      process.env.SKILL_ROOT = fixture.skillRoot
+      const code = await runCli(['tree', '--stop'])
+      expect(code).toBe(0)
+      expect(stdoutBuf).toContain('TREE_NOT_RUNNING')
+    })
+  })
+
+  describe('script plan', () => {
+    it('dispatches script plan and outputs PLAN_OK summary', async () => {
+      const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      const { tmpdir } = await import('node:os')
+
+      const skillRoot = mkdtempSync(join(tmpdir(), 'sk-main-plan-'))
+      process.env.SKILL_ROOT = skillRoot
+
+      try {
+        const plan = {
+          id: 'main-plan-001',
+          state_schema: {
+            'flags.started': { type: 'bool', desc: 'started', default: false },
+          },
+          initial_state: { 'flags.started': false },
+          narrative: {
+            arc: 'main arc',
+            acts: [{ act: 1, title: 'Act 1', theme: 'test', scenes: ['s-001'] }],
+          },
+          scenes: {
+            's-001': {
+              act: 1,
+              title: 'Start',
+              outline: 'the beginning',
+              choices: [{ id: 'c1', text: 'begin', intent: 'start', next: '' }],
+            },
+          },
+          endings: [
+            { id: 'ending-default', title: 'Default', condition: 'default', intent: 'fallback' },
+          ],
+        }
+
+        const buildDir = join(skillRoot, 'runtime', 'scripts', '.build-main-plan-001')
+        mkdirSync(buildDir, { recursive: true })
+        writeFileSync(join(buildDir, 'plan.json'), JSON.stringify(plan, null, 2), 'utf8')
+
+        const code = await runCli(['script', 'plan', 'main-plan-001'])
+        expect(code).toBe(0)
+        expect(stdoutBuf).toContain('PLAN_OK')
+        expect(stdoutBuf).toContain('scenes: 1')
+        expect(stdoutBuf).toContain('fields: 1')
+        expect(stdoutBuf).toContain('endings: 1')
+      } finally {
+        rmSync(skillRoot, { recursive: true, force: true })
+      }
+    })
+
+    it('returns exit 2 when id argument is missing', async () => {
+      const code = await runCli(['script', 'plan'])
+      expect(code).toBe(2)
+      expect(stderrBuf).toContain('usage: state script plan')
+    })
+
+    it('returns exit 1 when plan.json not found', async () => {
+      const { mkdtempSync, rmSync } = await import('node:fs')
+      const { join } = await import('node:path')
+      const { tmpdir } = await import('node:os')
+
+      const skillRoot = mkdtempSync(join(tmpdir(), 'sk-main-noplan-'))
+      process.env.SKILL_ROOT = skillRoot
+
+      try {
+        const code = await runCli(['script', 'plan', 'no-such-id'])
+        expect(code).toBe(1)
+        expect(stderrBuf).toContain('error:')
+      } finally {
+        rmSync(skillRoot, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('route', () => {
+    it('dispatches route command — missing args returns exit 2 with usage message', async () => {
+      // Missing gate-scene-id arg
+      const code = await runCli(['route', 'test-route'])
+      expect(code).toBe(2)
+      expect(stderrBuf).toContain('usage: state route')
+    })
+  })
 })

@@ -7,6 +7,7 @@ import type {
   CharacterRole,
   CharacterSpec,
   ProseStyle,
+  RouteCharacter,
   StorySpecConfig,
   StoryState,
 } from '../spec/story-spec.js'
@@ -148,6 +149,7 @@ export class ExportBuilder {
   private metadata?: StoryMetadata
   private storyState?: StoryState
   private proseStyle?: ProseStyle
+  private routeCharacters?: RouteCharacter[]
   private readonly characters: Map<string, CharacterDraft> = new Map()
   private readonly insertionOrder: string[] = []
 
@@ -309,6 +311,26 @@ export class ExportBuilder {
     this.proseStyle = s
   }
 
+  /**
+   * Set route focus characters. Called after all add_character calls.
+   * Each route character must reference an already-added character by name.
+   * Typical count: 2-3 characters with interesting conflict/growth potential.
+   */
+  setRouteCharacters(chars: RouteCharacter[]): void {
+    if (chars.length === 0) {
+      throw new Error('route_characters must be non-empty')
+    }
+    if (chars.length > 5) {
+      throw new Error('route_characters should have at most 5 entries')
+    }
+    for (const rc of chars) {
+      if (!rc.slug || !rc.name || !rc.reason) {
+        throw new Error(`route character entry missing required fields: slug, name, reason`)
+      }
+    }
+    this.routeCharacters = chars
+  }
+
   addCharacter(
     c: Omit<CharacterDraft, 'specific_axes' | 'shared_initial_overrides' | 'voice_summary'> & {
       voice_summary?: string
@@ -460,6 +482,7 @@ export class ExportBuilder {
         characters: charactersList,
         story_state: this.storyState,
         prose_style: finalProseStyle,
+        route_characters: this.routeCharacters,
       },
     }
   }
@@ -476,6 +499,12 @@ export interface ExportPlanCharacter {
   shared_initial_overrides_hint?: Record<string, number>
 }
 
+export interface RouteCandidate {
+  slug: string
+  name: string
+  reason: string
+}
+
 export interface ExportPlan {
   genre_direction: string
   tone_direction: string
@@ -483,6 +512,7 @@ export interface ExportPlan {
   flags: string[]
   prose_direction: string
   characters: ExportPlanCharacter[]
+  route_candidates?: RouteCandidate[]
 }
 
 // --- Progress event types ---
@@ -506,11 +536,12 @@ export type ExportProgressEvent =
   | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name: string }
   | { type: 'error'; error: string }
 
-export type ExportPhase = 'initiating' | 'planning' | 'plan_review' | 'selecting' | 'analyzing' | 'configuring' | 'packaging' | 'complete' | 'error'
+export type ExportPhase = 'initiating' | 'planning' | 'plan_review' | 'selecting' | 'analyzing' | 'configuring' | 'route_selection' | 'packaging' | 'complete' | 'error'
 
 export interface AskUserOption {
   label: string
   description?: string
+  preSelected?: boolean
 }
 
 export type OnExportProgress = (event: ExportProgressEvent) => void
@@ -518,7 +549,7 @@ export type OnExportProgress = (event: ExportProgressEvent) => void
  * Ask user handler.
  * When `multiSelect` is true, the returned string is a comma-separated list of labels.
  */
-export type AskUserHandler = (question: string, options?: AskUserOption[], allowFreeInput?: boolean, multiSelect?: boolean) => Promise<string>
+export type AskUserHandler = (question: string, options?: AskUserOption[], allowFreeInput?: boolean, multiSelect?: boolean, maxSelect?: number) => Promise<string>
 
 // --- Pre-selected export data (passed in from CLI layer) ---
 

@@ -52,10 +52,16 @@ The submitted plan will be shown to the user for preview (character arrangement 
 
 # Workflow (tools must be called in the following order; keep each call's input brief)
 
-**Step 1**: Analyze character relationships
+**Step 1**: Analyze character relationships + route potential
 - Cross-extract relationships from each character's identity.md, milestones.md, behaviors/relationships.md
 - One-sided mentions still count as relationships
 - **Do not** fabricate relationships not found in the materials
+- **Route potential analysis**: For each character, evaluate:
+  - Internal conflict depth (contradictions in identity.md)
+  - Relationship tension with other characters
+  - Character arc completeness (number and depth of behaviors files)
+  - Whether they have enough material to sustain an independent story route
+  - Rank characters by route potential; identify top 2-3 candidates
 
 **Step 2**: Call \`plan_story\` — set story-level direction
 - genre_direction: high-level genre direction
@@ -63,6 +69,7 @@ The submitted plan will be shown to the user for preview (character arrangement 
 - shared_axes: 2 non-bond shared axes (snake_case, semantically orthogonal)
 - flags: 5-8 key event flags (snake_case, reverse-engineered from expected endings)
 - prose_direction: narrative style direction (IP type, language style)
+- **route_candidates**: top 2-3 characters recommended as route focus, based on Step 1's analysis. Each entry has slug (soul name), name (display name), reason (1-2 sentences explaining why). Empty array if only 1 character total.
 
 **Step 3**: Call \`plan_character\` for each character
 - name: must match the preselected list
@@ -148,7 +155,9 @@ The initial prompt contains an **"# Execution Plan"** block (JSON), which is the
   a) \`add_character\` — register the character according to the plan's role. If the plan marks needs_voice_summary=true, you must provide voice_summary
   b) \`set_character_axes\` — refine the plan's specific_axes_direction into concrete axis definitions (name / english / initial)
 
-**Step 5**: After **all** characters in the plan have been set up, call \`finalize_export\` to trigger the actual packaging.
+**Step 4.5**: Route character selection — if the plan has \`route_candidates\`, the system will ask the user to confirm/adjust the route focus characters. This step is automatic (no tool call needed from you).
+
+**Step 5**: After **all** characters and route selection are complete, call \`finalize_export\` to trigger the actual packaging.
 
 If any call returns \`{ error: ... }\`, fix the error based on the error message and retry.
 **Absolutely do not** stuff all information into a single call — this will fail. Keep each call's input brief.

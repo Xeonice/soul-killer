@@ -162,25 +162,21 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    // Phase 1 must instruct Write tool usage (JSON, not YAML)
-    expect(result).toContain('Script Persistence')
-    expect(result).toContain('Write tool')
+    // Phase 1 must instruct incremental script building
+    expect(result).toContain('Script Building (Incremental)')
     expect(result).toContain('runtime/scripts/script-')
     expect(result).toContain('script-<id>.json')
     expect(result).not.toContain('script-<id>.yaml')
-    // Header fields still enumerated (inside JSON object now)
-    expect(result).toContain('"id"')
-    expect(result).toContain('"title"')
-    expect(result).toContain('"generated_at"')
-    expect(result).toContain('"user_direction"')
-    expect(result).toContain('"acts"')
-    // Explicit JSON format instruction
-    expect(result).toContain('JSON format')
-    expect(result).toContain('valid JSON')
+    // Build directory and final output referenced
+    expect(result).toContain('.build-<id>')
+    expect(result).toContain('plan.json')
+    // Incremental CLI commands
+    expect(result).toContain('script plan')
+    expect(result).toContain('script scene')
+    expect(result).toContain('script ending')
+    expect(result).toContain('script build')
     // Old "save in internal context" wording must be gone
     expect(result).not.toContain('剧本在你的内部上下文中保存，不要输出给用户')
-    // Failure tolerance
-    expect(result).toContain('could not be persisted')
   })
 
   it('includes rename and delete script flows in Phase -1', () => {
@@ -423,14 +419,12 @@ describe('generateSkillMd', () => {
       default_acts: 3,
     })
 
-    expect(result).toContain('Phase 1 Creation Steps (Strict Sequential Order)')
-    expect(result).toContain('Step 1: Design state_schema')
-    expect(result).toContain('Step 2: Write initial_state')
-    expect(result).toContain('Step 3: Write scenes')
-    expect(result).toContain('Step 4: Write endings')
-    expect(result).toContain('Step 5: Self-Check')
-    expect(result).toContain('Step 6: Write')
-    expect(result).toContain('Step 7: Enter Phase 2')
+    expect(result).toContain('Phase 1 Creation Steps')
+    expect(result).toContain('Step A: Plan')
+    expect(result).toContain('Step B: Generate Scenes')
+    expect(result).toContain('Step C: Generate Endings')
+    expect(result).toContain('Step D: Build')
+    expect(result).toContain('Step E: Self-Check (Simplified)')
     expect(result).toContain('character-for-character')
   })
 
@@ -488,7 +482,7 @@ describe('generateSkillMd', () => {
     expect(result).toContain('forbidden_patterns')
     expect(result).toContain('ip_specific')
     // The self-check step for prose_style must exist.
-    expect(result).toContain('Prose style anti-pattern verification')
+    expect(result).toContain('Prose style verification')
   })
 
   it('Phase 2 scene rendering lists high-frequency translatese patterns to avoid', () => {
@@ -607,14 +601,11 @@ describe('generateSkillMd', () => {
       expectedTextSizeKb: 230,
     })
 
-    // Single-character engine uses Step 5.e for data coverage
-    expect(result).toContain('Step 5.e — Data coverage completeness')
-    // Sanity thresholds must be present
-    expect(result).toContain('> 50')
-    expect(result).toContain('> 40')
-    expect(result).toContain('> 20')
-    // Recovery path
-    expect(result).toContain('offset/limit')
+    // Single-character engine uses simplified self-check with data coverage
+    expect(result).toContain('Step E: Self-Check (Simplified)')
+    expect(result).toContain('Data coverage')
+    // Recovery path — prose style verification
+    expect(result).toContain('Prose style verification')
   })
 
   it('Phase 1 Step 5 includes data coverage self-check (multi-character engine)', () => {
@@ -633,12 +624,12 @@ describe('generateSkillMd', () => {
       ],
     })
 
-    // Multi-character engine uses Step 5.h for data coverage
-    expect(result).toContain('Step 5.h — Data coverage completeness')
-    // Header updated to Eight-Fold
-    expect(result).toContain('Step 5: Eight-Fold Self-Check')
-    // Step 1 count in header updated to 8 steps (0-7)
-    expect(result).toContain('8 steps (Step 0 - Step 7)')
+    // Multi-character engine uses simplified self-check with data coverage
+    expect(result).toContain('Step E: Self-Check (Simplified)')
+    expect(result).toContain('Data coverage')
+    // Incremental plan-then-build steps present
+    expect(result).toContain('Step A: Plan')
+    expect(result).toContain('Step D: Build')
   })
 
   it('Phase 2 forbids LLM trained-default self-pause and fourth-wall breaks', () => {
