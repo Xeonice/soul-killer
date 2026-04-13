@@ -12,14 +12,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STATE_SRC = path.resolve(__dirname, '../../../src/export/state')
 
 describe('injectRuntimeFiles', () => {
-  it('adds doctor.sh + state + all .ts files to the archive map', () => {
+  it('adds all .ts files to the archive map under runtime/lib/', () => {
     const files: Record<string, Uint8Array> = {}
     injectRuntimeFiles(files)
 
-    // bin/ entry points
-    expect(files['runtime/bin/doctor.sh']).toBeInstanceOf(Uint8Array)
-    expect(files['runtime/bin/state']).toBeInstanceOf(Uint8Array)
-    // Note: state wrapper loses its .sh suffix intentionally
+    // Shell wrappers are no longer shipped
+    expect(files['runtime/bin/doctor.sh']).toBeUndefined()
+    expect(files['runtime/bin/state']).toBeUndefined()
     expect(files['runtime/bin/state.sh']).toBeUndefined()
 
     // lib/*.ts — must include every .ts present in src/export/state/
@@ -44,24 +43,12 @@ describe('injectRuntimeFiles', () => {
     expect(files['runtime/lib/mini-yaml.ts']).toEqual(
       new Uint8Array(sourceMiniYaml)
     )
-
-    const sourceDoctor = fs.readFileSync(path.join(STATE_SRC, 'doctor.sh'))
-    expect(files['runtime/bin/doctor.sh']).toEqual(new Uint8Array(sourceDoctor))
-
-    // state.sh is renamed but content must match
-    const sourceState = fs.readFileSync(path.join(STATE_SRC, 'state.sh'))
-    expect(files['runtime/bin/state']).toEqual(new Uint8Array(sourceState))
   })
 
-  it('returns the set of executable paths (doctor.sh + state)', () => {
+  it('returns void (no executable paths needed)', () => {
     const files: Record<string, Uint8Array> = {}
-    const execPaths = injectRuntimeFiles(files)
-
-    expect(execPaths.has('runtime/bin/doctor.sh')).toBe(true)
-    expect(execPaths.has('runtime/bin/state')).toBe(true)
-    // .ts files should NOT be executable
-    expect(execPaths.has('runtime/lib/main.ts')).toBe(false)
-    expect(execPaths.has('runtime/lib/apply.ts')).toBe(false)
+    const result = injectRuntimeFiles(files)
+    expect(result).toBeUndefined()
   })
 
   it('does not overwrite unrelated archive entries', () => {
@@ -83,8 +70,6 @@ describe('countMdFilesInMap — runtime exclusion', () => {
       'souls/judy/style.md': new Uint8Array(300),
       'story-spec.md': new Uint8Array(400),
       // Runtime code — must NOT be counted
-      'runtime/bin/doctor.sh': new Uint8Array(500),
-      'runtime/bin/state': new Uint8Array(600),
       'runtime/lib/main.ts': new Uint8Array(700),
       'runtime/lib/apply.ts': new Uint8Array(800),
       // Hypothetical .md accidentally placed under runtime/ — still excluded

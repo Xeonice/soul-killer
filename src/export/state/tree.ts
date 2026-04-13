@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 
 interface ServerInfo {
   port: number
@@ -87,8 +87,8 @@ export async function runTree(skillRoot: string, scriptId: string): Promise<Tree
   const serverScript = join(dirname(new URL(import.meta.url).pathname), 'tree-server.ts')
 
   return new Promise<TreeResult>((resolve, reject) => {
-    const child = spawn('bun', [serverScript], {
-      env: { ...process.env, SKILL_ROOT: skillRoot, SCRIPT_ID: scriptId },
+    const child = spawn(process.execPath, [serverScript], {
+      env: { ...process.env, BUN_BE_BUN: '1', SKILL_ROOT: skillRoot, SCRIPT_ID: scriptId },
       stdio: ['ignore', 'pipe', 'ignore'],
       detached: true,
     })
@@ -127,7 +127,13 @@ export function runTreeStop(skillRoot: string): TreeStopResult {
   if (!info) return { action: 'not_running' }
 
   if (isProcessAlive(info.pid)) {
-    try { process.kill(info.pid, 'SIGTERM') } catch { /* ignore */ }
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /pid ${info.pid} /f /t`, { stdio: 'ignore' })
+      } else {
+        process.kill(info.pid, 'SIGTERM')
+      }
+    } catch { /* ignore */ }
   }
 
   try { unlinkSync(serverJsonPath(skillRoot)) } catch { /* ignore */ }

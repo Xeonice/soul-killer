@@ -18,5 +18,11 @@ if (args.includes('--update')) {
   process.exit(0)
 }
 
+if (args[0] === 'runtime') {
+  const { runRuntime } = await import('./cli/runtime.js')
+  const code = await runRuntime(args.slice(1))
+  process.exit(code)
+}
+
 const { waitUntilExit } = render(<App />)
 await waitUntilExit()

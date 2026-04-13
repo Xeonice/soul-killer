@@ -315,18 +315,18 @@ function lintRuntimeCliUsage(skillContent: string, report: LintReport): void {
   // PHASE_0_DOCTOR_PRESENT — the Phase -1 Step 0 health check must exist.
   // We scan for the literal CLI invocation rather than a prose match so that
   // prose refactors don't break the rule.
-  const doctorMarker = 'runtime/bin/state doctor'
+  const doctorMarker = 'soulkiller runtime doctor'
   if (!skillContent.includes(doctorMarker)) {
     pushError(report, {
       rule: 'PHASE_0_DOCTOR_PRESENT',
       message:
         'Phase -1 Step 0 Runtime 健康检查缺失 — SKILL.md 必须至少出现一次 ' +
-        `"${doctorMarker}" 调用。未找到意味着 LLM 不会触发 bootstrap / 只读降级分支。`,
+        `"${doctorMarker}" 调用。未找到意味着 LLM 不会触发安装引导 / 只读降级分支。`,
     })
   }
 
   // STATE_APPLY_PRESENT — Phase 2 场景流转必须调 state apply
-  const applyMarker = 'runtime/bin/state apply'
+  const applyMarker = 'soulkiller runtime apply'
   if (!skillContent.includes(applyMarker)) {
     pushError(report, {
       rule: 'STATE_APPLY_PRESENT',
@@ -357,7 +357,7 @@ function lintRuntimeCliUsage(skillContent: string, report: LintReport): void {
         rule: 'NO_EDIT_STATE_YAML',
         message:
           'SKILL.md 禁止出现直接 Edit state.yaml / meta.yaml 的指令 — ' +
-          '所有状态写入必须通过 bash runtime/bin/state {init,apply,reset,rebuild}',
+          '所有状态写入必须通过 soulkiller runtime {init,apply,reset,rebuild}',
         line,
         snippet,
       })

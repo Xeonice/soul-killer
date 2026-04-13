@@ -23,7 +23,7 @@
 >
 > Every exported `.skill` archive is a standalone visual novel — with state management, save/load, multiple scripts per story, affinity tracking, and branching endings. You don't need to write a single line of code.
 >
-> **How to play?** Exported `.skill` files run in any application that supports the Skill protocol — such as [Claude](https://claude.ai) or [OpenClaw](https://github.com/nicepkg/openclaw). Import it as a Skill, and start playing. Each script supports saving, a single story can have multiple generated scripts, and you can view the current script's choice branch tree at any time. Also perfect for developers loading it in Claude Code's terminal — as far as your boss can tell, you're just "debugging an AI Skill."
+> **How to play?** Exported `.skill` files run in any application that supports the Skill protocol — such as [Claude](https://claude.ai) or [OpenClaw](https://github.com/nicepkg/openclaw). Import it as a Skill, and start playing. Each script supports saving, a single story can have multiple generated scripts, and you can view the current script's choice branch tree at any time. Recipients also need soulkiller CLI installed before their first play — the Skill automatically detects and prompts for installation on first load. Also perfect for developers loading it in Claude Code's terminal — as far as your boss can tell, you're just "debugging an AI Skill."
 
 ## Prerequisites
 
@@ -38,6 +38,8 @@ SOULKILLER requires the following API keys to operate. Complete registration bef
 > **Note:** Pick either Tavily or Exa for search — one is enough. The first-launch wizard will guide you through entering these keys step by step.
 
 ## Installation
+
+Supports macOS, Linux, and Windows.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh

@@ -23,7 +23,7 @@
 >
 > 每一个导出的 `.skill` 档案都是一部独立可运行的视觉小说——带有状态管理、存档读档、单故事多剧本选择、好感度追踪和多结局分支。你不需要写一行代码。
 >
-> **怎么玩？** 导出的 `.skill` 文件可以在任何支持 Skill 协议的应用中直接运行——比如 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw)。导入后作为 Skill 加载，即可开始游玩。每个剧本支持存档，同一个故事可以生成多个不同剧本，随时查看当前剧本的选择分支线。也特别适合开发者在 Claude Code 终端里加载——在老板眼皮底下，你只是在"调试 AI Skill"而已。
+> **怎么玩？** 导出的 `.skill` 文件可以在任何支持 Skill 协议的应用中直接运行——比如 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw)。导入后作为 Skill 加载，即可开始游玩。每个剧本支持存档，同一个故事可以生成多个不同剧本，随时查看当前剧本的选择分支线。接收方在首次游玩前也需要安装 soulkiller CLI——Skill 首次加载时会自动检测并提示安装。也特别适合开发者在 Claude Code 终端里加载——在老板眼皮底下，你只是在"调试 AI Skill"而已。
 
 ## 前置准备
 
@@ -38,6 +38,8 @@ SOULKILLER 需要以下 API 密钥才能运行。请在安装前完成注册：
 > **说明：** 搜索服务在 Tavily 和 Exa 中选一个即可。首次启动时配置向导会引导你逐步填入这些密钥。
 
 ## 安装
+
+支持 macOS、Linux 和 Windows。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh

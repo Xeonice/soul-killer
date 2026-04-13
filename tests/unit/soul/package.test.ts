@@ -144,7 +144,7 @@ describe('generateSkillMd', () => {
     expect(result).toContain('Delete script')
     expect(result).toContain('Start from beginning')
     // state list for save enumeration
-    expect(result).toContain('runtime/bin/state list')
+    expect(result).toContain('soulkiller runtime list')
     // Header fields that were formerly in YAML frontmatter
     expect(result).toContain('user_direction')
     expect(result).toContain('generated_at')
@@ -218,8 +218,8 @@ describe('generateSkillMd', () => {
     expect(result).toContain('script_ref')
     expect(result).toContain('last_played_at')
     // Save updates go through state apply (auto) and state save (manual)
-    expect(result).toContain('runtime/bin/state apply')
-    expect(result).toContain('runtime/bin/state save')
+    expect(result).toContain('soulkiller runtime apply')
+    expect(result).toContain('soulkiller runtime save')
     expect(result).toContain('💾 Save current progress')
     expect(result).not.toContain('Edit ${CLAUDE_SKILL_DIR}/runtime/saves')
   })
@@ -314,7 +314,7 @@ describe('generateSkillMd', () => {
     })
 
     // Validation is now delegated to the state CLI — no more inline六重 prose
-    expect(result).toContain('runtime/bin/state validate')
+    expect(result).toContain('soulkiller runtime validate')
     expect(result).toContain('--continue')
     // Structured JSON contract
     expect(result).toContain('"ok"')
@@ -368,7 +368,7 @@ describe('generateSkillMd', () => {
     })
 
     expect(result).toContain('# Replay Rules')
-    expect(result).toContain('runtime/bin/state reset')
+    expect(result).toContain('soulkiller runtime reset')
     // The old Write-to-reset pattern must be gone from the replay rule (Chinese)
     expect(result).not.toContain('整体覆盖为 script 的 `initial_state`')
     expect(result).not.toContain('允许 Write 整个 state.yaml 的两个例外')
@@ -388,7 +388,7 @@ describe('generateSkillMd', () => {
 
     // Section header still exists but now dispatches to CLI
     expect(result).toContain('apply_consequences Standard Flow')
-    expect(result).toContain('runtime/bin/state apply')
+    expect(result).toContain('soulkiller runtime apply')
     expect(result).toContain('<current-scene-id>')
     expect(result).toContain('<choice-id>')
     // stdout output format anchors
@@ -396,7 +396,7 @@ describe('generateSkillMd', () => {
     expect(result).toContain('CHANGES')
     expect(result).toContain('clamped')
     // First-enter path uses state init
-    expect(result).toContain('runtime/bin/state init')
+    expect(result).toContain('soulkiller runtime init')
     // Hard red line: no manual Edit/Write on state.yaml or meta.yaml
     expect(result).toContain('Direct State File Writes')
     expect(result).toContain('**All** state writes must go through')
@@ -456,7 +456,7 @@ describe('generateSkillMd', () => {
 
     // The new replay rule dispatches to state reset — the CLI handles
     // copying script.initial_state → state.yaml + resetting current_scene.
-    expect(result).toContain('runtime/bin/state reset')
+    expect(result).toContain('soulkiller runtime reset')
     expect(result).toContain('Reuses the current script')
     expect(result).toContain('initial_state')
     expect(result).toContain('first scene')

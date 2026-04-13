@@ -120,10 +120,12 @@ export async function runCli(argv: string[]): Promise<number> {
 
   try {
     if (sub === 'doctor') {
-      // doctor is handled by the bash wrapper before main.ts is invoked.
-      // If we land here, bun is already running — so doctor is trivially OK.
+      // Invoked via `soulkiller runtime doctor`. If we land here the
+      // soulkiller binary (with embedded bun) is working — trivially OK.
       process.stdout.write('STATUS: OK\n')
+      process.stdout.write(`SOULKILLER_VERSION: ${process.env.SOULKILLER_VERSION ?? 'unknown'}\n`)
       process.stdout.write(`BUN_VERSION: ${process.versions.bun ?? 'unknown'}\n`)
+      process.stdout.write(`PLATFORM: ${process.platform}-${process.arch}\n`)
       return 0
     }
 

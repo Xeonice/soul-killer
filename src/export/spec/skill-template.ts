@@ -233,7 +233,7 @@ In the plan's scenes, the gate scene looks like:
 \`\`\`
 
 8. Write the plan to \`.build-<id>/plan.json\`
-9. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script plan <id>\`
+9. Call \`soulkiller runtime script plan <id>\`
 10. The CLI will:
     - Validate JSON syntax, schema, graph integrity
     - Auto-compute predecessors and is_convergence for each scene
@@ -268,7 +268,7 @@ Generate each scene following the order from PLAN_OK. For each scene-id:
      - \`ip_specific\` defines terminology and naming conventions that must be followed when writing for the corresponding character
      - If a character has a \`character_voice_summary\`, use that summary as the voice anchor, taking priority over non-target-language source text in style.md
 6. Write to \`.build-<id>/draft/<scene-id>.json\`
-7. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script scene <id> <scene-id>\`
+7. Call \`soulkiller runtime script scene <id> <scene-id>\`
 8. If error -> read error -> fix draft -> re-Write -> retry (max 3 times)
 
 **Step C: Generate Endings (after ALL scenes)**
@@ -284,12 +284,12 @@ After every scene is generated, create ending bodies based on actual scene conte
    \`\`\`json
    { "id": "ending-A", "title": "...", "condition": {...}, "body": "ending narration..." }
    \`\`\`
-3. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script ending <id> <ending-id>\`
+3. Call \`soulkiller runtime script ending <id> <ending-id>\`
 4. If error -> fix -> retry
 
 **Step D: Build**
 
-Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script build <id>\`
+Call \`soulkiller runtime script build <id>\`
 
 This merges plan + scenes + endings into \`runtime/scripts/script-<id>.json\` and cleans up the build directory. The final format is identical to a standard script.json.
 
@@ -366,8 +366,8 @@ ${initialState}
 
 ## Scene Transition Rules
 
-- User selects a story choice -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
-- User selects "💾 Save current progress" -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
+- User selects a story choice -> call \`soulkiller runtime apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
+- User selects "💾 Save current progress" -> call \`soulkiller runtime save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
 - User enters free text -> respond in character as the most contextually relevant present character,
   then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
 - Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
@@ -376,7 +376,7 @@ ${initialState}
 
 When the current scene has type \`"affinity_gate"\`:
 1. If the gate has text, render it as narration
-2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state route <script-id> <gate-scene-id>\`
+2. Call \`soulkiller runtime route <script-id> <gate-scene-id>\`
 3. Parse output: \`ROUTE <route_id> → <next-scene-id>\`
 4. Narrate the route entry naturally (e.g., a brief transition sentence fitting the story mood)
 5. Immediately render the next scene (no AskUserQuestion for gates — gates are automatic transitions)
@@ -396,7 +396,7 @@ When the current scene has type \`"affinity_gate"\`:
 
 ## apply_consequences Standard Flow (via state apply script)
 
-**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`bash runtime/bin/state apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
+**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`soulkiller runtime apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
 
 1. Receive the user's choice (choice id)
 2. Call state apply once
@@ -406,7 +406,7 @@ When the current scene has type \`"affinity_gate"\`:
 ### Standard Call
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
+soulkiller runtime apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
 - \`<script-id>\` is the current script's id (determined in Phase -1, constant throughout Phase 2)
@@ -445,12 +445,12 @@ If state apply returns a non-zero exit code (stderr will print an error message)
 When entering Phase 2 for the first time, call **init** instead of apply:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
+soulkiller runtime init <script-id>
 \`\`\`
 
 The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-**Before rendering the first scene**, call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
+**Before rendering the first scene**, call \`soulkiller runtime tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
 "分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
 
 Then begin rendering the first scene.
@@ -562,7 +562,7 @@ Use AskUserQuestion to offer:
 When the user selects "Start over", you **must** call the state CLI's reset subcommand to perform the full reset:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset <script-id>
+soulkiller runtime reset <script-id>
 \`\`\`
 
 The script internally handles:
@@ -617,7 +617,7 @@ If the user wants to play an entirely new story (not replay the current script),
 - **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/auto/state.yaml\`
 - **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/*/meta.yaml\`
 - **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
-- **All** state writes must go through \`bash runtime/bin/state {init,apply,reset,rebuild,save}\`
+- **All** state writes must go through \`soulkiller runtime {init,apply,reset,rebuild,save}\`
 - Even if you see a field in state.yaml that is "obviously wrong", you may only use \`state rebuild\` or \`state reset\` — direct Edit will lock the error into the file
 `
 }
@@ -766,7 +766,7 @@ In the plan's scenes, the gate scene looks like:
 \`\`\`
 
 7. Write the plan to \`.build-<id>/plan.json\`
-8. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script plan <id>\`
+8. Call \`soulkiller runtime script plan <id>\`
 9. The CLI will:
    - Validate JSON syntax, schema, graph integrity
    - Auto-compute predecessors and is_convergence for each scene
@@ -798,7 +798,7 @@ Generate each scene following the order from PLAN_OK. For each scene-id:
    \`\`\`
    - **Prose constraints**: narration and dialogue must comply with prose_style's forbidden_patterns and ip_specific
 8. Write to \`.build-<id>/draft/<scene-id>.json\`
-9. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script scene <id> <scene-id>\`
+9. Call \`soulkiller runtime script scene <id> <scene-id>\`
 10. If error -> read error -> fix draft -> re-Write -> retry (max 3 times)
 
 **Step C: Generate Endings (after ALL scenes)**
@@ -814,12 +814,12 @@ After every scene is generated, create ending bodies based on actual scene conte
    \`\`\`json
    { "id": "ending-A", "title": "...", "condition": {...}, "body": "ending narration..." }
    \`\`\`
-3. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script ending <id> <ending-id>\`
+3. Call \`soulkiller runtime script ending <id> <ending-id>\`
 4. If error -> fix -> retry
 
 **Step D: Build**
 
-Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state script build <id>\`
+Call \`soulkiller runtime script build <id>\`
 
 This merges plan + scenes + endings into \`runtime/scripts/script-<id>.json\` and cleans up the build directory. The final format is identical to a standard script.json.
 
@@ -881,8 +881,8 @@ You must internally maintain a state object in the following format:
 
 ## Scene Transition Rules
 
-- User selects a story choice -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
-- User selects "💾 Save current progress" -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
+- User selects a story choice -> call \`soulkiller runtime apply <script-id> <scene-id> <choice-id>\` to let the script handle all state transitions (auto-save) -> **immediately render the next scene** (no pausing, no "continue?" prompts, no save details shown)
+- User selects "💾 Save current progress" -> call \`soulkiller runtime save <script-id>\` to create a manual save -> after confirmation, re-present the same AskUserQuestion (with original choices + 💾). See "Manual Save" section above
 - User enters free text -> respond in character within the current scene,
   then re-present AskUserQuestion with the same scene's choices + 💾 (no transition, no state change, no save written, **do not call state apply**)
 - Reaching the ending stage -> enter the ending determination flow (per the "Endings Condition Structured DSL" section's evaluate algorithm)
@@ -891,7 +891,7 @@ You must internally maintain a state object in the following format:
 
 When the current scene has type \`"affinity_gate"\`:
 1. If the gate has text, render it as narration
-2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state route <script-id> <gate-scene-id>\`
+2. Call \`soulkiller runtime route <script-id> <gate-scene-id>\`
 3. Parse output: \`ROUTE <route_id> → <next-scene-id>\`
 4. Narrate the route entry naturally (e.g., a brief transition sentence fitting the story mood)
 5. Immediately render the next scene (no AskUserQuestion for gates — gates are automatic transitions)
@@ -911,7 +911,7 @@ When the current scene has type \`"affinity_gate"\`:
 
 ## apply_consequences Standard Flow (via state apply script)
 
-**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`bash runtime/bin/state apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
+**Core contract**: delta calculation, clamping, type validation, and transactional writes to auto/ directory's state.yaml + meta.yaml are **all handled internally by \`soulkiller runtime apply\`**. You do not need to calculate any deltas, construct Edit old_strings, or maintain a literal representation of state. Your only responsibilities are:
 
 1. Receive the user's choice (choice id)
 2. Call state apply once
@@ -921,7 +921,7 @@ When the current scene has type \`"affinity_gate"\`:
 ### Standard Call
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
+soulkiller runtime apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
 - \`<script-id>\` is the current script's id (determined in Phase -1, constant throughout Phase 2)
@@ -960,12 +960,12 @@ If state apply returns a non-zero exit code (stderr will print an error message)
 When entering Phase 2 for the first time, call **init** instead of apply:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>
+soulkiller runtime init <script-id>
 \`\`\`
 
 The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-**Before rendering the first scene**, call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
+**Before rendering the first scene**, call \`soulkiller runtime tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
 "分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
 
 Then begin rendering the first scene.
@@ -1019,7 +1019,7 @@ When an ending is reached, present in the following order:
 When the user selects "Start over", you **must** call the state CLI's reset subcommand to perform the full reset:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset <script-id>
+soulkiller runtime reset <script-id>
 \`\`\`
 
 The script internally handles:
@@ -1072,7 +1072,7 @@ If the user wants to play an entirely new story (not replay the current script),
 - **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/auto/state.yaml\`
 - **Never** use the Edit tool to directly modify \`runtime/saves/<script-id>/*/meta.yaml\`
 - **Never** use the Write tool to directly rewrite \`state.yaml\` or \`meta.yaml\`
-- **All** state writes must go through \`bash runtime/bin/state {init,apply,reset,rebuild,save}\`
+- **All** state writes must go through \`soulkiller runtime {init,apply,reset,rebuild,save}\`
 - Even if you see a field in state.yaml that is "obviously wrong", you may only use \`state rebuild\` or \`state reset\` — direct Edit will lock the error into the file
 `
 }
@@ -1131,7 +1131,7 @@ flags:
 Every time a **scene transition** occurs (user selects a story choice -> jumps to the next scene), you **must immediately** call:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply <script-id> <current-scene-id> <choice-id>
+soulkiller runtime apply <script-id> <current-scene-id> <choice-id>
 \`\`\`
 
 The script internally performs a transactional update: reads consequences from script.json, applies deltas (int clamp / bool overwrite / enum validation), and atomically writes state.yaml + meta.yaml under the auto/ directory. You **do not** need to manually Edit or Write any file — the entire write flow is guaranteed by the script.
@@ -1144,9 +1144,9 @@ At the end of **every AskUserQuestion**'s option list in Phase 2, you **must** a
 
 When the user selects "💾 Save current progress":
 
-1. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id>\`
+1. Call \`soulkiller runtime save <script-id>\`
 2. **Success** -> output "✅ Saved" -> **re-present the exact same AskUserQuestion** (with all original story choices + 💾)
-3. Returns \`MANUAL_SAVE_LIMIT_REACHED\` -> use AskUserQuestion to show existing manual saves and let the user choose which to overwrite -> call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state save <script-id> --overwrite <timestamp>\` -> confirm -> re-present original choices
+3. Returns \`MANUAL_SAVE_LIMIT_REACHED\` -> use AskUserQuestion to show existing manual saves and let the user choose which to overwrite -> call \`soulkiller runtime save <script-id> --overwrite <timestamp>\` -> confirm -> re-present original choices
 
 **Manual saves do not trigger state apply**, do not advance the plot, and do not consume a turn.
 
@@ -1165,22 +1165,20 @@ Phase 2 uses the same script-id for all state CLI commands throughout.
  * Platform scope notice: inserted between the intro and Phase -1 so the
  * LLM sees the hard runtime requirements before it starts any work.
  *
- * The skill requires a Unix-like shell (macOS / Linux / Windows+WSL) to
- * run the state CLI under `runtime/bin/`. Windows native shells (cmd,
- * PowerShell, Git Bash, MSYS, Cygwin) are not supported — doctor.sh will
- * hard-refuse them with a WSL migration hint.
+ * The skill requires the soulkiller binary to be installed. The binary
+ * embeds its own bun runtime, so no separate shell or bun installation
+ * is needed — works identically on macOS, Linux, and Windows.
  */
 function buildPlatformNotice(): string {
   return `# Platform Scope
 
-This skill's state persistence relies on the shell + bun runtime under \`runtime/bin/\`. Supported platforms:
+This skill requires the \`soulkiller\` CLI to be installed. Supported platforms:
 
 - ✅ **macOS** (Apple Silicon / Intel)
 - ✅ **Linux** (x86_64 / arm64)
-- ✅ **Windows + WSL** (Ubuntu / Debian / Fedora, etc.)
-- ❌ **Windows native shell** (cmd / PowerShell / Git Bash / MSYS / Cygwin) — please switch to WSL
+- ✅ **Windows** (x64)
 
-Phase -1's Step 0 automatically runs \`runtime/bin/doctor.sh\` for a health check; if an unsupported platform is detected, it prompts the user to switch to WSL and enters read-only mode.
+If \`soulkiller\` is not available, Phase -1 Step 0 will provide installation instructions.
 `
 }
 
@@ -1200,65 +1198,41 @@ function buildPhaseMinusOne(): string {
 
 ## Step 0: Runtime Health Check (Must Execute First)
 
-**Before any other Phase -1 actions**, call the state CLI's doctor subcommand for a runtime health check:
+**Before any other Phase -1 actions**, run the soulkiller runtime doctor:
 
-\`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor
+\`\`\`
+soulkiller runtime doctor
 \`\`\`
 
-This command returns structured stdout, one \`KEY: value\` pair per line. Parse the \`STATUS\` field and handle according to the following branches:
+This command returns structured stdout, one \`KEY: value\` pair per line. Parse the \`STATUS\` field:
 
 ### STATUS: OK
 
-Everything is ready. Record \`BUN_VERSION\` and \`BUN_PATH\` for debugging, then proceed directly to **Step -1.1**.
+Everything is ready. Record \`SOULKILLER_VERSION\` and \`BUN_VERSION\` for debugging, then proceed directly to **Step -1.1**.
 
-### STATUS: BUN_MISSING (first run or runtime not installed)
+### Command not found (soulkiller is not installed)
 
-This is **normal for first-time runs**. Runtime is not installed. Use **AskUserQuestion** to present three options to the user.
+Use **AskUserQuestion** to present installation instructions:
 
 **Question body (must contain the following content verbatim)**:
 
 \`\`\`
-This skill requires the Bun JavaScript runtime to manage story state. A one-time installation is needed for first run:
+This skill requires the soulkiller CLI. One-time installation:
 
-- Install command: curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.soulkiller-runtime bash
-- Download size: ~90MB
-- Install location: ~/.soulkiller-runtime/
-- Official source: https://bun.sh
+- macOS/Linux: curl -fsSL https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.sh | sh
+- Windows: irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.ps1 | iex
 
-This is a one-time action; subsequent runs will not require reinstallation. You can fully uninstall at any time with \\\`rm -rf ~/.soulkiller-runtime\\\`.
+After installation, open a new terminal and retry.
 \`\`\`
 
-**Options (must be these three, in this order)**:
+**Options (must be these two, in this order)**:
 
-1. **"Install for me (recommended)"** — when selected:
-   - Use the Bash tool to execute \`curl -fsSL https://bun.sh/install | BUN_INSTALL=\$HOME/.soulkiller-runtime bash\`
-   - After the command completes, re-run \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor\`
-   - If \`STATUS: OK\` -> continue to Step -1.1
-   - Any other status -> show the error to the user and offer retry / read-only mode entry
-2. **"I'll install it myself"** — when selected:
-   - Show the full command for the user to execute in their terminal
-   - Wait for the user to reply "done" then re-run doctor
-3. **"Cancel (enter read-only mode)"** — when selected, enter read-only mode (see PLATFORM_UNSUPPORTED branch below)
+1. **"I've installed it"** — when selected, re-run \`soulkiller runtime doctor\`. If STATUS: OK -> continue. Otherwise show error and offer retry.
+2. **"Cancel (enter read-only mode)"** — when selected, enter read-only mode (see below)
 
-### STATUS: BUN_OUTDATED
+### Read-only mode
 
-Runtime exists but the version is too old (< \`MIN_VERSION\` in doctor output). Use AskUserQuestion to inform the user of the current \`BUN_VERSION\` and the minimum requirement, guiding them to run the \`UPGRADE_CMD_UNIX\` upgrade command from doctor output. Re-run doctor after user confirmation.
-
-### STATUS: PLATFORM_UNSUPPORTED
-
-Windows native shell detected. **Cannot enter normal flow**. Show the user:
-
-\`\`\`
-⚠️ The current environment is a Windows native shell. This skill cannot write saves in this environment.
-
-Please re-run Claude Code inside WSL (Windows Subsystem for Linux):
-https://learn.microsoft.com/windows/wsl/install
-
-Read-only mode allows viewing existing saves and the ending gallery, but cannot create new games or continue existing ones.
-\`\`\`
-
-Then enter **read-only mode** — skip the write portions of Steps -1.1 through -1.4, only allowing:
+Enter **read-only mode** — skip the write portions of Steps -1.1 through -1.4, only allowing:
 
 - List existing \`runtime/scripts/*.json\` (use Read to view header fields)
 - List existing saves (use Glob to scan \`runtime/saves/*/auto/meta.yaml\`)
@@ -1269,10 +1243,6 @@ Prohibited:
 - Any writes (init / apply / reset / rebuild / save)
 - Entering Phase 1 (new script creation)
 - Entering Phase 2 (scene transitions)
-
-### STATUS: PLATFORM_UNKNOWN
-
-Unrecognized platform. Also enter read-only mode, but inform the user "please report this issue".
 
 ## Step -1.1: List Existing Scripts
 
@@ -1306,7 +1276,7 @@ If a file cannot be JSON.parse'd (corrupted), mark it as \`(corrupted)\` — **d
 For each successfully parsed script, call the state CLI's list subcommand:
 
 \`\`\`bash
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state list <script-id>
+soulkiller runtime list <script-id>
 \`\`\`
 
 This command returns JSON:
@@ -1353,14 +1323,14 @@ options:
 
 ### Selected a Script without Saves -> Start Directly
 
-Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\` -> proceed directly to **Phase 2** first scene.
+Call \`soulkiller runtime init <script-id>\` -> proceed directly to **Phase 2** first scene.
 
 ### Load a Save
 
 After the user selects a save from the save sub-menu (auto or a manual save):
 
 1. Determine save-type: \`auto\` or \`manual:<timestamp>\`
-2. Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id> <save-type> --continue\`
+2. Call \`soulkiller runtime validate <script-id> <save-type> --continue\`
 3. validate returns structured JSON to stdout. On success:
 
 \`\`\`json
@@ -1386,10 +1356,10 @@ On failure:
 
 After the user selects "🆕 Start from beginning":
 
-- Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state init <script-id>\`
+- Call \`soulkiller runtime init <script-id>\`
   - The script internally handles: Read target script.json, copy initial_state to auto/state.yaml, write auto/meta.yaml (script_ref + current_scene = first scene)
   - Script stdout returns an \`INITIALIZED\` summary line
-- Call \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state validate <script-id>\` for a sanity check
+- Call \`soulkiller runtime validate <script-id>\` for a sanity check
 - Read \`runtime/scripts/script-<id>.json\` to load the script into context
 - Proceed directly to **Phase 2** first scene
 
@@ -1414,12 +1384,12 @@ Use AskUserQuestion to ask the user:
 
 \`\`\`
 options:
-  - "Keep usable fields, auto-fill missing / reset to defaults"     # -> bash state rebuild <script-id> [<save-type>]
-  - "Fully reset to initial_state"                                   # -> bash state reset <script-id> [<save-type>]
+  - "Keep usable fields, auto-fill missing / reset to defaults"     # -> soulkiller runtime rebuild <script-id> [<save-type>]
+  - "Fully reset to initial_state"                                   # -> soulkiller runtime reset <script-id> [<save-type>]
   - "Cancel loading, return to main menu"
 \`\`\`
 
-**Never** use Read + Edit / Write to manually patch state.yaml. Repair actions **may only** be performed via \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state rebuild\` or \`bash \${CLAUDE_SKILL_DIR}/runtime/bin/state reset\`.
+**Never** use Read + Edit / Write to manually patch state.yaml. Repair actions **may only** be performed via \`soulkiller runtime rebuild\` or \`soulkiller runtime reset\`.
 
 ### 📋 Manage Scripts
 

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { zipSync, strToU8, type ZipOptions } from 'fflate'
+import { zipSync, strToU8 } from 'fflate'
 import { readManifest, readSoulFiles } from '../soul/package.js'
 import { loadWorld, getWorldDir } from '../world/manifest.js'
 import { generateSkillMd } from './spec/skill-template.js'
@@ -298,11 +298,12 @@ export function packageSkill(config: PackageConfig): PackageResult {
   unprefixedFiles['runtime/scripts/.gitkeep'] = strToU8('')
   unprefixedFiles['runtime/saves/.gitkeep'] = strToU8('')
 
-  // 5.5 Runtime code — inject doctor.sh + state wrapper (bash) + bun .ts libs
-  //     from src/export/state/. These are the same files Soulkiller unit-tests
-  //     against, copied byte-for-byte into the archive. bash/sh entry points
-  //     are marked executable (0755) via fflate attrs; .ts files stay 0644.
-  const execPaths = injectRuntimeFiles(unprefixedFiles)
+  // 5.5 Runtime code — inject bun .ts libs from src/export/state/.
+  //     These are the same files Soulkiller's vitest suite exercises,
+  //     copied byte-for-byte into the archive. Shell wrappers are no
+  //     longer needed — the soulkiller binary itself serves as the
+  //     cross-platform runtime entry point via `soulkiller runtime`.
+  injectRuntimeFiles(unprefixedFiles)
 
   // ── Apply top-level directory prefix ─────────────────────────────
   //
@@ -314,7 +315,7 @@ export function packageSkill(config: PackageConfig): PackageResult {
   // We also defensively check every final path for ASCII compliance — if
   // a non-ASCII path slipped through (e.g. soul name slug formatter
   // regression), this would catch it before zip write.
-  const archiveFiles: Record<string, Uint8Array | [Uint8Array, ZipOptions]> = {}
+  const archiveFiles: Record<string, Uint8Array> = {}
   const nonAsciiPaths: string[] = []
   for (const [key, value] of Object.entries(unprefixedFiles)) {
     const finalPath = `${baseName}/${key}`
@@ -325,11 +326,7 @@ export function packageSkill(config: PackageConfig): PackageResult {
     if (!/^[\x00-\x7f]+$/.test(finalPath)) {
       nonAsciiPaths.push(finalPath)
     }
-    // Runtime bash/sh entry points need exec bit preserved inside the zip.
-    // fflate attrs format: upper 16 bits = Unix mode, os must be 3 (Unix).
-    archiveFiles[finalPath] = execPaths.has(key)
-      ? [value, { os: 3, attrs: (0o100755 << 16) >>> 0 }]
-      : value
+    archiveFiles[finalPath] = value
   }
   if (nonAsciiPaths.length > 0) {
     throw new Error(
@@ -423,46 +420,26 @@ export function estimateMdTextSizeKb(files: Record<string, Uint8Array>): number 
 }
 
 /**
- * Inject skill runtime files (doctor.sh, state wrapper, bun .ts lib) from
- * `src/export/state/` into the in-memory archive map. These are the same
- * files Soulkiller's vitest suite exercises, copied byte-for-byte so that
- * the consumer-side runtime is guaranteed to match what unit tests cover.
+ * Inject skill runtime TypeScript files from `src/export/state/` into the
+ * in-memory archive map. These are the same files Soulkiller's vitest
+ * suite exercises, copied byte-for-byte so that the consumer-side runtime
+ * is guaranteed to match what unit tests cover.
  *
  * File placement inside the archive:
- *   src/export/state/doctor.sh  → runtime/bin/doctor.sh     (executable)
- *   src/export/state/state.sh   → runtime/bin/state          (executable, .sh stripped)
- *   src/export/state/*.ts       → runtime/lib/<name>.ts      (regular)
+ *   src/export/state/*.ts → runtime/lib/<name>.ts
  *
- * Returns the set of unprefixed archive paths that require the executable
- * bit. Callers use this to apply fflate ZipOptions attrs at the final zip
- * step.
+ * Shell wrappers (state.sh, doctor.sh) are no longer shipped — the
+ * soulkiller binary itself serves as the cross-platform runtime entry
+ * point via `soulkiller runtime <subcommand>`.
  *
  * Exported for tests.
  */
-export function injectRuntimeFiles(files: Record<string, Uint8Array>): Set<string> {
+export function injectRuntimeFiles(files: Record<string, Uint8Array>): void {
   const stateSrcDir = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
     'state'
   )
-  const execPaths = new Set<string>()
 
-  // doctor.sh — POSIX health check, keeps .sh extension so it's clear this
-  // is the one file that stays raw shell.
-  files['runtime/bin/doctor.sh'] = new Uint8Array(
-    fs.readFileSync(path.join(stateSrcDir, 'doctor.sh'))
-  )
-  execPaths.add('runtime/bin/doctor.sh')
-
-  // state.sh → runtime/bin/state — drop the .sh suffix so LLM-facing command
-  // is just `bash runtime/bin/state <subcommand>`.
-  files['runtime/bin/state'] = new Uint8Array(
-    fs.readFileSync(path.join(stateSrcDir, 'state.sh'))
-  )
-  execPaths.add('runtime/bin/state')
-
-  // All .ts files — direct copy, no transpile. bun executes .ts natively,
-  // so the archive ships TypeScript as-is. This is the same code path that
-  // Soulkiller's unit tests import.
   const tsFiles = fs
     .readdirSync(stateSrcDir)
     .filter((f) => f.endsWith('.ts'))
@@ -478,6 +455,4 @@ export function injectRuntimeFiles(files: Record<string, Uint8Array>): Set<strin
       fs.readFileSync(path.join(stateSrcDir, ts))
     )
   }
-
-  return execPaths
 }

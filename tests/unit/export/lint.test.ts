@@ -15,7 +15,7 @@ name: test
 
 # Phase -1
 
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor
+soulkiller runtime doctor
 
 # Phase 1
 
@@ -30,7 +30,7 @@ state_schema:
 
 # Phase 2
 
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply slot-1 scene-001 choice-1
+soulkiller runtime apply slot-1 scene-001 choice-1
 `
     const r = lintSkillTemplate(skill)
     expect(r.ok).toBe(true)
@@ -310,11 +310,11 @@ name: test
 
 # Phase -1
 
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state doctor
+soulkiller runtime doctor
 
 # Phase 2
 
-bash \${CLAUDE_SKILL_DIR}/runtime/bin/state apply slot-1 scene-001 choice-1
+soulkiller runtime apply slot-1 scene-001 choice-1
 `
 
   describe('PHASE_0_DOCTOR_PRESENT', () => {

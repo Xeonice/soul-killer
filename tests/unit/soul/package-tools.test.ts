@@ -258,10 +258,9 @@ mode: always
     // Runtime placeholder dirs ship empty so the skill can write scripts/saves at runtime
     expect(entries).toContain(`${prefix}runtime/scripts/.gitkeep`)
     expect(entries).toContain(`${prefix}runtime/saves/.gitkeep`)
-    // Runtime state command CLI — LLM-facing bash wrappers
-    expect(entries).toContain(`${prefix}runtime/bin/state`)
-    expect(entries).toContain(`${prefix}runtime/bin/doctor.sh`)
     // Runtime state command implementation — bun .ts files (no node_modules)
+    // Shell wrappers (state, doctor.sh) are no longer shipped;
+    // soulkiller binary serves as the cross-platform entry point.
     expect(entries).toContain(`${prefix}runtime/lib/main.ts`)
     expect(entries).toContain(`${prefix}runtime/lib/apply.ts`)
     expect(entries).toContain(`${prefix}runtime/lib/init.ts`)
@@ -272,15 +271,6 @@ mode: always
     expect(entries).toContain(`${prefix}runtime/lib/script.ts`)
     expect(entries).toContain(`${prefix}runtime/lib/mini-yaml.ts`)
     expect(entries).toContain(`${prefix}runtime/lib/io.ts`)
-    // Runtime bin scripts must contain the expected entrypoint logic
-    const stateWrapper = strFromU8(unzipped[`${prefix}runtime/bin/state`]!)
-    expect(stateWrapper).toContain('#!/bin/bash')
-    expect(stateWrapper).toContain('.soulkiller-runtime/bin/bun')
-    const doctorSh = strFromU8(unzipped[`${prefix}runtime/bin/doctor.sh`]!)
-    expect(doctorSh).toContain('#!/bin/sh')
-    expect(doctorSh).toContain('STATUS: OK')
-    expect(doctorSh).toContain('PLATFORM_UNSUPPORTED')
-
     // file_count matches actual archive contents
     expect(result.file_count).toBe(entries.length)
 
