@@ -19,29 +19,14 @@ interface SkillInfo {
   needsUpdate: boolean
 }
 
-// Import at call time to avoid circular deps with template
-let _engineVersion: number | null = null
+import { CURRENT_ENGINE_VERSION, generateEngineTemplate } from '../export/spec/skill-template.js'
+
 function getCurrentEngineVersion(): number {
-  if (_engineVersion !== null) return _engineVersion
-  try {
-    const mod = require('../export/spec/skill-template.js')
-    _engineVersion = mod.CURRENT_ENGINE_VERSION ?? 1
-  } catch {
-    _engineVersion = 1
-  }
-  return _engineVersion
+  return CURRENT_ENGINE_VERSION
 }
 
-let _engineTemplate: string | null = null
 function getCurrentEngineTemplate(): string {
-  if (_engineTemplate !== null) return _engineTemplate
-  try {
-    const mod = require('../export/spec/skill-template.js')
-    _engineTemplate = mod.generateEngineTemplate?.() ?? ''
-  } catch {
-    _engineTemplate = ''
-  }
-  return _engineTemplate
+  return generateEngineTemplate()
 }
 
 function isSoulkillerSkill(dir: string): boolean {

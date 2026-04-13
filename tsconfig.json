@@ -7,6 +7,7 @@
     "jsxImportSource": "react",
     "outDir": "dist",
     "rootDir": "src",
+    "types": ["bun"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

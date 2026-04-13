@@ -7,9 +7,9 @@
  * Dev entry: `bun src/export/state/viewer-server.ts tree <script-id>`
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
-import { loadTreeData, watchSaveDir, type FileWatcher } from './viewer-data.js'
+import { loadTreeData, watchSaveDir } from './viewer-data.js'
 import { files as viewerFiles } from './viewer-bundle.js'
 
 const DEFAULT_PORT = 6677
@@ -62,14 +62,14 @@ const DATA_LOADERS: Record<string, DataLoader> = {
 export const AVAILABLE_VIEWS = Object.keys(DATA_LOADERS)
 
 // ── API request handler ──────────────────────────────────────────
-function handleApiRequest(
+async function handleApiRequest(
   url: URL,
   req: Request,
   skillRoot: string,
   viewName: string,
   scriptId: string,
   boundPort: number,
-): Response | null {
+): Promise<Response | null> {
   const loader = DATA_LOADERS[viewName]
   if (!loader) return null
 
@@ -95,15 +95,11 @@ function handleApiRequest(
   }
 
   if (url.pathname === '/api/switch' && req.method === 'POST') {
-    return new Response(
-      req.text().then((body) => {
-        const { scriptId: newId } = JSON.parse(body)
-        const data = loader(skillRoot, newId)
-        broadcastSSE('switch', data)
-        writeServerJson(skillRoot, boundPort, process.pid, newId)
-        return JSON.stringify({ ok: true })
-      }),
-    )
+    const body = await req.json() as { scriptId: string }
+    const data = loader(skillRoot, body.scriptId)
+    broadcastSSE('switch', data)
+    writeServerJson(skillRoot, boundPort, process.pid, body.scriptId)
+    return Response.json({ ok: true })
   }
 
   return null
@@ -135,11 +131,11 @@ export async function startProductionServer(
       Bun.serve({
         port: tryPort,
         idleTimeout: 0,
-        fetch(req) {
+        async fetch(req) {
           const url = new URL(req.url)
 
           // API routes
-          const apiResponse = handleApiRequest(url, req, skillRoot, viewName, scriptId, tryPort)
+          const apiResponse = await handleApiRequest(url, req, skillRoot, viewName, scriptId, tryPort)
           if (apiResponse) return apiResponse
 
           // Static files from barrel
@@ -196,9 +192,9 @@ async function startDevServer(
       Bun.serve({
         port: tryPort,
         idleTimeout: 0,
-        fetch(req) {
+        async fetch(req) {
           const url = new URL(req.url)
-          const apiResponse = handleApiRequest(url, req, skillRoot, viewName, scriptId, tryPort)
+          const apiResponse = await handleApiRequest(url, req, skillRoot, viewName, scriptId, tryPort)
           if (apiResponse) return apiResponse
           return new Response('Not Found', { status: 404 })
         },

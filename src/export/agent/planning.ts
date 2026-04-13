@@ -131,7 +131,10 @@ export async function runPlanningLoop(
           prose_direction: 'Cold-realism cyberpunk noir, multi-perspective with sharp dialogue',
         },
       }],
-      execute: async ({ genre_direction, tone_direction, shared_axes_1, shared_axes_2, flags, prose_direction, route_candidates }) => {
+      execute: async ({ genre_direction, tone_direction, shared_axes_1, shared_axes_2, flags, prose_direction, route_candidates }: {
+        genre_direction: string; tone_direction: string; shared_axes_1: string; shared_axes_2: string;
+        flags: string[]; prose_direction: string; route_candidates?: Array<{ slug: string; name: string; reason: string }>;
+      }) => {
         onProgress({ type: 'tool_start', tool: 'plan_story' })
         // Validate
         if (!genre_direction.trim()) {
