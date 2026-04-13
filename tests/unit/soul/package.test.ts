@@ -134,9 +134,8 @@ describe('generateSkillMd', () => {
     })
 
     expect(result).toContain('Phase -1: Script Library Menu')
-    // Post-bun-runtime migration: scripts live at runtime/scripts/*.json
-    expect(result).toContain('runtime/scripts/*.json')
-    expect(result).not.toContain('runtime/scripts/*.yaml')
+    // Post-bun-runtime migration: scripts discovered via CLI command
+    expect(result).toContain('soulkiller runtime scripts')
     // Flat script list with save status + management sub-menu
     expect(result).toContain('Generate new script')
     expect(result).toContain('Manage scripts')
