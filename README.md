@@ -129,7 +129,7 @@ irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.p
 导出的 `.skill` 档案在游玩时会自动启动一个本地分支树可视化服务，帮助你追踪当前的剧情走向。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Xeonice/soul-killer/main/docs/images/branch-tree.png" alt="Branch Tree Visualization" width="800" />
+  <img src="https://a1f14yslixes7la8.public.blob.vercel-storage.com/CleanShot%202026-04-13%20at%2011.04.40%402x.png" alt="Branch Tree Visualization" width="800" />
 </p>
 
 **功能特性：**
