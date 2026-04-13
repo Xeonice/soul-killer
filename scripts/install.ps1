@@ -34,15 +34,26 @@ try {
     Invoke-WebRequest -Uri $FallbackUrl -OutFile $TmpZip -UseBasicParsing
 }
 
-# Extract
-Expand-Archive -Path $TmpZip -DestinationPath $InstallDir -Force
+# Extract to temp directory
+$TmpExtract = "$env:TEMP\soulkiller-extract-$(Get-Random)"
+Expand-Archive -Path $TmpZip -DestinationPath $TmpExtract -Force
 Remove-Item $TmpZip -Force
 
-# Rename if needed (archive contains soulkiller-windows-x64.exe)
-$ExtractedExe = Join-Path $InstallDir "soulkiller-windows-x64.exe"
+# Install binary
+$ExtractedExe = Join-Path $TmpExtract "soulkiller-windows-x64.exe"
 if (Test-Path $ExtractedExe) {
     Move-Item -Path $ExtractedExe -Destination $Binary -Force
 }
+
+# Install viewer static files (if present)
+$ViewerSrc = Join-Path $TmpExtract "viewer"
+$ViewerDst = Join-Path $InstallDir "viewer"
+if (Test-Path $ViewerSrc) {
+    if (Test-Path $ViewerDst) { Remove-Item -Recurse -Force $ViewerDst }
+    Move-Item -Path $ViewerSrc -Destination $ViewerDst -Force
+}
+
+Remove-Item -Recurse -Force $TmpExtract
 
 # Configure PATH
 $CurrentPath = [Environment]::GetEnvironmentVariable("Path", "User")

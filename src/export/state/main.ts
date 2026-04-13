@@ -10,7 +10,7 @@
  * two levels up from the script (runtime/lib/main.ts → skill root).
  */
 
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { runInit } from './init.js'
 import { runApply } from './apply.js'
 import { runValidate } from './validate.js'
@@ -19,7 +19,7 @@ import { runReset } from './reset.js'
 import { runList } from './list.js'
 import { runSave } from './save.js'
 import { runTree, runTreeStop } from './tree.js'
-import { startProductionServer, AVAILABLE_VIEWS } from './viewer-server.js'
+import { AVAILABLE_VIEWS } from './viewer-server.js'
 import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild } from './script-builder.js'
 import { runRoute } from './route.js'
 import { runScripts } from './scripts.js'
@@ -259,10 +259,51 @@ export async function runCli(argv: string[]): Promise<number> {
         process.stderr.write(`error: unknown view "${viewName}"\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
         return 2
       }
-      const result = await startProductionServer(skillRoot, viewName, viewScriptId)
-      process.stdout.write(`VIEWER_URL ${result.url}\n`)
-      process.stdout.write(`VIEWER_PID ${result.pid}\n`)
-      return 0
+      // Spawn viewer-server as a detached process
+      const serverScript = join(dirname(new URL(import.meta.url).pathname), 'viewer-server.ts')
+      const { spawn } = await import('node:child_process')
+      return new Promise<number>((resolve) => {
+        const child = spawn(process.execPath, [serverScript], {
+          env: {
+            ...process.env,
+            BUN_BE_BUN: '1',
+            SKILL_ROOT: skillRoot,
+            VIEWER_MODE: 'production',
+            VIEWER_VIEW: viewName,
+            VIEWER_SCRIPT_ID: viewScriptId,
+          },
+          stdio: ['ignore', 'pipe', 'ignore'],
+          detached: true,
+        })
+        let output = ''
+        child.stdout!.on('data', (chunk: Buffer) => {
+          output += chunk.toString()
+          const match = output.match(/VIEWER_URL (http:\/\/localhost:\d+)/)
+          if (match) {
+            child.unref()
+            process.stdout.write(`VIEWER_URL ${match[1]}\n`)
+            process.stdout.write(`VIEWER_PID ${child.pid}\n`)
+            resolve(0)
+          }
+        })
+        child.on('error', (err) => {
+          process.stderr.write(`error: ${err.message}\n`)
+          resolve(1)
+        })
+        child.on('exit', (code) => {
+          if (!output.includes('VIEWER_URL')) {
+            process.stderr.write(`error: viewer-server exited with code ${code}\n`)
+            resolve(1)
+          }
+        })
+        setTimeout(() => {
+          if (!output.includes('VIEWER_URL')) {
+            child.kill()
+            process.stderr.write('error: viewer-server startup timed out\n')
+            resolve(1)
+          }
+        }, 10000)
+      })
     }
 
     if (sub === 'tree') {

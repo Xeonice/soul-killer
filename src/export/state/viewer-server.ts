@@ -1,20 +1,26 @@
 /**
- * Viewer HTTP server — dual-mode entry.
+ * Viewer HTTP server — standalone service.
  *
- * Production: startProductionServer() — serves embedded static files + API.
- * Development: startDevServer() — launches vite dev + API in same process.
+ * Production: runs as a detached process, serves static files from
+ *   ~/.soulkiller/viewer/ + API endpoints. Spawned by main.ts viewer command.
  *
- * Dev entry: `bun src/export/state/viewer-server.ts tree <script-id>`
+ * Development: `bun run dev:viewer tree <script-id>` starts vite dev + API.
+ *
+ * Environment variables (production mode):
+ *   SKILL_ROOT — path to the skill directory
+ *   VIEWER_VIEW — view name (e.g., "tree")
+ *   VIEWER_SCRIPT_ID — script id
  */
 
 import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { loadTreeData, watchSaveDir } from './viewer-data.js'
-import { files as viewerFiles } from './viewer-bundle.js'
 
 const DEFAULT_PORT = 6677
 const MAX_PORT_TRIES = 10
 const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000
+const VIEWER_DIR = join(homedir(), '.soulkiller', 'viewer')
 
 // ── SSE client management ────────────────────────────────────────
 const sseClients = new Set<ReadableStreamDefaultController<Uint8Array>>()
@@ -61,6 +67,22 @@ const DATA_LOADERS: Record<string, DataLoader> = {
 
 export const AVAILABLE_VIEWS = Object.keys(DATA_LOADERS)
 
+// ── MIME type helper ─────────────────────────────────────────────
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+}
+
+function getMime(path: string): string {
+  const ext = '.' + path.split('.').pop()
+  return MIME_TYPES[ext] ?? 'application/octet-stream'
+}
+
 // ── API request handler ──────────────────────────────────────────
 async function handleApiRequest(
   url: URL,
@@ -105,22 +127,12 @@ async function handleApiRequest(
   return null
 }
 
-// ── Production server ────────────────────────────────────────────
-export interface ViewerServerResult {
-  action: 'started'
-  url: string
-  port: number
-  pid: number
-}
+// ── Production server (runs as detached process) ─────────────────
 
-export async function startProductionServer(
-  skillRoot: string,
-  viewName: string,
-  scriptId: string,
-): Promise<ViewerServerResult> {
-  const files = viewerFiles
-  if (Object.keys(files).length === 0) {
-    throw new Error('Viewer bundle is empty. Run "bun run build:release" to generate it.')
+function startServer(skillRoot: string, viewName: string, scriptId: string): void {
+  if (!existsSync(join(VIEWER_DIR, 'index.html'))) {
+    process.stderr.write(`error: ${VIEWER_DIR}/index.html not found.\nRun "soulkiller --update" or reinstall to restore viewer files.\n`)
+    process.exit(1)
   }
 
   let boundPort = DEFAULT_PORT
@@ -138,27 +150,26 @@ export async function startProductionServer(
           const apiResponse = await handleApiRequest(url, req, skillRoot, viewName, scriptId, tryPort)
           if (apiResponse) return apiResponse
 
-          // Static files from barrel
-          const pathname = url.pathname === '/' ? '/' : url.pathname
-          const file = files[pathname]
-          if (file) {
-            return new Response(file.content, { headers: { 'Content-Type': file.mime } })
+          // Static files from ~/.soulkiller/viewer/
+          const pathname = url.pathname === '/' ? '/index.html' : url.pathname
+          const filePath = join(VIEWER_DIR, pathname)
+          const file = Bun.file(filePath)
+          if (await file.exists()) {
+            return new Response(file, { headers: { 'Content-Type': getMime(pathname) } })
           }
 
-          // SPA fallback — serve index.html for client-side routing
-          const index = files['/']
-          if (index) {
-            return new Response(index.content, { headers: { 'Content-Type': index.mime } })
-          }
-
-          return new Response('Not Found', { status: 404 })
+          // SPA fallback
+          return new Response(Bun.file(join(VIEWER_DIR, 'index.html')), {
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          })
         },
       })
       boundPort = tryPort
       break
     } catch {
       if (i === MAX_PORT_TRIES - 1) {
-        throw new Error(`Failed to bind any port in range ${DEFAULT_PORT}-${DEFAULT_PORT + MAX_PORT_TRIES - 1}`)
+        process.stderr.write(`error: failed to bind any port in range ${DEFAULT_PORT}-${DEFAULT_PORT + MAX_PORT_TRIES - 1}\n`)
+        process.exit(1)
       }
     }
   }
@@ -167,11 +178,11 @@ export async function startProductionServer(
   if (!existsSync(treeDir)) mkdirSync(treeDir, { recursive: true })
   writeServerJson(skillRoot, boundPort, process.pid, scriptId)
 
-  // Watch for file changes
   watchSaveDir(skillRoot, scriptId, (data) => broadcastSSE('update', data))
   resetIdleTimer(skillRoot)
 
-  return { action: 'started', url: `http://localhost:${boundPort}`, port: boundPort, pid: process.pid }
+  // Signal to parent that we're ready
+  process.stdout.write(`VIEWER_URL http://localhost:${boundPort}\n`)
 }
 
 // ── Dev server ───────────────────────────────────────────────────
@@ -184,7 +195,6 @@ async function startDevServer(
 
   const viewerRoot = resolve(process.cwd(), 'packages', 'viewer')
 
-  // Start API server on default port
   let apiPort = DEFAULT_PORT
   for (let i = 0; i < MAX_PORT_TRIES; i++) {
     const tryPort = DEFAULT_PORT + i
@@ -206,10 +216,8 @@ async function startDevServer(
     }
   }
 
-  // Watch for file changes
   watchSaveDir(skillRoot, scriptId, (data) => broadcastSSE('update', data))
 
-  // Start vite dev server with proxy to API
   const server = await createServer({
     root: viewerRoot,
     server: {
@@ -227,15 +235,15 @@ async function startDevServer(
   process.stdout.write(`MODE dev\n`)
 }
 
-// ── Direct-execution entry (dev mode) ────────────────────────────
+// ── Entry point ──────────────────────────────────────────────────
 if (import.meta.main) {
   const args = process.argv.slice(2)
-  const viewName = args[0]
-  const scriptId = args[1]
+  const mode = process.env.VIEWER_MODE ?? 'dev'
+  const viewName = process.env.VIEWER_VIEW ?? args[0]
+  const scriptId = process.env.VIEWER_SCRIPT_ID ?? args[1]
 
   if (!viewName || !scriptId) {
-    process.stderr.write(`usage: bun viewer-server.ts <view-name> <script-id>\n`)
-    process.stderr.write(`available views: ${AVAILABLE_VIEWS.join(', ')}\n`)
+    process.stderr.write(`usage: bun viewer-server.ts <view-name> <script-id>\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
     process.exit(2)
   }
 
@@ -244,12 +252,15 @@ if (import.meta.main) {
     process.exit(2)
   }
 
-  // Resolve skill root from SKILL_ROOT env or CLAUDE_SKILL_DIR
   const skillRoot = process.env.SKILL_ROOT ?? process.env.CLAUDE_SKILL_DIR
   if (!skillRoot) {
     process.stderr.write('error: SKILL_ROOT or CLAUDE_SKILL_DIR env var required\n')
     process.exit(1)
   }
 
-  await startDevServer(skillRoot, viewName, scriptId)
+  if (mode === 'production') {
+    startServer(skillRoot, viewName, scriptId)
+  } else {
+    await startDevServer(skillRoot, viewName, scriptId)
+  }
 }

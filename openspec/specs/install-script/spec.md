@@ -74,3 +74,5 @@
 
 - **WHEN** 安装成功完成
 - **THEN** SHALL 打印 soulkiller 版本、安装路径
+
+

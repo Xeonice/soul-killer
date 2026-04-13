@@ -2,8 +2,8 @@
  * Self-update: query GitHub Releases, compare binary hash, download if changed.
  */
 
-import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync, existsSync, rmSync } from 'node:fs'
+import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 
 const REPO = 'Xeonice/soul-killer'
@@ -176,28 +176,22 @@ export async function runUpdate(): Promise<void> {
     return
   }
 
-  // Extract binary from archive
-  const tmpPath = join(tmpdir(), `soulkiller-update-${Date.now()}`)
+  // Extract archive to temp directory
+  const extractDir = join(tmpdir(), `soulkiller-update-${Date.now()}`)
+  const { execSync } = await import('node:child_process')
 
   try {
     if (isWindows) {
-      const zipPath = tmpPath + '.zip'
+      const zipPath = extractDir + '.zip'
       writeFileSync(zipPath, Buffer.from(archiveData))
-      const { execSync } = await import('node:child_process')
-      const extractDir = tmpPath + '-extract'
       execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}'"`, { stdio: 'pipe' })
-      const { readdirSync } = await import('node:fs')
-      const files = readdirSync(extractDir)
-      const exe = files.find(f => f.endsWith('.exe'))
-      if (!exe) throw new Error('No .exe found in archive')
-      renameSync(join(extractDir, exe), tmpPath)
+      unlinkSync(zipPath)
     } else {
-      const tarPath = tmpPath + '.tar.gz'
+      const tarPath = extractDir + '.tar.gz'
       writeFileSync(tarPath, Buffer.from(archiveData))
-      const { execSync } = await import('node:child_process')
-      execSync(`tar -xzf "${tarPath}" -C "${tmpdir()}"`, { stdio: 'pipe' })
-      const extractedPath = join(tmpdir(), 'soulkiller')
-      renameSync(extractedPath, tmpPath)
+      const { mkdirSync } = await import('node:fs')
+      mkdirSync(extractDir, { recursive: true })
+      execSync(`tar -xzf "${tarPath}" -C "${extractDir}"`, { stdio: 'pipe' })
       unlinkSync(tarPath)
     }
   } catch (err) {
@@ -207,27 +201,53 @@ export async function runUpdate(): Promise<void> {
     return
   }
 
-  // Atomic replace
+  // Replace binary
   const execPath = process.execPath
-  try {
-    chmodSync(tmpPath, 0o755)
-    renameSync(tmpPath, execPath)
-  } catch {
-    // rename across filesystems fails — fall back to copy
-    try {
-      const data = Bun.file(tmpPath).arrayBuffer()
-      writeFileSync(execPath, Buffer.from(await data))
-      chmodSync(execPath, 0o755)
-      unlinkSync(tmpPath)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error(`  Failed to replace binary: ${msg}`)
-      console.error(`  New binary is at: ${tmpPath}`)
-      console.error(`  You can manually copy it to: ${execPath}`)
+  const extractedBinary = isWindows
+    ? join(extractDir, 'soulkiller-windows-x64.exe')
+    : join(extractDir, 'soulkiller')
+
+  if (!existsSync(extractedBinary)) {
+    // Fallback: find any exe or binary
+    const { readdirSync } = await import('node:fs')
+    const files = readdirSync(extractDir)
+    const bin = isWindows ? files.find(f => f.endsWith('.exe')) : files.find(f => f === 'soulkiller')
+    if (!bin) {
+      console.error('  No binary found in archive')
+      rmSync(extractDir, { recursive: true, force: true })
       process.exitCode = 1
       return
     }
   }
+
+  try {
+    chmodSync(extractedBinary, 0o755)
+    renameSync(extractedBinary, execPath)
+  } catch {
+    try {
+      const data = Bun.file(extractedBinary).arrayBuffer()
+      writeFileSync(execPath, Buffer.from(await data))
+      chmodSync(execPath, 0o755)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`  Failed to replace binary: ${msg}`)
+      rmSync(extractDir, { recursive: true, force: true })
+      process.exitCode = 1
+      return
+    }
+  }
+
+  // Replace viewer static files (if present in archive)
+  const extractedViewer = join(extractDir, 'viewer')
+  if (existsSync(extractedViewer)) {
+    const viewerDst = join(homedir(), '.soulkiller', 'viewer')
+    rmSync(viewerDst, { recursive: true, force: true })
+    renameSync(extractedViewer, viewerDst)
+    console.log('  ✓ Viewer files updated')
+  }
+
+  // Cleanup
+  rmSync(extractDir, { recursive: true, force: true })
 
   console.log(`  ✓ Updated to ${latestVersion}`)
 }

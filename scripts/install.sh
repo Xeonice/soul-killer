@@ -46,18 +46,19 @@ install_binary() {
 
   mkdir -p "$INSTALL_DIR"
 
-  # Download and extract (try CDN first, fall back to GitHub)
+  # Download and extract to temp directory
+  TMP_DIR=$(mktemp -d)
   download_ok=0
   if command -v curl >/dev/null 2>&1; then
-    if curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR" 2>/dev/null; then
+    if curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$TMP_DIR" 2>/dev/null; then
       download_ok=1
-    elif curl -fsSL "$FALLBACK_URL" | tar -xz -C "$INSTALL_DIR"; then
+    elif curl -fsSL "$FALLBACK_URL" | tar -xz -C "$TMP_DIR"; then
       download_ok=1
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if wget -qO- "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR" 2>/dev/null; then
+    if wget -qO- "$DOWNLOAD_URL" | tar -xz -C "$TMP_DIR" 2>/dev/null; then
       download_ok=1
-    elif wget -qO- "$FALLBACK_URL" | tar -xz -C "$INSTALL_DIR"; then
+    elif wget -qO- "$FALLBACK_URL" | tar -xz -C "$TMP_DIR"; then
       download_ok=1
     fi
   else
@@ -66,11 +67,23 @@ install_binary() {
   fi
 
   if [ "$download_ok" = "0" ]; then
+    rm -rf "$TMP_DIR"
     echo "Error: Download failed from both CDN and GitHub."
     exit 1
   fi
 
+  # Install binary
+  mv "$TMP_DIR/soulkiller" "$BINARY"
   chmod +x "$BINARY"
+
+  # Install viewer static files (if present in archive)
+  VIEWER_DIR="$HOME/.soulkiller/viewer"
+  if [ -d "$TMP_DIR/viewer" ]; then
+    rm -rf "$VIEWER_DIR"
+    mv "$TMP_DIR/viewer" "$VIEWER_DIR"
+  fi
+
+  rm -rf "$TMP_DIR"
 
   # macOS: remove quarantine attribute
   if [ "$(uname -s)" = "Darwin" ]; then

@@ -40,3 +40,5 @@ viewer-server 生产模式 SHALL 从内嵌的 barrel 模块中读取前端产物
 
 - **WHEN** 在项目根目录执行 `bun install`
 - **THEN** SHALL 同时安装根包和 `packages/viewer` 的所有依赖
+
+
