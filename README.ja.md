@@ -129,7 +129,7 @@ irm https://raw.githubusercontent.com/Xeonice/soul-killer/main/scripts/install.p
 エクスポートされた `.skill` アーカイブは、プレイ中にローカルブランチツリー可視化サーバーを自動起動し、現在のストーリー進行状況を追跡できます。
 
 <p align="center">
-  <img src="docs/images/branch-tree.png" alt="Branch Tree Visualization" width="800" />
+  <img src="https://raw.githubusercontent.com/Xeonice/soul-killer/main/docs/images/branch-tree.png" alt="Branch Tree Visualization" width="800" />
 </p>
 
 **機能：**

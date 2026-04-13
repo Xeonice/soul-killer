@@ -130,7 +130,7 @@ Step 3: Export the Game
 Exported `.skill` archives automatically start a local branch tree visualization server during play, helping you track your current story progress.
 
 <p align="center">
-  <img src="docs/images/branch-tree.png" alt="Branch Tree Visualization" width="800" />
+  <img src="https://raw.githubusercontent.com/Xeonice/soul-killer/main/docs/images/branch-tree.png" alt="Branch Tree Visualization" width="800" />
 </p>
 
 **Features:**
