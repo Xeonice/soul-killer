@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { zipSync, strToU8 } from 'fflate'
 import { readManifest, readSoulFiles } from '../soul/package.js'
 import { loadWorld, getWorldDir } from '../world/manifest.js'
-import { generateSkillMd } from './spec/skill-template.js'
+import { generateSkillMd, generateEngineTemplate, CURRENT_ENGINE_VERSION } from './spec/skill-template.js'
 import { generateStorySpec, type StorySpecConfig } from './spec/story-spec.js'
 import {
   lintSkillTemplate,
@@ -276,6 +276,15 @@ export function packageSkill(config: PackageConfig): PackageResult {
     routeCharacters: story_spec.route_characters?.map(r => ({ slug: r.slug, name: r.name })),
   })
   unprefixedFiles['SKILL.md'] = strToU8(skillContent)
+
+  // 4.4b Engine template + version manifest (split format)
+  unprefixedFiles['runtime/engine.md'] = strToU8(generateEngineTemplate())
+  unprefixedFiles['soulkiller.json'] = strToU8(JSON.stringify({
+    engine_version: CURRENT_ENGINE_VERSION,
+    soulkiller_version: process.env.SOULKILLER_VERSION ?? 'dev',
+    exported_at: new Date().toISOString(),
+    skill_id: baseName,
+  }, null, 2) + '\n')
 
   // 4.5 Author-side template lint — runs in the soulkiller process, never on
   //     the player's machine. The lint catches static prompt bugs (yaml

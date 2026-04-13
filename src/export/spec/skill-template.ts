@@ -1,6 +1,12 @@
 import type { CharacterSpec, ActOption } from './story-spec.js'
 
 /**
+ * Engine template version — bump this when engine.md structure changes
+ * so the packager / loader can detect stale archives.
+ */
+export const CURRENT_ENGINE_VERSION = 1
+
+/**
  * `CharacterSpec` extended with the ASCII slug used as the souls/<slug>/
  * directory name inside the archive. The slug is computed by the packager
  * via `formatPathSegment` and threaded through here so SKILL.md path
@@ -1913,3 +1919,219 @@ ${buildEndingsDslSection()}
 ${enginePart}
 `
 }
+
+/**
+ * Generate the engine-only template for runtime/engine.md.
+ * This is content-independent — no character names, paths, or story config.
+ * Where content is needed, it references SKILL.md.
+ */
+export function generateEngineTemplate(): string {
+  // Build multi-character engine with placeholder references
+  // Use a generic reading list that references SKILL.md
+  const genericReadingList = `## Required Reading List
+
+See the **Required Reading List** section in SKILL.md for the complete list of character personality files, worldview files, and story-spec to read. Every file must be Read in full (no offset/limit).
+
+When reading worldview files, first use \`Glob \${CLAUDE_SKILL_DIR}/world/**/*.md\` to list all files, then call Read on each one (without offset/limit) to ensure nothing is missed.
+
+## Chronicle Consistency Requirements
+- All time anchors referenced in the script must match \`display_time\` in \`history/timeline.md\`
+- Do not fabricate event details that conflict with \`history/events/\` descriptions
+
+## Character Scheduling
+See the **Character Scheduling** section in SKILL.md for character appearance timing (\`appears_from\` values).`
+
+  const genericProseStyle = `## Prose Style Constraints (Hard Constraints on All Phase 2 Output)
+
+See the **Prose Style Constraints** section in SKILL.md for target language, voice anchor, and forbidden patterns. These constraints are mandatory for all narrative output.`
+
+  return `# Soulkiller Visual Novel Engine — Execution Protocol
+
+This document defines the complete execution protocol for all phases.
+Story-specific content (characters, world, configuration) is in SKILL.md.
+
+${buildPlatformNotice()}
+
+${buildPhaseMinusOne()}
+
+${buildSaveSystemSection()}
+
+# Phase 0: Startup Configuration
+
+Ask the user in the following order at startup. Each step is completed via AskUserQuestion.
+
+## Step 0.1: Choose Story Length
+
+Read \`\${CLAUDE_SKILL_DIR}/story-spec.md\`'s frontmatter to find \`acts_options\` and \`default_acts\`.
+
+Use AskUserQuestion to present the available options. If the user presses Enter without switching, use the default.
+
+Based on the user's selection, **initialize runtime state in your internal context**:
+
+\`\`\`
+state.chosen_acts = <acts from the user's selected ActOption>
+state.rounds_budget = <rounds_total from the user's selected ActOption>
+state.target_endings_count = <endings_count from the user's selected ActOption>
+\`\`\`
+
+## Step 0.2: Story Seeds Prompt
+
+Use AskUserQuestion to ask:
+
+question: "What kind of story would you like?"
+options:
+  - "Let fate decide"
+  - "I have some ideas"
+
+If the user selects "Let fate decide", seeds are empty — proceed directly to Phase 1.
+If the user selects "I have some ideas", ask them to describe their desired story direction in natural language.
+After collection, proceed to Phase 1.
+
+## appears_from Truncation Rule
+
+If a character's \`appears_from\` in story-spec exceeds \`state.chosen_acts\`:
+- Truncate to first appearance in the final act (\`act_\${state.chosen_acts}\`)
+- No error — introduce naturally
+
+# Phase 1 Creation Constraints (Must Be Followed When Generating Scripts)
+
+${buildStateSchemaSection()}
+
+${buildEndingsDslSection()}
+
+# Phase 1: Generate Script and Persist
+
+${buildReadBudgetDeclaration({})}
+
+## Phase 0 Contamination Fix (Mandatory)
+
+Phase 0 likely only Read the first 50 lines of \`story-spec.md\` to extract \`acts_options\`. However, the **Story State section, Prose Style Anchor section, and characters configuration** are further down in the file. Phase 0's partial read did not include this critical information.
+
+**As the very first action of Phase 1**, re-Read the entire \`\${CLAUDE_SKILL_DIR}/story-spec.md\` **without offset/limit parameters**.
+
+${genericReadingList}
+
+Using the above materials and the seeds collected from the user in Phase 0 (if any), create a complete visual novel script following story-spec.md's specifications.
+
+The script must follow story-spec.md's multi-character cast scheduling rules, choice tradeoff constraints, and character appearance timing (see SKILL.md's Character Scheduling section).
+
+## Script Building (Incremental)
+
+Script generation uses an incremental plan-then-build approach. You do NOT write the complete script in a single call. Instead:
+
+**Step A — Plan**: Generate a plan.json (narrative blueprint with scene outlines, character arcs, context_refs, and route structure). Call \`soulkiller runtime script plan <id>\` to validate.
+
+**Step B — Scenes**: Generate each scene individually in topological order. Call \`soulkiller runtime script scene <id> <scene-id>\` after each.
+
+**Step C — Endings**: Generate endings after all scenes. Call \`soulkiller runtime script ending <id> <ending-id>\` after each.
+
+**Step D — Build**: Call \`soulkiller runtime script build <id>\` to merge into final script.json.
+
+**Step E — Self-check**: Verify prose style compliance and data coverage.
+
+# Phase 2: Run Story
+
+${genericProseStyle}
+
+## Scene Rendering Rules
+
+Each scene render must:
+1. Read the scene text from the loaded script
+2. Render the narrative in the target language following prose style constraints
+3. Present choices via AskUserQuestion (max 3 story choices + 💾 save option)
+
+## State Tracking Rules
+
+- User selects a story choice -> call \`soulkiller runtime apply <script-id> <scene-id> <choice-id>\` to handle all state transitions -> immediately render the next scene
+- User selects "💾 Save current progress" -> call \`soulkiller runtime save <script-id>\` -> re-present the same choices
+- Free-text reply -> treat as in-character dialogue, then re-present the same choices (no state change)
+
+## apply_consequences Standard Flow
+
+**Core contract**: delta calculation, clamping, type validation, and transactional writes are **all handled internally by \`soulkiller runtime apply\`**. You do not need to calculate deltas or edit state.yaml.
+
+\`\`\`
+soulkiller runtime apply <script-id> <current-scene-id> <choice-id>
+\`\`\`
+
+If state apply returns a non-zero exit code, **do not** attempt to manually fix state.yaml. Use \`soulkiller runtime rebuild\` or \`soulkiller runtime reset\`.
+
+## Phase 2 Initialization
+
+\`\`\`
+soulkiller runtime init <script-id>
+\`\`\`
+
+**Before rendering the first scene**, call \`soulkiller runtime viewer tree <script-id>\` to start the branch tree visualization server. Parse VIEWER_URL from stdout and inform the user:
+"分支线可视化已就绪：<VIEWER_URL> — 在浏览器中打开即可实时查看选择路径。"
+
+## Scene Transition Rules
+
+4 stop situations:
+1. Scene ends with choices -> AskUserQuestion
+2. 💾 save flow
+3. Free-text reply -> re-present choices
+4. Ending reached -> Phase 3
+
+## Reset
+
+\`\`\`
+soulkiller runtime reset <script-id>
+\`\`\`
+
+## Route System
+
+When the current scene is an \`affinity_gate\`:
+1. Do NOT present choices via AskUserQuestion
+2. Call \`soulkiller runtime route <script-id> <gate-scene-id>\`
+3. Parse output for matched route and next scene
+4. Render transition narration and proceed
+
+# Phase 3: Ending Gallery
+
+## 1. Ending Performance
+Render the matched ending's narrative.
+
+## 2. Journey Recap
+Summarize the player's journey through key decisions.
+
+## 3. Ending Gallery (All Endings)
+Show all possible endings with discovery status.
+
+## 4. Replay Options
+Offer: replay from beginning, generate new script, or quit.
+
+# Replay Rules
+
+"Start over" -> \`soulkiller runtime reset <script-id>\` -> re-enter Phase 2.
+"Generate new script" -> re-enter Phase 0 for new configuration.
+
+# Prohibited Actions
+
+## Story Structure
+- Do not generate more scenes/acts than the user selected
+- Do not exceed 3 choices per scene (+ 💾 = max 4 AskUserQuestion options)
+
+## Control Flow Self-Pausing (Strictly Prohibited)
+- Never pause between scenes with "Shall I continue?" or "Ready for the next scene?"
+- Scene transitions are immediate after state apply
+
+## Progress/Save Exposure (Fourth Wall)
+- Never show "story has entered Act N" or progress indicators
+- Never show scene IDs or save write details
+- Do not reveal state values or field names during the story
+
+## Chatbot-Style Meta-Narration
+- Do not use transitions like "The above was X, now let me..."
+- Narration enters the scene directly without preamble
+
+## Option Label Contamination
+- AskUserQuestion option text must be verbatim copy of script choices[i].text
+- Do not add suffix hints like "(friendly route)" or "(will increase trust)"
+
+## Direct State File Writes (Hard Red Line)
+- **Never** use Edit/Write to modify state.yaml or meta.yaml
+- **All** state writes must go through \`soulkiller runtime {init,apply,reset,rebuild,save}\`
+`
+}
+

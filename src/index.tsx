@@ -24,5 +24,21 @@ if (args[0] === 'runtime') {
   process.exit(code)
 }
 
+if (args[0] === 'skill') {
+  const { skillList, skillUpgrade } = await import('./cli/skill-manager.js')
+  const sub = args[1]
+  if (sub === 'list') {
+    process.exit(skillList())
+  } else if (sub === 'upgrade') {
+    const code = await skillUpgrade(args[2])
+    process.exit(code)
+  } else {
+    console.log('Usage: soulkiller skill <list|upgrade>')
+    console.log('  list                  List installed soulkiller skills')
+    console.log('  upgrade [--all|name]  Upgrade skill engine')
+    process.exit(sub ? 2 : 0)
+  }
+}
+
 const { waitUntilExit } = render(<App />)
 await waitUntilExit()
