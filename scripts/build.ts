@@ -167,6 +167,24 @@ for (const { platform, bunTarget } of TARGETS) {
 
 console.log('  ✓ All platforms compiled\n')
 
+// ── Phase 2.5: Checksums ────────────────────────────────────────
+console.log('  Phase 2.5: Generating checksums...')
+
+const checksumLines = [`# soulkiller v${version} checksums (sha256)`]
+for (const { platform } of TARGETS) {
+  const isWindows = platform.startsWith('windows')
+  const binaryName = `soulkiller-${platform}${isWindows ? '.exe' : ''}`
+  const binaryPath = join(DIST, binaryName)
+  const hasher = new Bun.CryptoHasher('sha256')
+  hasher.update(readFileSync(binaryPath))
+  const hash = hasher.digest('hex')
+  checksumLines.push(`${hash}  ${binaryName}`)
+}
+
+const { writeFileSync: writeChecksums } = await import('node:fs')
+writeChecksums(join(DIST, 'checksums.txt'), checksumLines.join('\n') + '\n', 'utf8')
+console.log(`  ✓ Checksums: ${TARGETS.length} entries\n`)
+
 // ── Phase 3: Compress ───────────────────────────────────────────
 console.log('  Phase 3: Compressing...')
 

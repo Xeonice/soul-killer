@@ -90,6 +90,9 @@ jobs:
           # version.txt for Worker to read without GitHub API
           echo "$VERSION" > /tmp/version.txt
           npx wrangler r2 object put --remote "soulkiller-releases/releases/latest/version.txt" --file /tmp/version.txt
+          # Checksums
+          npx wrangler r2 object put --remote "soulkiller-releases/releases/$VERSION/checksums.txt" --file dist/checksums.txt
+          npx wrangler r2 object put --remote "soulkiller-releases/releases/latest/checksums.txt" --file dist/checksums.txt
           # Install scripts
           npx wrangler r2 object put --remote "soulkiller-releases/scripts/install.sh" --file dist/install.sh
           npx wrangler r2 object put --remote "soulkiller-releases/scripts/install.ps1" --file dist/install.ps1
