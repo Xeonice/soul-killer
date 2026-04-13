@@ -83,12 +83,13 @@ export async function runTree(skillRoot: string, scriptId: string): Promise<Tree
   const treeDir = join(skillRoot, 'runtime', 'tree')
   if (!existsSync(treeDir)) mkdirSync(treeDir, { recursive: true })
 
-  // Resolve tree-server.ts path (same directory as this file)
-  const serverScript = join(dirname(new URL(import.meta.url).pathname), 'tree-server.ts')
+  // Use viewer-server via main.ts 'viewer' subcommand path
+  // Spawns soulkiller runtime viewer tree <script-id> as a detached process
+  const mainScript = join(dirname(new URL(import.meta.url).pathname), 'main.ts')
 
   return new Promise<TreeResult>((resolve, reject) => {
-    const child = spawn(process.execPath, [serverScript], {
-      env: { ...process.env, BUN_BE_BUN: '1', SKILL_ROOT: skillRoot, SCRIPT_ID: scriptId },
+    const child = spawn(process.execPath, [mainScript, 'viewer', 'tree', scriptId], {
+      env: { ...process.env, BUN_BE_BUN: '1', SKILL_ROOT: skillRoot },
       stdio: ['ignore', 'pipe', 'ignore'],
       detached: true,
     })
@@ -96,7 +97,7 @@ export async function runTree(skillRoot: string, scriptId: string): Promise<Tree
     let output = ''
     child.stdout!.on('data', (chunk: Buffer) => {
       output += chunk.toString()
-      const match = output.match(/TREE_URL (http:\/\/localhost:\d+)/)
+      const match = output.match(/VIEWER_URL (http:\/\/localhost:\d+)/)
       if (match) {
         child.unref()
         const url = match[1]!
@@ -107,16 +108,16 @@ export async function runTree(skillRoot: string, scriptId: string): Promise<Tree
 
     child.on('error', (err) => reject(err))
     child.on('exit', (code) => {
-      if (!output.includes('TREE_URL')) {
-        reject(new Error(`tree-server exited with code ${code}`))
+      if (!output.includes('VIEWER_URL')) {
+        reject(new Error(`viewer-server exited with code ${code}`))
       }
     })
 
     // Timeout after 10s
     setTimeout(() => {
-      if (!output.includes('TREE_URL')) {
+      if (!output.includes('VIEWER_URL')) {
         child.kill()
-        reject(new Error('tree-server startup timed out'))
+        reject(new Error('viewer-server startup timed out'))
       }
     }, 10000)
   })

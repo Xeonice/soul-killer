@@ -64,11 +64,17 @@ Write-Host "  ✓ Location:  $Binary"
 Write-Host ""
 
 if ($PathConfigured) {
-    Write-Host "  PATH updated. Open a new terminal window, then run:"
+    Write-Host "  PATH updated in user environment."
+    Write-Host ""
+    Write-Host "  To use in this terminal:"
+    Write-Host ""
+    Write-Host "    `$env:Path = `"$InstallDir;`$env:Path`""
+    Write-Host ""
+    Write-Host "  Or open a new terminal window."
 } else {
     Write-Host "  Run:"
+    Write-Host ""
+    Write-Host "    soulkiller"
 }
 
-Write-Host ""
-Write-Host "    soulkiller"
 Write-Host ""

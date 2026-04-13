@@ -19,8 +19,10 @@ import { runReset } from './reset.js'
 import { runList } from './list.js'
 import { runSave } from './save.js'
 import { runTree, runTreeStop } from './tree.js'
+import { startProductionServer, AVAILABLE_VIEWS } from './viewer-server.js'
 import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild } from './script-builder.js'
 import { runRoute } from './route.js'
+import { runScripts } from './scripts.js'
 import type { ChangeEntry } from './schema.js'
 import type { SaveType } from './io.js'
 
@@ -33,6 +35,8 @@ const SUBCOMMANDS = [
   'reset',
   'save',
   'list',
+  'scripts',
+  'viewer',
   'tree',
   'script',
   'route',
@@ -57,6 +61,8 @@ function printHelp(): void {
       '  reset <script-id> [<save-type>]                Wholesale reset to initial_state',
       '  save <script-id> [--overwrite <timestamp>]     Snapshot auto save to manual/',
       '  list <script-id>                               List all saves for a script (JSON)',
+      '  scripts                                        List all generated scripts (JSON)',
+      '  viewer <view> <script-id>                      Start viewer server (views: tree)',
       '  tree <script-id>                               Start branch tree visualization server',
       '  tree --stop                                    Stop the visualization server',
       '  script plan <id>                               Validate + enrich plan.json',
@@ -233,6 +239,29 @@ export async function runCli(argv: string[]): Promise<number> {
       }
       const result = runList(skillRoot, scriptId)
       process.stdout.write(JSON.stringify(result, null, 2) + '\n')
+      return 0
+    }
+
+    if (sub === 'scripts') {
+      const result = runScripts(skillRoot)
+      process.stdout.write(JSON.stringify(result, null, 2) + '\n')
+      return 0
+    }
+
+    if (sub === 'viewer') {
+      const viewName = argv[1]
+      const viewScriptId = argv[2]
+      if (!viewName || !viewScriptId) {
+        process.stderr.write(`usage: state viewer <view-name> <script-id>\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
+        return 2
+      }
+      if (!AVAILABLE_VIEWS.includes(viewName)) {
+        process.stderr.write(`error: unknown view "${viewName}"\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
+        return 2
+      }
+      const result = await startProductionServer(skillRoot, viewName, viewScriptId)
+      process.stdout.write(`VIEWER_URL ${result.url}\n`)
+      process.stdout.write(`VIEWER_PID ${result.pid}\n`)
       return 0
     }
 

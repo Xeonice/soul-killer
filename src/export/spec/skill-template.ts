@@ -450,8 +450,8 @@ soulkiller runtime init <script-id>
 
 The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-**Before rendering the first scene**, call \`soulkiller runtime tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
-"分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
+**Before rendering the first scene**, call \`soulkiller runtime viewer tree <script-id>\` to start the branch tree visualization server. Parse VIEWER_URL from stdout and inform the user:
+"分支线可视化已就绪：<VIEWER_URL> — 在浏览器中打开即可实时查看选择路径。"
 
 Then begin rendering the first scene.
 
@@ -965,8 +965,8 @@ soulkiller runtime init <script-id>
 
 The script internally writes auto/state.yaml from script.initial_state and initializes auto/meta.yaml in one pass. (Phase -1's "restart from beginning" or "no-save script" entry point already called init on that path — Phase 2 can start rendering directly.)
 
-**Before rendering the first scene**, call \`soulkiller runtime tree <script-id>\` to start the branch tree visualization server. Parse TREE_URL from stdout and inform the user:
-"分支线可视化已就绪：<TREE_URL> — 在浏览器中打开即可实时查看选择路径。"
+**Before rendering the first scene**, call \`soulkiller runtime viewer tree <script-id>\` to start the branch tree visualization server. Parse VIEWER_URL from stdout and inform the user:
+"分支线可视化已就绪：<VIEWER_URL> — 在浏览器中打开即可实时查看选择路径。"
 
 Then begin rendering the first scene.
 
@@ -1234,7 +1234,7 @@ After installation, open a new terminal and retry.
 
 Enter **read-only mode** — skip the write portions of Steps -1.1 through -1.4, only allowing:
 
-- List existing \`runtime/scripts/*.json\` (use Read to view header fields)
+- List existing scripts via \`soulkiller runtime scripts\` (use Read to view header fields)
 - List existing saves (use Glob to scan \`runtime/saves/*/auto/meta.yaml\`)
 - View the Phase 3 gallery for a previously reached ending
 
@@ -1246,10 +1246,14 @@ Prohibited:
 
 ## Step -1.1: List Existing Scripts
 
-Use the Glob tool to list \`\${CLAUDE_SKILL_DIR}/runtime/scripts/*.json\`:
+Run the following command and parse the JSON output:
 
-- **If the result is empty** -> skip Step -1.2, proceed directly to **Phase 0** (first playthrough, no menu needed)
-- **If the result is not empty** -> proceed to Step -1.2
+\`\`\`
+soulkiller runtime scripts
+\`\`\`
+
+- **If \`count\` is 0** -> skip Step -1.2, proceed directly to **Phase 0** (first playthrough, no menu needed)
+- **If \`count\` > 0** -> proceed to Step -1.2, using the \`scripts\` array entries for each script's metadata
 
 ## Step -1.2: Parse Each Script's Header Fields
 

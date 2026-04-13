@@ -1,6 +1,6 @@
 {
   "name": "soulkiller",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Extract your digital soul and create distributable AI avatars",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "lint:shell": "shellcheck --shell=sh src/export/state/doctor.sh && shellcheck --shell=bash src/export/state/state.sh",
     "verify": "bun acceptance/cli.ts verify",
     "diagnose": "bun acceptance/cli.ts diagnose",
-    "build:release": "bun scripts/build.ts"
+    "build:release": "bun scripts/build.ts",
+    "dev:viewer": "bun src/export/state/viewer-server.ts"
   },
   "keywords": [
     "soulkiller",
@@ -31,6 +32,7 @@
   ],
   "author": "",
   "license": "GPL-3.0",
+  "workspaces": ["packages/*"],
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.37",
     "@mozilla/readability": "^0.6.0",
@@ -41,7 +43,8 @@
     "ink": "^6.8.0",
     "linkedom": "^0.18.12",
     "openai": "^6.33.0",
-    "react": "^19.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "turndown": "^7.2.2",
     "yaml": "^2.8.3",
     "zod": "^4.3.6"
@@ -52,6 +55,7 @@
     "ink-testing-library": "^4.0.0",
     "strip-ansi": "^7.2.0",
     "typescript": "^6.0.2",
+    "vite": "^6.3.0",
     "vitest": "^4.1.2"
   }
 }

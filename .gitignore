@@ -5,3 +5,4 @@ dist/
 .DS_Store
 .claude/
 tests/visual/__baselines__/*.diff.png
+src/export/state/viewer-bundle.ts

@@ -142,13 +142,23 @@ main() {
   echo ""
 
   if [ "${PATH_CONFIGURED:-0}" = "1" ]; then
-    echo "  PATH updated. Open a new terminal window, then run:"
+    echo "  PATH updated in ${RC_FILE}."
+    echo ""
+    echo "  To use in this terminal:"
+    echo ""
+    if [ "${SHELL_NAME}" = "fish" ]; then
+      echo "    set -gx PATH \$HOME/.soulkiller/bin \$PATH"
+    else
+      echo "    export PATH=\"\$HOME/.soulkiller/bin:\$PATH\""
+    fi
+    echo ""
+    echo "  Or open a new terminal window."
   else
     echo "  Run:"
+    echo ""
+    echo "    soulkiller"
   fi
 
-  echo ""
-  echo "    soulkiller"
   echo ""
 }
 
