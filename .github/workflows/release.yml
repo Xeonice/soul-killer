@@ -60,7 +60,7 @@ jobs:
       - name: Merge artifacts into dist/
         run: |
           mkdir -p dist
-          cp dist-all/dist-macos-latest/* dist/
+          cp dist-all/dist-macos-26/* dist/
           cp dist-all/dist-ubuntu-latest/* dist/
           cp scripts/install.sh dist/install.sh
           cp scripts/install.ps1 dist/install.ps1
