@@ -270,21 +270,20 @@ export async function runCli(argv: string[]): Promise<number> {
         process.stderr.write(`error: unknown view "${viewName}"\navailable views: ${AVAILABLE_VIEWS.join(', ')}\n`)
         return 2
       }
-      // Spawn self as a detached viewer-server process
+      // Spawn self as a detached viewer-server process.
+      // process.execPath is always the correct entry:
+      //   compiled binary → ~/.soulkiller/bin/soulkiller
+      //   dev mode (via runCli) → bun (but this code path isn't reached in dev)
       const { spawn } = await import('node:child_process')
-      // In compiled binary: process.execPath IS the soulkiller binary → spawn with 'runtime viewer-serve'
-      // In dev mode (bun): process.execPath is bun → spawn with the entry script + 'runtime viewer-serve'
-      const spawnArgs = process.env.BUN_BE_BUN
-        ? ['runtime', 'viewer-serve', viewName, viewScriptId]
-        : [process.argv[1], 'runtime', 'viewer-serve', viewName, viewScriptId]
+      const spawnArgs = ['runtime', 'viewer-serve', viewName, viewScriptId]
       return new Promise<number>((resolve) => {
         const child = spawn(process.execPath, spawnArgs, {
           env: {
             ...process.env,
-            BUN_BE_BUN: '1',
             SKILL_ROOT: skillRoot,
+            CLAUDE_SKILL_DIR: skillRoot,
           },
-          stdio: ['ignore', 'pipe', 'ignore'],
+          stdio: ['ignore', 'pipe', 'pipe'],
           detached: true,
         })
         let output = ''
@@ -298,12 +297,15 @@ export async function runCli(argv: string[]): Promise<number> {
             resolve(0)
           }
         })
+        let stderrOutput = ''
+        child.stderr!.on('data', (chunk: Buffer) => { stderrOutput += chunk.toString() })
         child.on('error', (err) => {
           process.stderr.write(`error: ${err.message}\n`)
           resolve(1)
         })
         child.on('exit', (code) => {
           if (!output.includes('VIEWER_URL')) {
+            if (stderrOutput) process.stderr.write(stderrOutput)
             process.stderr.write(`error: viewer-server exited with code ${code}\n`)
             resolve(1)
           }
