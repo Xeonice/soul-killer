@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-26
             targets: darwin-arm64,darwin-x64
           - os: ubuntu-latest
             targets: linux-x64,linux-arm64,windows-x64
@@ -79,10 +79,16 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-darwin-arm64.tar.gz" --file dist/soulkiller-darwin-arm64.tar.gz
-          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-darwin-x64.tar.gz" --file dist/soulkiller-darwin-x64.tar.gz
-          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-linux-x64.tar.gz" --file dist/soulkiller-linux-x64.tar.gz
-          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-linux-arm64.tar.gz" --file dist/soulkiller-linux-arm64.tar.gz
-          npx wrangler r2 object put "soulkiller-releases/${{ github.ref_name }}/soulkiller-windows-x64.zip" --file dist/soulkiller-windows-x64.zip
-          npx wrangler r2 object put "soulkiller-releases/scripts/install.sh" --file dist/install.sh
-          npx wrangler r2 object put "soulkiller-releases/scripts/install.ps1" --file dist/install.ps1
+          VERSION="${{ github.ref_name }}"
+          # Upload each binary to versioned path + latest path
+          for asset in dist/soulkiller-*.tar.gz dist/soulkiller-*.zip; do
+            name=$(basename "$asset")
+            npx wrangler r2 object put --remote "soulkiller-releases/releases/$VERSION/$name" --file "$asset"
+            npx wrangler r2 object put --remote "soulkiller-releases/releases/latest/$name" --file "$asset"
+          done
+          # version.txt for Worker to read without GitHub API
+          echo "$VERSION" > /tmp/version.txt
+          npx wrangler r2 object put --remote "soulkiller-releases/releases/latest/version.txt" --file /tmp/version.txt
+          # Install scripts
+          npx wrangler r2 object put --remote "soulkiller-releases/scripts/install.sh" --file dist/install.sh
+          npx wrangler r2 object put --remote "soulkiller-releases/scripts/install.ps1" --file dist/install.ps1
