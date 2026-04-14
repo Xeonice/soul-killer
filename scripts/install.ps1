@@ -45,10 +45,17 @@ if (Test-Path $ExtractedExe) {
     Move-Item -Path $ExtractedExe -Destination $Binary -Force
 }
 
-# Install viewer static files (if present)
+# Install viewer static files (if present).
+# Runtime reads viewer assets from ~/.soulkiller/viewer (hardcoded in
+# viewer-server.ts), not next to the binary in $InstallDir. Keep the install
+# location aligned with the runtime expectation across all platforms.
 $ViewerSrc = Join-Path $TmpExtract "viewer"
-$ViewerDst = Join-Path $InstallDir "viewer"
+$ViewerDst = Join-Path $env:USERPROFILE ".soulkiller\viewer"
 if (Test-Path $ViewerSrc) {
+    $ViewerParent = Split-Path -Parent $ViewerDst
+    if (!(Test-Path $ViewerParent)) {
+        New-Item -ItemType Directory -Path $ViewerParent -Force | Out-Null
+    }
     if (Test-Path $ViewerDst) { Remove-Item -Recurse -Force $ViewerDst }
     Move-Item -Path $ViewerSrc -Destination $ViewerDst -Force
 }
