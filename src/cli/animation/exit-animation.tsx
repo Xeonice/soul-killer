@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Text } from 'ink'
+import { Text, Box } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
-import { loadArasakaLogo } from './logo-loader.js'
+import { loadArasakaLogoCentered } from './logo-loader.js'
 import { LogoAnnihilator } from './logo-annihilator.js'
 import { isAnimationEnabled } from './use-animation.js'
-import { CenteredStage } from './layout.js'
+import { CenteredStage, getContentWidth } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
 
 interface ExitAnimationProps {
@@ -36,6 +36,7 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
 
   const engine = getGlitchEngine()
   const termWidth = process.stdout.columns ?? 80
+  const contentWidth = getContentWidth(termWidth)
 
   useEffect(() => {
     if (!isAnimationEnabled()) {
@@ -46,7 +47,9 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
     const timers: NodeJS.Timeout[] = []
 
     // === Phase 1: Logo appears immediately, annihilates (0-5s) ===
-    const rawLines = loadArasakaLogo(termWidth)
+    // Use pre-padded lines so the logo renders centered without relying on
+    // yoga's alignItems (which miscounts ANSI escape bytes as visible width)
+    const rawLines = loadArasakaLogoCentered(contentWidth)
     setLogoLines(rawLines)
     setLogoReady(true)
     annihilatorRef.current = new LogoAnnihilator(rawLines)
@@ -130,11 +133,14 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
       <Text> </Text>
 
       {/* === Logo Annihilation (dissolves in place, then disappears) === */}
+      {/* Lines are pre-padded — render in plain Box to avoid yoga double-centering ANSI bytes */}
       {logoReady && !logoGone && (
         <>
-          {logoLines.map((line, i) => (
-            <Text key={`logo-${i}`}>{line}</Text>
-          ))}
+          <Box flexDirection="column" width={contentWidth}>
+            {logoLines.map((line, i) => (
+              <Text key={`logo-${i}`}>{line}</Text>
+            ))}
+          </Box>
           <Text> </Text>
         </>
       )}

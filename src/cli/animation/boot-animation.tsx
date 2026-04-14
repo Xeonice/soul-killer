@@ -3,7 +3,7 @@ import { Text, Box } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { bootingBar } from './booting-bar.js'
-import { loadArasakaLogo } from './logo-loader.js'
+import { loadArasakaLogoCentered } from './logo-loader.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { CenteredStage, getContentWidth } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
@@ -164,7 +164,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
   void frame
 
   const barWidth = contentWidth
-  const logoLines = loadArasakaLogo(contentWidth)
+  const logoLines = loadArasakaLogoCentered(contentWidth)
 
   // Visible portion of the scroll buffer (last N lines)
   const visibleLines = scrollBuffer.slice(-SCROLL_VISIBLE)
@@ -206,9 +206,13 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
       {panelStarted && (
         <>
           <Text> </Text>
-          {logoLines.map((line, i) => (
-            <Text key={`logo-${i}`}>{line}</Text>
-          ))}
+          {/* Logo lines are manually padded for centering — render in a plain Box
+              to avoid yoga's alignItems="center" double-counting ANSI escape bytes */}
+          <Box flexDirection="column" width={contentWidth}>
+            {logoLines.map((line, i) => (
+              <Text key={`logo-${i}`}>{line}</Text>
+            ))}
+          </Box>
 
           <Text> </Text>
 
