@@ -17,8 +17,6 @@
     "test:integration": "bun vitest run --config vitest.integration.config.ts",
     "test:e2e": "bun tests/e2e/run-sequential.ts",
     "lint:shell": "shellcheck --shell=sh src/export/state/doctor.sh && shellcheck --shell=bash src/export/state/state.sh",
-    "verify": "bun acceptance/cli.ts verify",
-    "diagnose": "bun acceptance/cli.ts diagnose",
     "build:release": "bun scripts/build.ts",
     "dev:viewer": "bun src/export/state/viewer-server.ts"
   },
