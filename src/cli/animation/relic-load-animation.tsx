@@ -4,6 +4,7 @@ import { HeartbeatLine } from './heartbeat-line.js'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DIM } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
+import { CenteredStage } from './layout.js'
 
 type Phase = 'link' | 'sync' | 'info' | 'tagline' | 'done'
 
@@ -86,13 +87,13 @@ export function RelicLoadAnimation({
   const linkGlitchIntensity = phase === 'link' ? Math.max(0.1, 0.6 - frame * 0.015) : 0
 
   return (
-    <Box flexDirection="column" paddingLeft={2}>
+    <CenteredStage>
       {/* Phase 1: Neural Link — glitch decays */}
       {phase === 'link' && (
         <Box flexDirection="column">
           <Text> </Text>
           <Text color={ACCENT}>
-            {'  ▓ '}{engine.glitchText('establishing neural link...', linkGlitchIntensity)}
+            {'▓ '}{engine.glitchText('establishing neural link...', linkGlitchIntensity)}
           </Text>
           <Text> </Text>
         </Box>
@@ -160,7 +161,7 @@ export function RelicLoadAnimation({
           <Text> </Text>
         </Box>
       )}
-    </Box>
+    </CenteredStage>
   )
 }
 

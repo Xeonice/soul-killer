@@ -1,6 +1,4 @@
-import { readFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
+import logoAns from '../../../assets/logo-red-130-r08.ans' with { type: 'text' }
 import { primary } from './colors.js'
 
 const FALLBACK_LOGO = [
@@ -14,9 +12,9 @@ const FALLBACK_LOGO = [
 ]
 
 /**
- * Load the ANSI art Arasaka logo from assets.
- * Returns an array of pre-colored strings (one per line).
- * Falls back to simple text if file is missing or terminal is too narrow.
+ * Load the ANSI art Arasaka logo.
+ * The logo is embedded at compile time via Bun text import — no runtime filesystem access.
+ * Falls back to simple text if terminal is too narrow.
  */
 export function loadArasakaLogo(terminalWidth?: number): string[] {
   const width = terminalWidth ?? process.stdout.columns ?? 80
@@ -25,17 +23,10 @@ export function loadArasakaLogo(terminalWidth?: number): string[] {
     return FALLBACK_LOGO
   }
 
-  try {
-    const __dirname = dirname(fileURLToPath(import.meta.url))
-    const logoPath = join(__dirname, '..', '..', '..', 'assets', 'logo-red-130-r08.ans')
-    const content = readFileSync(logoPath, 'utf-8')
-    const lines = content.split('\n')
-    // Remove trailing empty line if present
-    if (lines.length > 0 && lines[lines.length - 1] === '') {
-      lines.pop()
-    }
-    return lines
-  } catch {
-    return FALLBACK_LOGO
+  const lines = logoAns.split('\n')
+  // Remove trailing empty line if present
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop()
   }
+  return lines
 }

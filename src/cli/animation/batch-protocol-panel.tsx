@@ -4,6 +4,7 @@ import { SoulkillerProtocolPanel } from './soulkiller-protocol-panel.js'
 import { DistillProgressPanel } from '../components/distill-progress.js'
 import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { isAnimationEnabled } from './use-animation.js'
+import { CenteredStage } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
 import type { SoulTaskStatus, SoulTaskPhase } from '../../soul/batch-pipeline.js'
 
@@ -109,9 +110,9 @@ export function BatchProtocolPanel({ statuses, onCancel }: BatchProtocolPanelPro
     }
 
     return (
-      <Box flexDirection="column" paddingLeft={2}>
+      <CenteredStage>
         <Text color={ACCENT} bold>SOULKILLER PROTOCOL — {soul.name}</Text>
-        <Text color={DIM}>  [Esc] {t('batch.back_to_list')}</Text>
+        <Text color={DIM}>[Esc] {t('batch.back_to_list')}</Text>
         <Text> </Text>
         {(soul.phase === 'capturing' || (soul.phase === 'distilling' && soul.toolCalls.length > 0) || soul.phase === 'done' || soul.phase === 'failed') && (
           <SoulkillerProtocolPanel
@@ -136,18 +137,18 @@ export function BatchProtocolPanel({ statuses, onCancel }: BatchProtocolPanelPro
           </Box>
         )}
         {soul.phase === 'pending' && (
-          <Text color={DIM}>  {t('batch.waiting')}</Text>
+          <Text color={DIM}>{t('batch.waiting')}</Text>
         )}
         {soul.error && (
-          <Text color={ACCENT}>  ✗ {soul.error}</Text>
+          <Text color={ACCENT}>✗ {soul.error}</Text>
         )}
-      </Box>
+      </CenteredStage>
     )
   }
 
   // Compact view
   return (
-    <Box flexDirection="column" paddingLeft={2}>
+    <CenteredStage>
       <Text color={ACCENT} bold>SOULKILLER PROTOCOL — BATCH CAPTURE [{statuses.length}]</Text>
       <Text> </Text>
       {statuses.map((soul, index) => {
@@ -177,10 +178,10 @@ export function BatchProtocolPanel({ statuses, onCancel }: BatchProtocolPanelPro
       })}
       <Text> </Text>
       <Text color={DIM}>
-        {'  '}{doneCount}/{statuses.length} {t('batch.complete')}  ·  {activeCount} {t('batch.active')}  ·  {failedCount} {t('batch.failed')}
+        {doneCount}/{statuses.length} {t('batch.complete')}  ·  {activeCount} {t('batch.active')}  ·  {failedCount} {t('batch.failed')}
       </Text>
       <Text> </Text>
-      <Text color={DIM}>  [↑↓] {t('batch.select')}  [Enter] {t('batch.expand')}  [Esc] {t('batch.cancel')}</Text>
-    </Box>
+      <Text color={DIM}>[↑↓] {t('batch.select')}  [Enter] {t('batch.expand')}  [Esc] {t('batch.cancel')}</Text>
+    </CenteredStage>
   )
 }

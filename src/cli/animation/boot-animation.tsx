@@ -5,6 +5,7 @@ import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { bootingBar } from './booting-bar.js'
 import { loadArasakaLogo } from './logo-loader.js'
 import { isAnimationEnabled } from './use-animation.js'
+import { CenteredStage, getContentWidth } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
 
 interface BootAnimationProps {
@@ -63,6 +64,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
 
   const engine = getGlitchEngine()
   const termWidth = process.stdout.columns ?? 80
+  const contentWidth = getContentWidth(termWidth)
 
   useEffect(() => {
     if (!animationEnabled) {
@@ -161,7 +163,6 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
 
   void frame
 
-  const contentWidth = Math.min(130, termWidth - 4)
   const barWidth = contentWidth
   const logoLines = loadArasakaLogo(contentWidth)
 
@@ -175,8 +176,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
     : null
 
   return (
-    <Box flexDirection="column" alignItems="center" width={termWidth}>
-      <Box flexDirection="column" width={contentWidth}>
+    <CenteredStage>
       {/* === Fixed Header (always visible) === */}
       <Text> </Text>
       <Text color={PRIMARY}>ARASAKA</Text>
@@ -213,7 +213,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
           <Text> </Text>
 
           {PANEL_INFO.slice(0, panelReveal).map((line, i) => (
-            <Text key={`info-${i}`} color={i < 2 ? PRIMARY : DIM}>{'    '}{line}</Text>
+            <Text key={`info-${i}`} color={i < 2 ? PRIMARY : DIM}>{line}</Text>
           ))}
 
           <Text> </Text>
@@ -232,8 +232,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
           </Box>
         </>
       )}
-      </Box>
-    </Box>
+    </CenteredStage>
   )
 }
 

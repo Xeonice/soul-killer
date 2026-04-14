@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Text, Box, useInput } from 'ink'
+import { CenteredStage } from '../../animation/layout.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -1070,18 +1071,20 @@ export function CreateCommand({ onComplete, onCancel, supplementSoul }: CreateCo
       )}
 
       {step === 'capturing' && (
-        <SoulkillerProtocolPanel
-          mode="soul"
-          targetName={soulName}
-          classification={classification}
-          origin={origin}
-          toolCalls={toolCalls}
-          totalFragments={chunkCount}
-          elapsedTime={agentElapsed}
-          filterProgress={filterProgress}
-          phase={protocolPhase}
-          searchPlan={searchPlan}
-        />
+        <CenteredStage>
+          <SoulkillerProtocolPanel
+            mode="soul"
+            targetName={soulName}
+            classification={classification}
+            origin={origin}
+            toolCalls={toolCalls}
+            totalFragments={chunkCount}
+            elapsedTime={agentElapsed}
+            filterProgress={filterProgress}
+            phase={protocolPhase}
+            searchPlan={searchPlan}
+          />
+        </CenteredStage>
       )}
 
       {step === 'search-confirm' && (

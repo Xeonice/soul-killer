@@ -2,6 +2,6 @@
 
 exports[`RelicLoadAnimation > snapshot of initial phase (seeded glitch) 1`] = `
 "
-    ▓ ▄st█▄└ish┴┴▓ ▌┐u┘a┘ │i┼┴┌┐┘
+                          ▓ ▄st█▄└ish┴┴▓ ▌┐u┘a┘ │i┼┴┌┐┘
 "
 `;

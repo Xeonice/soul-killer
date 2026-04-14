@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Text, Box, useInput } from "ink";
+import { CenteredStage } from "../../animation/layout.js";
 import { TextInput, CheckboxSelect } from "../../components/text-input.js";
 import { SoulkillerProtocolPanel } from "../../animation/soulkiller-protocol-panel.js";
 import { WorldDistillPanel } from "../../components/world-distill-panel.js";
@@ -870,19 +871,21 @@ export function WorldCreateWizard({
 
       {/* AI search */}
       {step === "capturing" && (
-        <SoulkillerProtocolPanel
-          mode="world"
-          targetName={worldName}
-          classification={classification}
-          classificationLabels={classificationLabels}
-          origin={origin}
-          toolCalls={toolCalls}
-          totalFragments={chunkCount}
-          elapsedTime={agentElapsed}
-          filterProgress={filterProgress}
-          phase={protocolPhase}
-          searchPlan={searchPlan}
-        />
+        <CenteredStage>
+          <SoulkillerProtocolPanel
+            mode="world"
+            targetName={worldName}
+            classification={classification}
+            classificationLabels={classificationLabels}
+            origin={origin}
+            toolCalls={toolCalls}
+            totalFragments={chunkCount}
+            elapsedTime={agentElapsed}
+            filterProgress={filterProgress}
+            phase={protocolPhase}
+            searchPlan={searchPlan}
+          />
+        </CenteredStage>
       )}
 
       {/* Search confirm — with dimension breakdown */}

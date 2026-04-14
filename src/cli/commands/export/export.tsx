@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { Box, Text } from 'ink'
+import { CenteredStage } from '../../animation/layout.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -616,7 +617,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   }
 
   return (
-    <Box flexDirection="column">
+    <CenteredStage>
       <ExportProtocolPanel
         phase={panelState.phase}
         planningTrail={panelState.planningTrail}
@@ -660,6 +661,6 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
           />
         </Box>
       )}
-    </Box>
+    </CenteredStage>
   )
 }

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Text, Box } from 'ink'
+import { Text } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
 import { loadArasakaLogo } from './logo-loader.js'
 import { LogoAnnihilator } from './logo-annihilator.js'
 import { isAnimationEnabled } from './use-animation.js'
+import { CenteredStage } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
 
 interface ExitAnimationProps {
@@ -121,11 +122,11 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
   const visibleScroll = scrollBuffer.slice(-18)
 
   return (
-    <Box flexDirection="column" paddingLeft={2}>
+    <CenteredStage>
       {/* === Fixed Header === */}
       <Text> </Text>
-      <Text color={ACCENT}>{'  < SYSTEM SHUTDOWN INITIATED >'}</Text>
-      <Text color={DIM}>{'  '}{t('anim.exit.disconnecting')}</Text>
+      <Text color={ACCENT}>{'< SYSTEM SHUTDOWN INITIATED >'}</Text>
+      <Text color={DIM}>{t('anim.exit.disconnecting')}</Text>
       <Text> </Text>
 
       {/* === Logo Annihilation (dissolves in place, then disappears) === */}
@@ -143,19 +144,19 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
         <>
           {shutdownStep >= 1 && (
             <Text color={DIM}>
-              {'  ▓ compressing neural state...      '}
+              {'▓ compressing neural state...      '}
               <Text color={PRIMARY}>{progressBar(saveProgress)}</Text>
               {' '}{saveProgress}%
             </Text>
           )}
           {shutdownStep >= 2 && (
-            <Text color={DIM}>{'  ▓ flushing memory cortex...        saved.'}</Text>
+            <Text color={DIM}>{'▓ flushing memory cortex...        saved.'}</Text>
           )}
           {shutdownStep >= 3 && (
-            <Text color={DIM}>{'  ▓ severing neural link...           ✓'}</Text>
+            <Text color={DIM}>{'▓ severing neural link...           ✓'}</Text>
           )}
           <Text> </Text>
-          <Text color={DARK}>{'  NEURAL LINK STATUS: ░░░░░░░░░░ SEVERED'}</Text>
+          <Text color={DARK}>{'NEURAL LINK STATUS: ░░░░░░░░░░ SEVERED'}</Text>
         </>
       )}
 
@@ -176,11 +177,11 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
         <>
           <Text> </Text>
           <Text> </Text>
-          <Text color={DIM}>{'  「 flatline. connection terminated 」'}</Text>
+          <Text color={DIM}>{'「 flatline. connection terminated 」'}</Text>
           <Text> </Text>
         </>
       )}
-    </Box>
+    </CenteredStage>
   )
 }
 
