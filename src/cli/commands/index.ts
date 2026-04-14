@@ -254,8 +254,7 @@ const packCommand: CommandHandler = {
   name: 'pack',
   descriptionKey: 'cmd.pack',
   groupKey: 'cmd.group.export',
-  requires: ['args'],
-  argDef: { name: 'soul|world <name>' },
+  argDef: { name: '[soul|world <name>] [--output <dir>]' },
   handle(ctx) {
     return React.createElement(PackCommand, {
       args: ctx.args,
@@ -268,8 +267,7 @@ const unpackCommand: CommandHandler = {
   name: 'unpack',
   descriptionKey: 'cmd.unpack',
   groupKey: 'cmd.group.export',
-  requires: ['args'],
-  argDef: { name: '<path>' },
+  argDef: { name: '[path]' },
   interactive: true,
   handle(ctx) {
     return React.createElement(UnpackCommand, {

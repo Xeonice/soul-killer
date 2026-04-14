@@ -1,7 +1,13 @@
 export const FORMAT_VERSION = '1.0'
 export const SUPPORTED_MAJOR = 1
 
-export type PackType = 'soul' | 'world'
+export type PackType = 'soul' | 'world' | 'souls-bundle' | 'worlds-bundle'
+
+export interface BundleItem {
+  name: string
+  display_name: string
+  worlds?: string[]
+}
 
 export interface PackMeta {
   format_version: string
@@ -11,6 +17,7 @@ export interface PackMeta {
   packed_at: string
   soulkiller_version: string
   includes_worlds: string[]
+  items?: BundleItem[]
   checksum: string
 }
 
@@ -19,6 +26,7 @@ export function createMeta(
   name: string,
   displayName: string,
   includesWorlds: string[] = [],
+  items?: BundleItem[],
 ): PackMeta {
   return {
     format_version: FORMAT_VERSION,
@@ -28,6 +36,7 @@ export function createMeta(
     packed_at: new Date().toISOString(),
     soulkiller_version: '0.1.0',
     includes_worlds: includesWorlds,
+    items,
     checksum: '',
   }
 }
@@ -47,6 +56,7 @@ export function parseMeta(raw: string): PackMeta {
     packed_at: String(parsed.packed_at ?? ''),
     soulkiller_version: String(parsed.soulkiller_version ?? 'unknown'),
     includes_worlds: Array.isArray(parsed.includes_worlds) ? parsed.includes_worlds.map(String) : [],
+    items: Array.isArray(parsed.items) ? (parsed.items as BundleItem[]) : undefined,
     checksum: String(parsed.checksum ?? ''),
   }
 }

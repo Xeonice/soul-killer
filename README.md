@@ -25,6 +25,53 @@
 >
 > **怎么玩？** 导出的 `.skill` 文件可以在任何支持 Skill 协议的应用中直接运行——比如 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw)。导入后作为 Skill 加载，即可开始游玩。每个剧本支持存档，同一个故事可以生成多个不同剧本，随时查看当前剧本的选择分支线。接收方在首次游玩前也需要安装 soulkiller CLI——Skill 首次加载时会自动检测并提示安装。也特别适合开发者在 Claude Code 终端里加载——在老板眼皮底下，你只是在"调试 AI Skill"而已。
 
+## 预制档案库
+
+不想从零开始？以下预制档案托管于 Cloudflare R2，覆盖 Fate/Zero、三国、白色相簿2 和赛博朋克 2077 四个宇宙。
+
+### Skill 档案 — 直接下载，立刻开玩
+
+下载 `.skill` 文件，在 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw) 中作为 Skill 加载即可开始游玩，**无需任何配置**。
+
+| 档案 | 世界 | 说明 |
+|------|------|------|
+| [fate-zero.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill) | Fate/Zero | 第四次圣杯战争，含伊斯坎达尔、言峰绮礼、卫宫切嗣等完整卡司 |
+| [three-kingdoms.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/three-kingdoms.skill) | 三国 | 乱世争霸，曹操、刘备、诸葛亮等群雄并立 |
+| [white-album-2.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/white-album-2.skill) | 白色相簿2 | 冬马和纱、小木曾雪菜的遗憾与救赎 IF 线 |
+
+> 首次游玩需要安装 soulkiller CLI（Skill 加载时会自动检测并提示）。
+
+### Soul 档案 — 批量导入所有角色
+
+包含全部 55 个角色（三国、Fate/Zero、Fate/Stay Night、白色相簿2、赛博朋克2077），一次导入即可全部到位。
+
+```bash
+# 一次性安装全部角色（默认跳过本地已有）
+/unpack https://soulkiller-download.ad546971975.workers.dev/examples/all-souls.soul.pack
+
+# 覆盖本地已有版本
+/unpack https://soulkiller-download.ad546971975.workers.dev/examples/all-souls.soul.pack --overwrite
+
+# 安装后直接对话
+/use 伊斯坎达尔
+```
+
+### World 档案 — 批量导入所有世界
+
+包含全部 6 个世界观，安装后可用 `/create` 创建自己的角色并绑定到任意世界。
+
+```bash
+# 安装全部世界
+/unpack https://soulkiller-download.ad546971975.workers.dev/examples/all-worlds.world.pack
+
+# 创建角色并绑定
+/create 貂蝉
+/world bind 三国
+/export 貂蝉
+```
+
+---
+
 ## 前置准备
 
 SOULKILLER 需要以下 API 密钥才能运行。请在安装前完成注册：
@@ -92,7 +139,10 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 | 指令 | 功能 |
 |------|------|
 | `/export <name>` | 将灵魂 × 世界导出为可游玩的文字冒险视觉小说 Skill 档案 |
-| `/pack <name>` | 打包灵魂为 `.soul.pack` 便携归档 |
+| `/pack` | 全量打包：所有 Soul 打成 `all-souls.soul.pack`，所有 World 打成 `all-worlds.world.pack` |
+| `/pack soul\|world <name>` | 打包单个 Soul 或 World |
+| `/unpack <file>` | 解包 pack 文件（bundle 或单体，交互式冲突解决） |
+| `/unpack <dir>` | 批量解包目录下所有 pack 文件（`--overwrite` 覆盖已有） |
 | `/help` | 显示完整指令列表 |
 
 ## 完整流程

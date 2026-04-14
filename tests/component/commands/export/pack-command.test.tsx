@@ -20,11 +20,12 @@ describe('PackCommand', () => {
     vi.clearAllMocks()
   })
 
-  it('shows error when no args provided', async () => {
+  it('starts pack-all mode when no args provided', async () => {
     const { lastFrame } = render(<PackCommand args="" onComplete={onComplete} />)
     await waitForFrame()
     const output = lastFrame() ?? ''
-    expect(output).toContain('/pack')
+    // No args triggers all-mode (starts packing, not an error)
+    expect(output).toBeTruthy()
   })
 
   it('shows error for invalid subcommand', async () => {

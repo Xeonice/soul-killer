@@ -22,6 +22,27 @@ export interface UnpackResult {
   renamed: { type: string; from: string; to: string }[]
 }
 
+export interface BatchUnpackOptions {
+  /** Conflict resolution strategy — no interactive prompt */
+  onConflict: 'skip' | 'overwrite'
+  onProgress?: (event: BatchUnpackProgress) => void
+}
+
+export interface BatchUnpackProgress {
+  file: string
+  status: 'inspecting' | 'applying' | 'done' | 'error' | 'skipped'
+  result?: UnpackResult
+  error?: string
+  current: number
+  total: number
+}
+
+export interface BatchUnpackResult {
+  installed: { type: string; name: string }[]
+  skipped: { type: string; name: string }[]
+  errors: { file: string; error: string }[]
+}
+
 /**
  * Extract a pack file and return its metadata + conflicts to resolve.
  * The caller must handle conflicts and then call applyUnpack().
@@ -181,8 +202,74 @@ export function applyUnpack(
 
       result.installed.push({ type: 'soul', name: targetName })
     }
+  } else if (meta.type === 'souls-bundle') {
+    // Install bundled worlds first (deduplicated)
+    const worldsStagingDir = path.join(stagingDir, 'worlds')
+    if (fs.existsSync(worldsStagingDir)) {
+      for (const wd of fs.readdirSync(worldsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        const worldName = wd.name
+        const key = `world:${worldName}`
+        const resolution = resolutions.get(key)
+        if (resolution === 'skip') { result.skipped.push({ type: 'world', name: worldName }); continue }
+        let targetName = worldName
+        if (resolution && typeof resolution === 'object' && 'rename' in resolution) {
+          targetName = resolution.rename
+          result.renamed.push({ type: 'world', from: worldName, to: targetName })
+        }
+        const targetDir = path.join(worldsBase, targetName)
+        if (resolution === 'overwrite' && fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true })
+        fs.mkdirSync(path.dirname(targetDir), { recursive: true })
+        fs.cpSync(path.join(worldsStagingDir, worldName), targetDir, { recursive: true })
+        if (targetName !== worldName) updateWorldManifestName(targetDir, targetName)
+        result.installed.push({ type: 'world', name: targetName })
+      }
+    }
+    // Install souls
+    const soulsStagingDir = path.join(stagingDir, 'souls')
+    if (fs.existsSync(soulsStagingDir)) {
+      for (const sd of fs.readdirSync(soulsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        const soulName = sd.name
+        const key = `soul:${soulName}`
+        const resolution = resolutions.get(key)
+        if (resolution === 'skip') { result.skipped.push({ type: 'soul', name: soulName }); continue }
+        let targetName = soulName
+        if (resolution && typeof resolution === 'object' && 'rename' in resolution) {
+          targetName = resolution.rename
+          result.renamed.push({ type: 'soul', from: soulName, to: targetName })
+        }
+        const targetDir = path.join(soulsBase, targetName)
+        if (resolution === 'overwrite' && fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true })
+        fs.mkdirSync(targetDir, { recursive: true })
+        fs.cpSync(path.join(soulsStagingDir, soulName), targetDir, { recursive: true })
+        if (targetName !== soulName) updateSoulManifestName(targetDir, targetName)
+        fs.mkdirSync(path.join(targetDir, 'vectors'), { recursive: true })
+        fs.mkdirSync(path.join(targetDir, 'examples'), { recursive: true })
+        result.installed.push({ type: 'soul', name: targetName })
+      }
+    }
+  } else if (meta.type === 'worlds-bundle') {
+    const worldsStagingDir = path.join(stagingDir, 'worlds')
+    if (fs.existsSync(worldsStagingDir)) {
+      for (const wd of fs.readdirSync(worldsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        const worldName = wd.name
+        const key = `world:${worldName}`
+        const resolution = resolutions.get(key)
+        if (resolution === 'skip') { result.skipped.push({ type: 'world', name: worldName }); continue }
+        let targetName = worldName
+        if (resolution && typeof resolution === 'object' && 'rename' in resolution) {
+          targetName = resolution.rename
+          result.renamed.push({ type: 'world', from: worldName, to: targetName })
+        }
+        const targetDir = path.join(worldsBase, targetName)
+        if (resolution === 'overwrite' && fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true })
+        fs.mkdirSync(path.dirname(targetDir), { recursive: true })
+        fs.cpSync(path.join(worldsStagingDir, worldName), targetDir, { recursive: true })
+        if (targetName !== worldName) updateWorldManifestName(targetDir, targetName)
+        result.installed.push({ type: 'world', name: targetName })
+      }
+    }
   } else {
-    // World pack
+    // Single world pack
     const worldStagingDir = path.join(stagingDir, 'world')
     const key = `world:${meta.name}`
     const resolution = resolutions.get(key)
@@ -261,8 +348,34 @@ function detectConflicts(meta: PackMeta, stagingDir: string): ConflictItem[] {
         }
       }
     }
+  } else if (meta.type === 'souls-bundle') {
+    const soulsStagingDir = path.join(stagingDir, 'souls')
+    if (fs.existsSync(soulsStagingDir)) {
+      for (const sd of fs.readdirSync(soulsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        if (fs.existsSync(path.join(soulsBase, sd.name, 'manifest.json'))) {
+          conflicts.push({ type: 'soul', name: sd.name, sourcePath: path.join(soulsStagingDir, sd.name) })
+        }
+      }
+    }
+    const worldsStagingDir = path.join(stagingDir, 'worlds')
+    if (fs.existsSync(worldsStagingDir)) {
+      for (const wd of fs.readdirSync(worldsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        if (worldExists(wd.name)) {
+          conflicts.push({ type: 'world', name: wd.name, sourcePath: path.join(worldsStagingDir, wd.name) })
+        }
+      }
+    }
+  } else if (meta.type === 'worlds-bundle') {
+    const worldsStagingDir = path.join(stagingDir, 'worlds')
+    if (fs.existsSync(worldsStagingDir)) {
+      for (const wd of fs.readdirSync(worldsStagingDir, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+        if (worldExists(wd.name)) {
+          conflicts.push({ type: 'world', name: wd.name, sourcePath: path.join(worldsStagingDir, wd.name) })
+        }
+      }
+    }
   } else {
-    // World pack conflict
+    // Single world pack conflict
     if (worldExists(meta.name)) {
       conflicts.push({
         type: 'world',
@@ -289,6 +402,75 @@ function updateSoulManifestName(soulDir: string, newName: string): void {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'))
   manifest.name = newName
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2))
+}
+
+/**
+ * Recursively collect all .soul.pack and .world.pack files in a directory.
+ */
+function collectPackFiles(dirPath: string): string[] {
+  const results: string[] = []
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...collectPackFiles(fullPath))
+    } else if (entry.isFile() && (entry.name.endsWith('.soul.pack') || entry.name.endsWith('.world.pack'))) {
+      results.push(fullPath)
+    }
+  }
+  return results
+}
+
+/**
+ * Batch unpack all .soul.pack / .world.pack files from a directory.
+ * Conflicts are resolved automatically using the specified strategy (no interactive prompt).
+ */
+export async function batchUnpackDir(
+  dirPath: string,
+  options: BatchUnpackOptions,
+): Promise<BatchUnpackResult> {
+  const packFiles = collectPackFiles(dirPath)
+  const total = packFiles.length
+  const batchResult: BatchUnpackResult = { installed: [], skipped: [], errors: [] }
+
+  for (let i = 0; i < packFiles.length; i++) {
+    const filePath = packFiles[i]!
+    const file = path.relative(dirPath, filePath)
+    const current = i + 1
+
+    options.onProgress?.({ file, status: 'inspecting', current, total })
+
+    let inspected: Awaited<ReturnType<typeof inspectPack>> | null = null
+    try {
+      inspected = await inspectPack(filePath)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      batchResult.errors.push({ file, error })
+      options.onProgress?.({ file, status: 'error', error, current, total })
+      continue
+    }
+
+    // Auto-resolve all conflicts with the chosen strategy
+    const resolutions = new Map<string, ConflictResolution>()
+    for (const conflict of inspected.conflicts) {
+      resolutions.set(`${conflict.type}:${conflict.name}`, options.onConflict)
+    }
+
+    options.onProgress?.({ file, status: 'applying', current, total })
+
+    try {
+      const unpackResult = applyUnpack(inspected.meta, inspected.stagingDir, resolutions)
+      batchResult.installed.push(...unpackResult.installed)
+      batchResult.skipped.push(...unpackResult.skipped)
+      options.onProgress?.({ file, status: 'done', result: unpackResult, current, total })
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      batchResult.errors.push({ file, error })
+      options.onProgress?.({ file, status: 'error', error, current, total })
+    }
+  }
+
+  return batchResult
 }
 
 function updateBindingReferences(soulDir: string, renameMap: Map<string, string>): void {

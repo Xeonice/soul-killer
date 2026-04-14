@@ -7,12 +7,16 @@
  *   GET /install.sh                → Unix install script
  *   GET /install.ps1               → Windows install script
  *   GET /latest                    → JSON with latest version info
+ *   GET /examples/:file            → example pack/skill files (R2 examples/)
+ *   GET /examples/skills/:file     → example skill files (R2 examples/skills/)
  *
  * R2 layout (managed by CI):
  *   releases/latest/<asset>         — always the newest version
  *   releases/latest/version.txt     — plain text version tag (e.g. "v0.2.1")
  *   releases/v0.2.1/<asset>         — versioned archive
  *   scripts/install.sh|install.ps1  — install scripts
+ *   examples/<file>                 — example pack files (all-souls.soul.pack, all-worlds.world.pack)
+ *   examples/skills/<file>          — example skill files
  */
 
 interface Env {
@@ -118,6 +122,22 @@ async function getLatestVersionFromGitHub(): Promise<string> {
   return data.tag_name
 }
 
+async function serveExample(env: Env, r2Path: string, filename: string): Promise<Response> {
+  const r2Obj = await env.RELEASES.get(r2Path)
+  if (!r2Obj) {
+    return new Response(`Example not found: ${filename}`, { status: 404 })
+  }
+  return new Response(r2Obj.body, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename=${filename}`,
+      'Content-Length': String(r2Obj.size),
+      'Cache-Control': 'public, max-age=86400',
+      'X-Source': 'r2',
+    },
+  })
+}
+
 async function serveInstallScript(env: Env, filename: string): Promise<Response> {
   const r2Obj = await env.RELEASES.get(`scripts/${filename}`)
   if (r2Obj) {
@@ -180,6 +200,18 @@ export default {
       return serveVersionedAsset(env, versionMatch[1]!, versionMatch[2]!)
     }
 
+    // GET /examples/skills/:file — example skill files
+    const exampleSkillMatch = path.match(/^\/examples\/skills\/([\w.-]+)$/)
+    if (exampleSkillMatch) {
+      return serveExample(env, `examples/skills/${exampleSkillMatch[1]}`, exampleSkillMatch[1]!)
+    }
+
+    // GET /examples/:file — example pack files
+    const exampleMatch = path.match(/^\/examples\/([\w.-]+)$/)
+    if (exampleMatch) {
+      return serveExample(env, `examples/${exampleMatch[1]}`, exampleMatch[1]!)
+    }
+
     // Root
     if (path === '/' || path === '') {
       return Response.json({
@@ -190,6 +222,8 @@ export default {
           '/download/:version/:asset': 'Download specific version asset',
           '/install.sh': 'Unix install script',
           '/install.ps1': 'Windows install script',
+          '/examples/:file': 'Example pack files (all-souls.soul.pack, all-worlds.world.pack)',
+          '/examples/skills/:file': 'Example skill files (fate-zero.skill, three-kingdoms.skill, ...)',
         },
         platforms: Object.keys(PLATFORM_MAP),
       })
