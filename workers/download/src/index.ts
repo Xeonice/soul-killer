@@ -184,9 +184,9 @@ export default {
       }
     }
 
-    // GET /install.sh or /install.ps1
-    if (path === '/install.sh') return serveInstallScript(env, 'install.sh')
-    if (path === '/install.ps1') return serveInstallScript(env, 'install.ps1')
+    // GET /install.sh or /install.ps1 (both /xxx and /scripts/xxx supported)
+    if (path === '/install.sh' || path === '/scripts/install.sh') return serveInstallScript(env, 'install.sh')
+    if (path === '/install.ps1' || path === '/scripts/install.ps1') return serveInstallScript(env, 'install.ps1')
 
     // GET /download/:platform — latest binary
     const platformMatch = path.match(/^\/download\/([\w-]+)$/)
