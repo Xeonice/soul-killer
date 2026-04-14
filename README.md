@@ -31,13 +31,37 @@
 
 ### Skill 档案 — 直接下载，立刻开玩
 
-下载 `.skill` 文件，在 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw) 中作为 Skill 加载即可开始游玩，**无需任何配置**。
+`.skill` 是 zip 归档，解压到 Claude Code 或 OpenClaw 的 skills 目录后即可加载游玩。下面用 `fate-zero` 举例，三款 skill 同理（替换文件名即可）。
 
 | 档案 | 世界 | 说明 |
 |------|------|------|
 | [fate-zero.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill) | Fate/Zero | 第四次圣杯战争，含伊斯坎达尔、言峰绮礼、卫宫切嗣等完整卡司 |
 | [three-kingdoms.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/three-kingdoms.skill) | 三国 | 乱世争霸，曹操、刘备、诸葛亮等群雄并立 |
 | [white-album-2.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/white-album-2.skill) | 白色相簿2 | 冬马和纱、小木曾雪菜的遗憾与救赎 IF 线 |
+
+**Claude Code**
+
+Claude Code 从 git 仓库根目录的 `.claude/skills/` 查找 skill。请在正确位置执行：
+
+```bash
+# 安装到当前项目（在 git 仓库根目录执行）
+mkdir -p .claude/skills/fate-zero && \
+  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
+  unzip -q /tmp/fate-zero.skill -d .claude/skills/fate-zero
+
+# 或安装到全局（所有项目都能用）
+mkdir -p ~/.claude/skills/fate-zero && \
+  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
+  unzip -q /tmp/fate-zero.skill -d ~/.claude/skills/fate-zero
+```
+
+**OpenClaw**
+
+```bash
+mkdir -p ~/.openclaw/workspace/skills/fate-zero && \
+  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
+  unzip -q /tmp/fate-zero.skill -d ~/.openclaw/workspace/skills/fate-zero
+```
 
 > 首次游玩需要安装 soulkiller CLI（Skill 加载时会自动检测并提示）。
 
