@@ -315,9 +315,14 @@ export function App() {
   if (state.phase === 'setup') {
     return (
       <SetupWizard
+        initialConfig={loadConfig() ?? undefined}
         onComplete={(config: SoulkillerConfig) => {
           createLLMClient(config)
-          setState((s) => ({ ...s, phase: 'idle' }))
+          setLocale(config.language)
+          setState((s) => ({ ...s, phase: 'idle', interactiveMode: false, commandOutput: null }))
+        }}
+        onCancel={() => {
+          setState((s) => ({ ...s, phase: 'idle', interactiveMode: false, commandOutput: null }))
         }}
       />
     )

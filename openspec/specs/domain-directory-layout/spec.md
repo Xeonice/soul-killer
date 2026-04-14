@@ -20,7 +20,7 @@ src/ SHALL 按业务领域组织业务代码。三个业务领域（soul, world,
 
 #### Scenario: 搜索后端
 - **WHEN** soul 和 world 领域都需要使用搜索功能
-- **THEN** infra/search/ SHALL 包含所有搜索后端实现（tavily、searxng、exa、page-extractor、title-filter）
+- **THEN** infra/search/ SHALL 包含所有搜索后端实现（tavily、exa、page-extractor、title-filter）
 
 #### Scenario: 通用 agent 框架
 - **WHEN** soul 和 world 领域都需要使用通用捕获循环和 planning 框架

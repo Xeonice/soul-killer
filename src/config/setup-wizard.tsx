@@ -1,14 +1,13 @@
 import React, { useState, useCallback } from 'react'
 import { Text, Box, useInput } from 'ink'
-import { TextInput, CheckboxSelect } from '../cli/components/text-input.js'
+import { TextInput, CheckboxSelect, Confirm } from '../cli/components/text-input.js'
 import { validateApiKey } from '../infra/llm/client.js'
 import { RECOMMENDED_MODELS, type SoulkillerConfig, type SupportedLanguage, type SearchProvider } from './schema.js'
 import { saveConfig } from './loader.js'
 import { PRIMARY, ACCENT, WARNING, DIM } from '../cli/animation/colors.js'
 import { t, setLocale } from '../infra/i18n/index.js'
-import { isDockerAvailable } from '../infra/search/searxng-search.js'
 
-type Step = 'language' | 'intro' | 'api_key' | 'validating' | 'model_select' | 'search_engine' | 'exa_key' | 'tavily_key' | 'done'
+type Step = 'confirm' | 'language' | 'intro' | 'api_key' | 'validating' | 'model_select' | 'search_engine' | 'exa_key' | 'tavily_key' | 'done'
 
 const LANGUAGE_OPTIONS: { value: SupportedLanguage; label: string }[] = [
   { value: 'zh', label: '中文' },
@@ -16,21 +15,33 @@ const LANGUAGE_OPTIONS: { value: SupportedLanguage; label: string }[] = [
   { value: 'ja', label: '日本語' },
 ]
 
+const PROVIDER_ORDER: SearchProvider[] = ['exa', 'tavily']
+
 interface SetupWizardProps {
+  initialConfig?: SoulkillerConfig
   onComplete: (config: SoulkillerConfig) => void
+  onCancel?: () => void
 }
 
-export function SetupWizard({ onComplete }: SetupWizardProps) {
-  const [step, setStep] = useState<Step>('language')
-  const [language, setLanguage] = useState<SupportedLanguage>('zh')
-  const [langCursor, setLangCursor] = useState(0)
-  const [apiKey, setApiKey] = useState('')
-  const [selectedModel, setSelectedModel] = useState('')
+export function SetupWizard({ initialConfig, onComplete, onCancel }: SetupWizardProps) {
+  const isRerun = !!initialConfig
+
+  const [step, setStep] = useState<Step>(isRerun ? 'confirm' : 'language')
+  const [language, setLanguage] = useState<SupportedLanguage>(initialConfig?.language ?? 'zh')
+  const initialLangIndex = Math.max(
+    0,
+    LANGUAGE_OPTIONS.findIndex((o) => o.value === (initialConfig?.language ?? 'zh')),
+  )
+  const [langCursor, setLangCursor] = useState(initialLangIndex)
+  const [apiKey, setApiKey] = useState(initialConfig?.llm.api_key ?? '')
+  const [selectedModel, setSelectedModel] = useState(initialConfig?.llm.default_model ?? '')
   const [balance, setBalance] = useState<number | undefined>()
   const [error, setError] = useState<string | null>(null)
-  const [searchCursor, setSearchCursor] = useState(0)
-  const [dockerAvailable, setDockerAvailable] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
+  const initialSearchIndex = Math.max(
+    0,
+    PROVIDER_ORDER.indexOf((initialConfig?.search?.provider ?? 'exa') as SearchProvider),
+  )
+  const [searchCursor, setSearchCursor] = useState(initialSearchIndex)
 
   useInput((_, key) => {
     if (step === 'language') {
@@ -44,29 +55,33 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       }
     } else if (step === 'search_engine') {
       if (key.upArrow) setSearchCursor((i) => Math.max(0, i - 1))
-      if (key.downArrow) setSearchCursor((i) => Math.min(2, i + 1))
+      if (key.downArrow) setSearchCursor((i) => Math.min(PROVIDER_ORDER.length - 1, i + 1))
       if (key.return) {
-        setSearchError(null)
-        if (searchCursor === 0) {
-          // SearXNG
-          if (dockerAvailable) {
-            finishSetup('searxng')
-          } else {
-            setSearchError(t('setup.searxng_docker_not_found'))
-          }
-        } else if (searchCursor === 1) {
-          // Exa
+        const provider = PROVIDER_ORDER[searchCursor]
+        if (provider === 'exa') {
           setStep('exa_key')
         } else {
-          // Tavily
           setStep('tavily_key')
         }
       }
     }
   })
 
+  const handleConfirm = useCallback((yes: boolean) => {
+    if (yes) {
+      setStep('language')
+    } else if (onCancel) {
+      onCancel()
+    }
+  }, [onCancel])
+
   const handleKeySubmit = useCallback(async (key: string) => {
     setApiKey(key)
+    // Skip validation when user kept the existing key unchanged
+    if (initialConfig && key === initialConfig.llm.api_key) {
+      setStep('model_select')
+      return
+    }
     setStep('validating')
     const result = await validateApiKey(key)
     if (result.valid) {
@@ -76,11 +91,10 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       setError(result.error ?? 'Invalid key')
       setStep('api_key')
     }
-  }, [])
+  }, [initialConfig])
 
   const handleModelSelect = useCallback((selected: string[]) => {
     setSelectedModel(selected[0] ?? RECOMMENDED_MODELS[0].id)
-    setDockerAvailable(isDockerAvailable())
     setStep('search_engine')
   }, [])
 
@@ -108,7 +122,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         default_model: selectedModel,
       },
       language,
-      animation: true,
+      animation: initialConfig?.animation ?? true,
       search: {
         provider: searchProvider,
         ...(tavilyKey ? { tavily_api_key: tavilyKey } : {}),
@@ -118,7 +132,24 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     saveConfig(config)
     setStep('done')
     onComplete(config)
-  }, [apiKey, selectedModel, language, onComplete])
+  }, [apiKey, selectedModel, language, initialConfig, onComplete])
+
+  if (step === 'confirm') {
+    return (
+      <Box flexDirection="column" paddingLeft={2}>
+        <Text color={ACCENT} bold>SOULKILLER SETUP</Text>
+        <Text> </Text>
+        <Text color={WARNING}>{t('setup.confirm_overwrite')}</Text>
+        <Text color={DIM}>{t('setup.confirm_hint')}</Text>
+        <Text> </Text>
+        <Confirm
+          message={t('setup.confirm_proceed')}
+          defaultYes={false}
+          onConfirm={handleConfirm}
+        />
+      </Box>
+    )
+  }
 
   if (step === 'language') {
     return (
@@ -149,6 +180,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         <TextInput
           prompt="OpenRouter API Key:"
           mask
+          initialValue={initialConfig?.llm.api_key}
           onSubmit={handleKeySubmit}
         />
       )}
@@ -159,6 +191,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <TextInput
             prompt="OpenRouter API Key:"
             mask
+            initialValue={initialConfig?.llm.api_key}
             onSubmit={handleKeySubmit}
           />
         </>
@@ -177,8 +210,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             items={RECOMMENDED_MODELS.map((m) => ({
               value: m.id,
               label: `${m.name}  ${t(m.pricingKey)} · ${t(m.tagKey)}`,
-              checked: m.id === RECOMMENDED_MODELS[0].id,
+              checked: m.id === (initialConfig?.llm.default_model ?? RECOMMENDED_MODELS[0].id),
             }))}
+            initialCursor={Math.max(
+              0,
+              RECOMMENDED_MODELS.findIndex((m) => m.id === (initialConfig?.llm.default_model ?? RECOMMENDED_MODELS[0].id)),
+            )}
             onSubmit={handleModelSelect}
           />
         </>
@@ -188,10 +225,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         <>
           <Text color={PRIMARY}>✓ {t('setup.model_selected', { model: selectedModel })}</Text>
           <Text> </Text>
-          <Text color={PRIMARY}>{t('setup.searxng_prompt')}</Text>
+          <Text color={PRIMARY}>{t('setup.search_prompt')}</Text>
           <Text> </Text>
           {[
-            `SearXNG  ${t('setup.searxng_desc')}`,
             `Exa      ${t('setup.exa_desc')}`,
             `Tavily   ${t('setup.tavily_desc')}`,
           ].map((label, i) => (
@@ -200,24 +236,20 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </Text>
           ))}
           <Text> </Text>
-          {dockerAvailable
-            ? <Text color={PRIMARY}>{t('setup.searxng_docker_detected')}</Text>
-            : <Text color={WARNING}>{t('setup.searxng_docker_not_found')}</Text>
-          }
-          {searchError && <Text color={WARNING}>  {searchError}</Text>}
           <Text color={DIM} dimColor>  ↑↓ Enter</Text>
         </>
       )}
 
       {step === 'exa_key' && (
         <>
-          <Text color={PRIMARY}>✓ {t('setup.searxng_prompt')}: Exa</Text>
+          <Text color={PRIMARY}>✓ {t('setup.search_prompt')}: Exa</Text>
           <Text> </Text>
           <Text color={DIM}>{t('setup.exa_url')}</Text>
           <Text> </Text>
           <TextInput
             prompt={t('setup.exa_prompt')}
             mask
+            initialValue={initialConfig?.search?.exa_api_key}
             onSubmit={handleExaKeySubmit}
           />
           <Text color={DIM}>  {t('setup.tavily_back')}</Text>
@@ -226,13 +258,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
       {step === 'tavily_key' && (
         <>
-          <Text color={PRIMARY}>✓ {t('setup.searxng_prompt')}: Tavily</Text>
+          <Text color={PRIMARY}>✓ {t('setup.search_prompt')}: Tavily</Text>
           <Text> </Text>
           <Text color={DIM}>{t('setup.tavily_url')}</Text>
           <Text> </Text>
           <TextInput
             prompt={t('setup.tavily_prompt')}
             mask
+            initialValue={initialConfig?.search?.tavily_api_key}
             onSubmit={handleTavilyKeySubmit}
           />
           <Text color={DIM}>  {t('setup.tavily_back')}</Text>

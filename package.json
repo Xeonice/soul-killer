@@ -1,6 +1,6 @@
 {
   "name": "soulkiller",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "Extract your digital soul and create distributable AI avatars",
   "type": "module",
   "main": "dist/index.js",

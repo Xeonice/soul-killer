@@ -15,11 +15,6 @@ vi.mock('../../../../../src/infra/search/exa-search.js', () => ({
   hasCJK: vi.fn(() => false),
 }))
 
-vi.mock('../../../../../src/infra/search/searxng-search.js', () => ({
-  searxngSearch: vi.fn(),
-  ensureSearxng: vi.fn(),
-}))
-
 function makeConfig(tavilyKey = 'test-key'): SoulkillerConfig {
   return {
     llm: { api_key: 'test', default_model: 'test' },
@@ -108,7 +103,6 @@ describe('supplementSearch', () => {
     const { tools } = createEvaluationTools(makeConfig(), {
       dimensionPlan: makePlan(),
       sessionDir: tmpDir,
-      searxngAvailable: false,
     })
 
     const result = await tools.supplementSearch.execute!({ dimensionName: 'history', keywords: ['more', 'history'] }, {} as any) as any

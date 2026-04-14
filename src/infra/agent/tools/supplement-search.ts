@@ -6,7 +6,6 @@ import type { SoulkillerConfig } from '../../../config/schema.js'
 import type { SearchResult } from '../../search/tavily-search.js'
 import { executeTavilySearch } from '../../search/tavily-search.js'
 import { executeExaSearch } from '../../search/exa-search.js'
-import { searxngSearch } from '../../search/searxng-search.js'
 import { readDimensionCache } from './evaluate-dimension.js'
 import type { AgentLogger } from '../../utils/agent-logger.js'
 
@@ -15,7 +14,7 @@ const MAX_SUPPLEMENTS_PER_DIM = 2
 export function createSupplementSearchTool(
   config: SoulkillerConfig,
   sessionDir: string,
-  options: { searxngAvailable?: boolean; agentLog?: AgentLogger },
+  options: { agentLog?: AgentLogger },
 ) {
   const { agentLog } = options
   const supplementCounts = new Map<string, number>()
@@ -23,10 +22,8 @@ export function createSupplementSearchTool(
   const tavilyKey = config.search?.tavily_api_key
   const exaKey = config.search?.exa_api_key
   const configProvider = config.search?.provider
-  const resolvedProvider = configProvider === 'searxng' && options.searxngAvailable ? 'searxng'
-    : configProvider === 'exa' && exaKey ? 'exa'
+  const resolvedProvider = configProvider === 'exa' && exaKey ? 'exa'
     : configProvider === 'tavily' && tavilyKey ? 'tavily'
-    : options.searxngAvailable ? 'searxng'
     : exaKey ? 'exa'
     : tavilyKey ? 'tavily'
     : 'none'
@@ -57,7 +54,6 @@ export function createSupplementSearchTool(
       try {
         if (resolvedProvider === 'exa') results = await executeExaSearch(exaKey!, query)
         else if (resolvedProvider === 'tavily') results = await executeTavilySearch(tavilyKey!, query)
-        else if (resolvedProvider === 'searxng') results = await searxngSearch(query)
         else results = []
       } catch (err) {
         return { error: `Search failed: ${String(err)}`, results: [] }

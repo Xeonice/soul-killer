@@ -36,6 +36,7 @@ interface TextInputProps {
   prompt?: string
   placeholder?: string
   mask?: boolean
+  initialValue?: string
   completionItems?: CommandDef[]
   argCompletionMap?: ArgCompletionMap
   pathCompletion?: boolean
@@ -47,14 +48,16 @@ export function TextInput({
   prompt,
   placeholder,
   mask,
+  initialValue,
   completionItems,
   argCompletionMap,
   pathCompletion,
   onEscape,
   onSubmit,
 }: TextInputProps) {
-  const [value, setValue] = useState('')
-  const [cursor, setCursor] = useState(0)
+  const initial = initialValue ?? ''
+  const [value, setValue] = useState(initial)
+  const [cursor, setCursor] = useState(initial.length)
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false)
   const [argPaletteOpen, setArgPaletteOpen] = useState(false)
   const [pathPaletteOpen, setPathPaletteOpen] = useState(false)
@@ -62,8 +65,8 @@ export function TextInput({
 
   // Refs for immediate read in useInput — prevents closure staleness
   // when multiple keystrokes arrive in the same React render frame
-  const valueRef = useRef('')
-  const cursorRef = useRef(0)
+  const valueRef = useRef(initial)
+  const cursorRef = useRef(initial.length)
 
   // Helper: update value + cursor together (both state and ref)
   function updateValue(next: string, nextCursor?: number) {
@@ -414,16 +417,19 @@ export function TextInput({
 
 interface CheckboxSelectProps<T extends string> {
   items: { value: T; label: string; checked?: boolean }[]
+  initialCursor?: number
   onEscape?: () => void
   onSubmit: (selected: T[]) => void
 }
 
 export function CheckboxSelect<T extends string>({
   items,
+  initialCursor,
   onEscape,
   onSubmit,
 }: CheckboxSelectProps<T>) {
-  const [cursor, setCursor] = useState(0)
+  const clamped = Math.max(0, Math.min(items.length - 1, initialCursor ?? 0))
+  const [cursor, setCursor] = useState(clamped)
   const [selected, setSelected] = useState<Set<T>>(
     new Set(items.filter((i) => i.checked).map((i) => i.value))
   )
@@ -468,22 +474,33 @@ export function CheckboxSelect<T extends string>({
 
 interface ConfirmProps {
   message: string
+  defaultYes?: boolean
   onConfirm: (yes: boolean) => void
 }
 
-export function Confirm({ message, onConfirm }: ConfirmProps) {
-  useInput((input) => {
-    if (input === 'y' || input === 'Y' || input === '\r') {
-      onConfirm(true)
-    } else if (input === 'n' || input === 'N') {
+export function Confirm({ message, defaultYes = true, onConfirm }: ConfirmProps) {
+  useInput((input, key) => {
+    if (key.escape) {
       onConfirm(false)
+      return
+    }
+    if (input === 'y' || input === 'Y') {
+      onConfirm(true)
+      return
+    }
+    if (input === 'n' || input === 'N') {
+      onConfirm(false)
+      return
+    }
+    if (key.return) {
+      onConfirm(defaultYes)
     }
   })
 
   return (
     <Text>
       <Text color={PRIMARY}>{message} </Text>
-      <Text color={DIM}>(Y/n) </Text>
+      <Text color={DIM}>{defaultYes ? '(Y/n) ' : '(y/N) '}</Text>
     </Text>
   )
 }

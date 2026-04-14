@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
-import { TextInput } from '../../../src/cli/components/text-input.js'
+import { TextInput, CheckboxSelect } from '../../../src/cli/components/text-input.js'
 
 // Generous delay for ink event processing — needs headroom for parallel test runs
 const DELAY = 120
@@ -329,5 +329,67 @@ describe('TextInput rendering', () => {
     const lines = frame.split('\n').filter((l) => l.trim())
     expect(lines.length).toBe(1)
     expect(lines[0]).toContain('>')
+  })
+
+  it('prefills with initialValue and submits unchanged', async () => {
+    const onSubmit = vi.fn()
+    const { stdin } = render(
+      <TextInput initialValue="sk-123" onSubmit={onSubmit} />
+    )
+
+    stdin.write(ENTER)
+    await new Promise((r) => setTimeout(r, DELAY))
+
+    expect(onSubmit).toHaveBeenCalledWith('sk-123')
+  })
+
+  it('initialValue cursor lands at end so backspace trims from tail', async () => {
+    const onSubmit = vi.fn()
+    const { stdin } = render(
+      <TextInput initialValue="abcd" onSubmit={onSubmit} />
+    )
+
+    stdin.write(BACKSPACE)
+    await new Promise((r) => setTimeout(r, DELAY))
+    stdin.write(ENTER)
+    await new Promise((r) => setTimeout(r, DELAY))
+
+    expect(onSubmit).toHaveBeenCalledWith('abc')
+  })
+})
+
+describe('CheckboxSelect initialCursor', () => {
+  it('starts cursor at the provided index', () => {
+    const { lastFrame } = render(
+      <CheckboxSelect
+        items={[
+          { value: 'a', label: 'alpha' },
+          { value: 'b', label: 'beta' },
+          { value: 'c', label: 'gamma' },
+        ]}
+        initialCursor={2}
+        onSubmit={() => {}}
+      />
+    )
+    const frame = lastFrame()!
+    // The row containing the caret marker '❯' must be the gamma row.
+    const caretLine = frame.split('\n').find((l) => l.includes('❯'))!
+    expect(caretLine).toContain('gamma')
+  })
+
+  it('clamps out-of-range initialCursor to valid bounds', () => {
+    const { lastFrame } = render(
+      <CheckboxSelect
+        items={[
+          { value: 'a', label: 'alpha' },
+          { value: 'b', label: 'beta' },
+        ]}
+        initialCursor={99}
+        onSubmit={() => {}}
+      />
+    )
+    const frame = lastFrame()!
+    const caretLine = frame.split('\n').find((l) => l.includes('❯'))!
+    expect(caretLine).toContain('beta')
   })
 })

@@ -35,10 +35,10 @@ const CONFIG_ITEMS: ConfigItem[] = [
   {
     key: 'search_provider',
     labelKey: 'config.label.search_provider',
-    getValue: (c) => c.search?.provider ?? 'searxng',
+    getValue: (c) => c.search?.provider ?? 'exa',
     displayValue: (c) => {
-      const provider = c.search?.provider ?? 'searxng'
-      const labels: Record<string, string> = { searxng: 'SearXNG', exa: 'Exa', tavily: 'Tavily' }
+      const provider = c.search?.provider ?? 'exa'
+      const labels: Record<string, string> = { exa: 'Exa', tavily: 'Tavily' }
       const label = labels[provider] ?? provider
       // Show key status for API providers
       if (provider === 'exa') {
@@ -103,7 +103,6 @@ function getLanguageOptions(): { value: SupportedLanguage; label: string }[] {
 
 function getSearchProviderOptions(): { value: SearchProvider; label: string }[] {
   return [
-    { value: 'searxng', label: t('config.search.searxng_label') },
     { value: 'exa', label: 'Exa (API)' },
     { value: 'tavily', label: 'Tavily (API)' },
   ]
@@ -184,7 +183,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
           setSelectCursor(currentIdx >= 0 ? currentIdx : 0)
           setMode('select')
         } else if (item.key === 'search_provider') {
-          const currentIdx = getSearchProviderOptions().findIndex((p) => p.value === (config.search?.provider ?? 'searxng'))
+          const currentIdx = getSearchProviderOptions().findIndex((p) => p.value === (config.search?.provider ?? 'exa'))
           setSelectCursor(currentIdx >= 0 ? currentIdx : 0)
           setMode('select')
         } else if (item.key === 'animation') {
@@ -312,19 +311,13 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
       if (key.return) {
         if (item.key === 'search_provider') {
           const selected = getSearchProviderOptions()[selectCursor]!.value
-          if (selected === 'searxng') {
-            // SearXNG doesn't need a key
-            doSave('search_provider', selected)
-            setMode('menu')
-          } else {
-            // Exa or Tavily — transition to key input
-            setPendingProvider(selected)
-            const existingKey = selected === 'exa'
-              ? (config.search?.exa_api_key ?? '')
-              : (config.search?.tavily_api_key ?? '')
-            setEditValue(existingKey)
-            setMode('search_key')
-          }
+          // Exa or Tavily — transition to key input
+          setPendingProvider(selected)
+          const existingKey = selected === 'exa'
+            ? (config.search?.exa_api_key ?? '')
+            : (config.search?.tavily_api_key ?? '')
+          setEditValue(existingKey)
+          setMode('search_key')
           return
         }
 
@@ -443,7 +436,7 @@ export function ConfigCommand({ onClose }: ConfigCommandProps) {
                 {i === selectCursor ? '  ❯ ' : '    '}
               </Text>
               <Text color={i === selectCursor ? PRIMARY : DIM}>
-                {opt.value === (config.search?.provider ?? 'searxng') ? '◉' : '◯'} {opt.label}
+                {opt.value === (config.search?.provider ?? 'exa') ? '◉' : '◯'} {opt.label}
               </Text>
             </Text>
           ))}

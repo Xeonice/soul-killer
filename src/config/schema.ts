@@ -2,7 +2,7 @@ export type SupportedLanguage = 'zh' | 'ja' | 'en'
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['zh', 'ja', 'en']
 
-export type SearchProvider = 'searxng' | 'exa' | 'tavily'
+export type SearchProvider = 'exa' | 'tavily'
 
 export interface SoulkillerConfig {
   llm: {

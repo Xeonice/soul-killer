@@ -25,6 +25,7 @@ exports[`HelpCommand > renders full help output 1`] = `
 
   设置
     /config               查看/修改配置
+    /setup                重跑初始化向导（按当前配置预填）
 
   其他
     /help                 帮助

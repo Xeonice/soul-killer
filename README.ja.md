@@ -25,18 +25,6 @@
 >
 > **どうやってプレイする？** エクスポートされた `.skill` ファイルは、Skill プロトコルに対応するあらゆるアプリケーションで直接実行できる——例えば [Claude](https://claude.ai) や [OpenClaw](https://github.com/nicepkg/openclaw)。Skill としてインポートすれば、すぐにプレイ開始。各脚本はセーブに対応し、一つの物語から複数の異なる脚本を生成可能。現在の脚本の選択分岐ツリーはいつでも確認できる。受信者は初回プレイ前に soulkiller CLI のインストールが必要です——Skill は初回ロード時に自動検出し、インストールを案内します。開発者が Claude Code のターミナルでロードするのにも最適——上司から見れば、あなたは「AI Skill をデバッグしている」だけである。
 
-## 事前準備
-
-SOULKILLER の稼働には以下の API キーが必要である。導入前に登録を完了せよ：
-
-| サービス | 用途 | 必須 | 取得先 |
-|----------|------|:----:|--------|
-| [OpenRouter](https://openrouter.ai/keys) | LLM 推論（魂蒸留、世界構築、脚本生成） | **必須** | https://openrouter.ai/keys |
-| [Tavily](https://app.tavily.com/home) | Web 検索（デジタル痕跡の収集） | いずれか一方 | https://app.tavily.com/home |
-| [Exa](https://dashboard.exa.ai/api-keys) | Web 検索（Tavily の代替） | いずれか一方 | https://dashboard.exa.ai/api-keys |
-
-> **補足：** 検索サービスは Tavily と Exa のいずれか一方で十分である。初回起動時の設定ウィザードがこれらのキー入力を順次案内する。
-
 ## 導入
 
 macOS、Linux、Windows に対応。バイナリは Cloudflare CDN 経由でグローバルに配信される。
@@ -53,7 +41,23 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 
 導入完了後、端末に表示される PATH コマンドをコピーして実行すればすぐに使用可能。または新しい端末ウィンドウを開き、`soulkiller` を実行して起動せよ。
 
-## 30秒概要
+## 事前準備
+
+SOULKILLER の創作パイプライン（魂蒸留 / 世界構築 / 脚本生成）には以下の API キーが必要である。**配布済みアーカイブを遊ぶだけ**ならこの節はスキップ可能 — 受け手は Claude/OpenClaw で `.skill` をロードするだけで済む。
+
+| サービス | 用途 | 必須 | 取得先 |
+|----------|------|:----:|--------|
+| [OpenRouter](https://openrouter.ai/keys) | LLM 推論（魂蒸留、世界構築、脚本生成） | **必須** | https://openrouter.ai/keys |
+| [Tavily](https://app.tavily.com/home) | Web 検索（デジタル痕跡の収集） | いずれか一方 | https://app.tavily.com/home |
+| [Exa](https://dashboard.exa.ai/api-keys) | Web 検索（Tavily の代替） | いずれか一方 | https://dashboard.exa.ai/api-keys |
+
+> **補足：** 検索サービスは Tavily と Exa のいずれか一方で十分である。初回起動時の `/setup` ウィザードがこれらのキー入力を順次案内する。後から `/setup` で再走、または `/config` で単項目修正も可能。
+
+## soulkiller CLI の使い方
+
+soulkiller 本体は**ローカルランチャー**である — 導入後にターミナルで `soulkiller` を実行して REPL に入り、スラッシュコマンドで「キャラクター → 世界 → エクスポート」の全工程を駆動する。同時にすべての `.skill` アーカイブの Phase 2 ランタイム（状態管理、セーブ／ロード、分岐ツリー可視化）を担う実行エンジンでもある。以下三節がそれぞれ、立ち上がりのリズム、コマンドリファレンス、典型的な作者ワークフローを示す。
+
+### 30 秒で立ち上げる
 
 ```bash
 # 第一段階：キャラクターの魂を生成
@@ -68,7 +72,7 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 
 キャラクター → 世界 → エクスポート。三段階で配布可能なテキストアドベンチャーが完成する。全工程は AI エージェントが自律的に遂行する。
 
-## 主要操作コマンド
+### CLI コマンドリファレンス
 
 **第一段階：キャラクター**
 
@@ -95,7 +99,7 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 | `/pack <name>` | 魂を `.soul.pack` 携帯アーカイブとしてパッケージ |
 | `/help` | 全コマンドリファレンスを表示 |
 
-## 完全手順
+### 作者ワークフロー
 
 ```
 第一段階：キャラクターを生成

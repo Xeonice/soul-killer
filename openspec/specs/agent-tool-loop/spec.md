@@ -23,18 +23,13 @@
 - **AND** reportFindings 中 classification 为 UNKNOWN_ENTITY，extractions 为空数组
 
 ### Requirement: 搜索工具集
-Agent SHALL 拥有以下 tool 供自主调用：search（统一搜索，单一 query 参数）、extractPage（提取页面完整内容）、planSearch（生成搜索计划）、checkCoverage（检查维度覆盖度）、reportFindings（报告结果并终止循环）。搜索后端根据 config.search.provider 自动选择 SearXNG/Exa/Tavily，自动聚合多源结果（包括 Wikipedia）。
+Agent SHALL 拥有以下 tool 供自主调用：search（统一搜索，单一 query 参数）、extractPage（提取页面完整内容）、planSearch（生成搜索计划）、checkCoverage（检查维度覆盖度）、reportFindings（报告结果并终止循环）。搜索后端根据 config.search.provider 自动选择 Exa/Tavily，自动聚合多源结果（包括 Wikipedia）。
 
 #### Scenario: 简化后的搜索调用
 - **WHEN** LLM 调用 search tool
 - **THEN** 只需传入 query 字符串
-- **AND** 搜索后端根据 config.search.provider 自动选择 SearXNG/Exa/Tavily
+- **AND** 搜索后端根据 config.search.provider 自动选择 Exa/Tavily
 - **AND** 返回包含多源内容的结果数组
-
-#### Scenario: search tool 使用 SearXNG
-- **WHEN** config.search.provider 为 searxng 且 SearXNG 容器可用
-- **THEN** 搜索请求发送到本地 SearXNG 实例
-- **AND** 对前 5 条内容 < 300 字符的结果自动提取全文
 
 #### Scenario: search tool 使用 Exa
 - **WHEN** config.search.provider 为 exa 且 exa_api_key 存在

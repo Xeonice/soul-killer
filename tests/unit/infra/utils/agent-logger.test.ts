@@ -45,7 +45,7 @@ describe('AgentLogger', () => {
   it('writes META header with prompt, model, and provider', () => {
     const logger = createTestLogger('Research test target', {
       model: 'qwen/qwen3-235b',
-      provider: 'searxng',
+      provider: 'exa',
       raw: { temperature: 0 },
     })
     createdFiles.push(logger.filePath)
@@ -56,7 +56,7 @@ describe('AgentLogger', () => {
     expect(content).toContain('[META]')
     expect(content).toContain('Prompt   : Research test target')
     expect(content).toContain('Model    : qwen/qwen3-235b')
-    expect(content).toContain('Provider : searxng')
+    expect(content).toContain('Provider : exa')
     expect(content).toContain('"temperature":0')
   })
 
@@ -128,12 +128,12 @@ describe('AgentLogger', () => {
 
     logger.startStep(1, 'searching')
     logger.toolCall('search', { query: 'test' })
-    logger.toolInternal('Provider: searxng')
+    logger.toolInternal('Provider: exa')
     logger.toolInternal('Raw results: 10', { durationMs: 500 })
 
     const content = readLogFile(logger)
 
-    expect(content).toContain('[INTERNAL] Provider: searxng')
+    expect(content).toContain('[INTERNAL] Provider: exa')
     expect(content).toContain('[INTERNAL] Raw results: 10 {"durationMs":500}')
   })
 

@@ -18,14 +18,12 @@ import { withExacto, getProviderOptions, getToolChoice } from '../llm/client.js'
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider'
 import { logger } from '../utils/logger.js'
 import { AgentLogger } from '../utils/agent-logger.js'
-import { ensureSearxng } from '../search/searxng-search.js'
 import type { SearchResult } from '../search/tavily-search.js'
 import { runAgentLoop } from './agent-loop.js'
 
 // ── Search executor: runs all planned queries deterministically ──
 
 interface SearchExecutorConfig {
-  searxngAvailable: boolean
   config: SoulkillerConfig
   agentLog: AgentLogger
 }
@@ -34,17 +32,14 @@ async function createSearchRunner(execConfig: SearchExecutorConfig) {
   // Import search backends
   const { executeTavilySearch } = await import('../search/tavily-search.js')
   const { executeExaSearch } = await import('../search/exa-search.js')
-  const { searxngSearch } = await import('../search/searxng-search.js')
 
   const config = execConfig.config
   const tavilyKey = config.search?.tavily_api_key
   const exaKey = config.search?.exa_api_key
   const configProvider = config.search?.provider
 
-  const resolvedProvider = configProvider === 'searxng' && execConfig.searxngAvailable ? 'searxng'
-    : configProvider === 'exa' && exaKey ? 'exa'
+  const resolvedProvider = configProvider === 'exa' && exaKey ? 'exa'
     : configProvider === 'tavily' && tavilyKey ? 'tavily'
-    : execConfig.searxngAvailable ? 'searxng'
     : exaKey ? 'exa'
     : tavilyKey ? 'tavily'
     : 'none'
@@ -54,9 +49,7 @@ async function createSearchRunner(execConfig: SearchExecutorConfig) {
   return async function runSearch(query: string): Promise<SearchResult[]> {
     let results: SearchResult[]
 
-    if (resolvedProvider === 'searxng') {
-      results = await searxngSearch(query)
-    } else if (resolvedProvider === 'exa') {
+    if (resolvedProvider === 'exa') {
       results = await executeExaSearch(exaKey!, query)
     } else if (resolvedProvider === 'tavily') {
       results = await executeTavilySearch(tavilyKey!, query)
@@ -257,15 +250,8 @@ export async function runCaptureAgent(
   const model = provider(withExacto(config.llm.default_model))
   const providerOpts = getProviderOptions(config.llm.default_model)
 
-  let searxngAvailable = false
-  if (config.search?.provider === 'searxng') {
-    searxngAvailable = await ensureSearxng()
-  }
-
-  const resolvedProvider = config.search?.provider === 'searxng' && searxngAvailable ? 'searxng'
-    : config.search?.provider === 'exa' && config.search?.exa_api_key ? 'exa'
+  const resolvedProvider = config.search?.provider === 'exa' && config.search?.exa_api_key ? 'exa'
     : config.search?.provider === 'tavily' && config.search?.tavily_api_key ? 'tavily'
-    : searxngAvailable ? 'searxng'
     : config.search?.exa_api_key ? 'exa'
     : config.search?.tavily_api_key ? 'tavily'
     : 'none'
@@ -282,7 +268,7 @@ export async function runCaptureAgent(
   logger.info(`${tag} Pre-search with raw name: "${name}"`)
   onProgress?.({ type: 'phase', phase: 'searching' })
 
-  const runSearchFn = await createSearchRunner({ searxngAvailable, config, agentLog })
+  const runSearchFn = await createSearchRunner({ config, agentLog })
 
   // Build multilingual pre-search queries from name + hint
   const preSearchQueries = [name]
@@ -519,7 +505,7 @@ ${dimSummary}
 Review each dimension's scores by calling evaluateDimension. If any dimension is insufficient, use supplementSearch to add more data. Then call reportFindings.`
 
   const { tools } = createEvaluationTools(config, {
-    agentLog, strategy, dimensionPlan, dimensionScores, sessionDir, searxngAvailable,
+    agentLog, strategy, dimensionPlan, dimensionScores, sessionDir,
   })
 
   const dimCount = dimensionPlan.dimensions.length

@@ -18,7 +18,6 @@ export function createEvaluationTools(
     dimensionPlan: DimensionPlan
     dimensionScores?: Map<string, DimensionScore>
     sessionDir: string
-    searxngAvailable?: boolean
   },
 ) {
   const { agentLog, strategy, dimensionPlan, sessionDir } = options
@@ -30,7 +29,6 @@ export function createEvaluationTools(
   const tools = {
     evaluateDimension: createEvaluateDimensionTool(dimensionPlan, dimensionScores, agentLog),
     supplementSearch: createSupplementSearchTool(config, sessionDir, {
-      searxngAvailable: options.searxngAvailable,
       agentLog,
     }),
     reportFindings: createReportFindingsTool(classificationValues, dimensionValues),

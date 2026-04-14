@@ -105,6 +105,21 @@ const configCommand: CommandHandler = {
   },
 }
 
+const setupCommand: CommandHandler = {
+  name: 'setup',
+  descriptionKey: 'cmd.setup',
+  groupKey: 'cmd.group.settings',
+  interactive: true,
+  handle(ctx) {
+    ctx.setState((s) => ({
+      ...s,
+      phase: 'setup',
+      interactiveMode: true,
+      commandOutput: null,
+    }))
+  },
+}
+
 const createCommand: CommandHandler = {
   name: 'create',
   descriptionKey: 'cmd.create',
@@ -371,6 +386,7 @@ export function registerAllCommands(): void {
     sourceCommand,
     statusCommand,
     configCommand,
+    setupCommand,
     createCommand,
     listCommand,
     worldCommand,

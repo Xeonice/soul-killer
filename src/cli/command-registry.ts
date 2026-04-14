@@ -97,6 +97,7 @@ const COMMAND_TEMPLATES: CommandTemplate[] = [
 
   // 设置
   { name: 'config', descriptionKey: 'cmd.config', groupKey: 'cmd.group.settings' },
+  { name: 'setup', descriptionKey: 'cmd.setup', groupKey: 'cmd.group.settings' },
 
   // 其他
   { name: 'help', descriptionKey: 'cmd.help', groupKey: 'cmd.group.other' },

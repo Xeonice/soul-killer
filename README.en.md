@@ -25,18 +25,6 @@
 >
 > **How to play?** Exported `.skill` files run in any application that supports the Skill protocol — such as [Claude](https://claude.ai) or [OpenClaw](https://github.com/nicepkg/openclaw). Import it as a Skill, and start playing. Each script supports saving, a single story can have multiple generated scripts, and you can view the current script's choice branch tree at any time. Recipients also need soulkiller CLI installed before their first play — the Skill automatically detects and prompts for installation on first load. Also perfect for developers loading it in Claude Code's terminal — as far as your boss can tell, you're just "debugging an AI Skill."
 
-## Prerequisites
-
-SOULKILLER requires the following API keys to operate. Complete registration before installation:
-
-| Service | Purpose | Required | Get Key |
-|---------|---------|:--------:|---------|
-| [OpenRouter](https://openrouter.ai/keys) | LLM inference (soul distillation, world building, script generation) | **Yes** | https://openrouter.ai/keys |
-| [Tavily](https://app.tavily.com/home) | Web search (collecting digital footprints) | Either one | https://app.tavily.com/home |
-| [Exa](https://dashboard.exa.ai/api-keys) | Web search (alternative to Tavily) | Either one | https://dashboard.exa.ai/api-keys |
-
-> **Note:** Pick either Tavily or Exa for search — one is enough. The first-launch wizard will guide you through entering these keys step by step.
-
 ## Installation
 
 Supports macOS, Linux, and Windows. Binaries are distributed globally via Cloudflare CDN.
@@ -53,7 +41,23 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 
 After installation, copy and run the PATH command shown in the terminal to use immediately, or open a new terminal window and run `soulkiller` to launch.
 
-## 30-Second Overview
+## Prerequisites
+
+SOULKILLER's authoring pipeline (soul distillation / world building / script generation) needs the following API keys. **Skip this section if you only plan to play pre-made archives** — recipients just need to load a `.skill` file in Claude/OpenClaw.
+
+| Service | Purpose | Required | Get Key |
+|---------|---------|:--------:|---------|
+| [OpenRouter](https://openrouter.ai/keys) | LLM inference (soul distillation, world building, script generation) | **Yes** | https://openrouter.ai/keys |
+| [Tavily](https://app.tavily.com/home) | Web search (collecting digital footprints) | Either one | https://app.tavily.com/home |
+| [Exa](https://dashboard.exa.ai/api-keys) | Web search (alternative to Tavily) | Either one | https://dashboard.exa.ai/api-keys |
+
+> **Note:** Pick either Tavily or Exa for search — one is enough. The first-launch `/setup` wizard walks you through entering these keys; you can always rerun `/setup` later, or use `/config` for single-field tweaks.
+
+## Using the soulkiller CLI
+
+soulkiller itself is a **local launcher** — after installation, run `soulkiller` in your terminal to enter the REPL, where slash commands drive the full "character → world → export" pipeline. It also doubles as the Phase 2 runtime engine (state management, save/load, branch-tree visualization) that every `.skill` archive depends on. The three subsections below give you the quick-start rhythm, the full command reference, and a typical author workflow.
+
+### 30-Second Overview
 
 ```bash
 # Step 1: Create a character soul
@@ -68,7 +72,7 @@ After installation, copy and run the PATH command shown in the terminal to use i
 
 Character → World → Export. Three steps to a distributable text adventure game, executed autonomously by the AI agent.
 
-## Core Operation Commands
+### CLI Command Reference
 
 **Phase 1: Character**
 
@@ -95,7 +99,7 @@ Character → World → Export. Three steps to a distributable text adventure ga
 | `/pack <name>` | Package a soul into a portable `.soul.pack` archive |
 | `/help` | Display the complete command reference |
 
-## Full Procedure
+### Author Workflow
 
 ```
 Step 1: Create a Character
