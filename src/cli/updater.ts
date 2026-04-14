@@ -2,9 +2,9 @@
  * Self-update: query GitHub Releases, compare binary hash, download if changed.
  */
 
-import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync, existsSync, rmSync, realpathSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync, existsSync, rmSync, realpathSync, mkdirSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 const REPO = 'Xeonice/soul-killer'
 const CDN_BASE = 'https://soulkiller-download.ad546971975.workers.dev'
@@ -239,6 +239,22 @@ export async function atomicReplaceBinary(
 }
 
 /**
+ * Replace the viewer static-assets directory atomically.
+ *
+ * Ensures the parent directory (~/.soulkiller) exists before attempting
+ * rename — install.ps1 never creates ~/.soulkiller on Windows, so the first
+ * --update after a fresh install would otherwise hit ENOENT.
+ *
+ * Extracted as its own function to make the ordering (mkdir → rm → rename)
+ * directly testable without standing up the whole download pipeline.
+ */
+export function replaceViewer(src: string, dst: string): void {
+  mkdirSync(dirname(dst), { recursive: true })
+  rmSync(dst, { recursive: true, force: true })
+  renameSync(src, dst)
+}
+
+/**
  * Print a user-facing message for a ReplaceFailure. One helper instead of
  * scattering console.error calls through runUpdate.
  */
@@ -425,12 +441,10 @@ export async function runUpdate(): Promise<void> {
     return
   }
 
-  // Replace viewer static files (if present in archive)
+  // Replace viewer static files (if present in archive).
   const extractedViewer = join(extractDir, 'viewer')
   if (existsSync(extractedViewer)) {
-    const viewerDst = join(homedir(), '.soulkiller', 'viewer')
-    rmSync(viewerDst, { recursive: true, force: true })
-    renameSync(extractedViewer, viewerDst)
+    replaceViewer(extractedViewer, join(homedir(), '.soulkiller', 'viewer'))
     console.log('  ✓ Viewer files updated')
   }
 

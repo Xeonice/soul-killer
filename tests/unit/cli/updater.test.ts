@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, rmSync, symlinkSync, realpathSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   atomicReplaceBinary,
   resolveTargetPath,
   reportReplaceFailure,
+  replaceViewer,
   type ReplaceFailure,
   type ReplaceOps,
 } from '../../../src/cli/updater.js'
@@ -208,6 +209,45 @@ describe('atomicReplaceBinary — Windows branch', () => {
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason.code).toBe('LOCKED')
+  })
+})
+
+describe('replaceViewer', () => {
+  let root: string
+  beforeEach(() => { root = tmp() })
+  afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+  it('creates missing parent directory before rename (Windows first-update bug)', () => {
+    const src = join(root, 'src-viewer')
+    mkdirSync(src)
+    writeFileSync(join(src, 'index.html'), '<html>new</html>')
+
+    // Simulate fresh Windows install: ~/.soulkiller never created
+    const soulkillerHome = join(root, 'fake-home', '.soulkiller')
+    const dst = join(soulkillerHome, 'viewer')
+    expect(existsSync(soulkillerHome)).toBe(false)
+
+    replaceViewer(src, dst)
+
+    expect(existsSync(dst)).toBe(true)
+    expect(readFileSync(join(dst, 'index.html'), 'utf8')).toBe('<html>new</html>')
+    expect(existsSync(src)).toBe(false)
+  })
+
+  it('replaces existing viewer atomically when parent already exists', () => {
+    const src = join(root, 'src-viewer')
+    mkdirSync(src)
+    writeFileSync(join(src, 'index.html'), 'NEW')
+
+    const dst = join(root, 'viewer')
+    mkdirSync(dst)
+    writeFileSync(join(dst, 'index.html'), 'OLD')
+    writeFileSync(join(dst, 'stale.txt'), 'should be removed')
+
+    replaceViewer(src, dst)
+
+    expect(readFileSync(join(dst, 'index.html'), 'utf8')).toBe('NEW')
+    expect(existsSync(join(dst, 'stale.txt'))).toBe(false)
   })
 })
 
