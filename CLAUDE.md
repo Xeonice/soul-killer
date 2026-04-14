@@ -151,7 +151,7 @@ src/cli/app.tsx        → Main state machine (boot → setup → idle → comma
 - **Build**: `bun scripts/build.ts` — two-phase build: bundle (stub `react-devtools-core` via plugin, inject version) → cross-compile 5 platforms via `bun build --compile --target`. Outputs `.tar.gz` (Unix) and `.zip` (Windows) to `dist/`.
 - **CI**: `.github/workflows/release.yml` — triggered by `v*` tag push. Single ubuntu runner cross-compiles all targets, runs tests first, then creates GitHub Release with all archives + install scripts.
 - **Install**: `scripts/install.sh` (macOS/Linux) and `scripts/install.ps1` (Windows). Detect platform, download binary from GitHub Release, install to `~/.soulkiller/bin/`, configure PATH.
-- **Self-update**: `soulkiller --update` queries GitHub API for latest release, downloads and atomically replaces the current binary.
+- **Self-update**: `soulkiller --update` queries GitHub API for latest release, verifies the downloaded archive against `checksums.txt`, and delegates replacement to `atomicReplaceBinary(src, dst)` in `src/cli/updater.ts`. Platform logic is unified inside that primitive: Unix uses `rename` (with `EXDEV` fallback to read+write); Windows uses the rename-self trick (rename running exe to `<exe>.old`, write new binary at original path), the same pattern Deno's `deno upgrade` uses. Failures are reported via typed `ReplaceFailure` codes (`LOCKED` / `PERMISSION` / `DISK_FULL` / `UNKNOWN`). On Windows, `<exe>.old` lingers briefly and is cleaned on the next cold start via `cleanupStaleOld()` in `src/index.tsx`.
 - **Version**: Injected at build time via `process.env.SOULKILLER_VERSION`. `soulkiller --version` prints it. Dev mode falls back to `dev`.
 
 ## Testing

@@ -1,11 +1,32 @@
 #!/usr/bin/env bun
 import { render } from 'ink'
 import React from 'react'
+import { existsSync, realpathSync, unlinkSync } from 'node:fs'
 import { App } from './cli/app.js'
 import { runRuntime } from './cli/runtime.js'
 import { runUpdate } from './cli/updater.js'
 import { runDoctor } from './cli/doctor.js'
 import { skillList, skillUpgrade } from './cli/skill-manager.js'
+
+/**
+ * Remove any stale `<exe>.old` left behind by a previous Windows self-update.
+ * On Windows the update path renames the running exe to `<exe>.old` before
+ * writing the new binary — cleanup is deferred to the next cold start because
+ * the just-updated process may still hold a lock at update completion time.
+ * Runs silently; any failure (permission, still-locked, non-existent) is
+ * swallowed and retried on the next start.
+ */
+export function cleanupStaleOld(): void {
+  try {
+    const target = (() => {
+      try { return realpathSync(process.execPath) } catch { return process.execPath }
+    })()
+    const staleOld = target + '.old'
+    if (existsSync(staleOld)) unlinkSync(staleOld)
+  } catch { /* silent */ }
+}
+
+cleanupStaleOld()
 
 // Pre-ink flag handling — intercept before React renders
 const args = process.argv.slice(2)

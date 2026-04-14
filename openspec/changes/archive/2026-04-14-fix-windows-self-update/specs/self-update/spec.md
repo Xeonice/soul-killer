@@ -1,67 +1,5 @@
 ## ADDED Requirements
 
-### Requirement: --version flag 输出版本号
-
-`soulkiller --version` SHALL 在 ink 渲染前输出版本号并退出。
-
-#### Scenario: 查看版本
-
-- **WHEN** 执行 `soulkiller --version`
-- **THEN** SHALL 输出 `soulkiller 0.2.0`（版本号来自构建时注入）并以 exit code 0 退出
-
-### Requirement: --update flag 触发自我更新
-
-`soulkiller --update` SHALL 查询 GitHub Release 最新版本，若有新版本则下载替换当前二进制。
-
-#### Scenario: 有新版本可用
-
-- **WHEN** 当前版本 `0.1.0`，GitHub 最新 Release 为 `v0.2.0`
-- **THEN** SHALL 下载对应平台的新二进制，替换 `process.execPath`，打印更新成功信息
-
-#### Scenario: 已是最新版本
-
-- **WHEN** 当前版本与 GitHub 最新 Release 一致
-- **THEN** SHALL 打印"已是最新版本"并退出
-
-#### Scenario: 网络失败
-
-- **WHEN** 无法连接 GitHub API
-- **THEN** SHALL 打印明确的网络错误信息并以非零 exit code 退出
-
-### Requirement: 原子替换二进制
-
-更新过程 SHALL 先下载到临时文件，验证完整后（archive sha256 校验通过）再根据平台执行替换，确保失败不损坏当前二进制。
-
-#### Scenario: 下载中断不影响当前版本
-
-- **WHEN** 下载新版本过程中网络中断
-- **THEN** 当前二进制 SHALL 保持不变，可继续正常使用
-
-#### Scenario: checksum 校验失败不影响当前版本
-
-- **WHEN** 下载完成后 checksum 校验失败
-- **THEN** 当前二进制 SHALL 保持不变
-- **AND** 临时 archive 文件 SHALL 被清理
-
-#### Scenario: macOS / Linux 替换路径
-
-- **WHEN** `atomicReplaceBinary` 在 Unix 平台上被调用
-- **THEN** SHALL 优先尝试 `renameSync(src, dst)` 原子覆盖
-- **AND** 遇到 `EXDEV`（跨设备）错误时 SHALL 回退到 `writeFileSync(dst, read(src))`
-- **AND** SHALL 保持 POSIX 权限位 `0o755`
-
-#### Scenario: Windows 替换路径
-
-- **WHEN** `atomicReplaceBinary` 在 Windows 上被调用
-- **THEN** SHALL 走 Windows rename-self 策略（见下方 Requirement）
-- **AND** SHALL NOT 直接 rename 或 writeFileSync 覆盖运行中的 exe
-
-#### Scenario: 调用方只看到统一接口
-
-- **WHEN** `runUpdate` 调用 `atomicReplaceBinary(src, dst)`
-- **THEN** 调用方 SHALL 以相同的 API 处理 Unix / Windows 两条路径的结果
-- **AND** SHALL NOT 观察到平台特定字段或异常类型
-
 ### Requirement: 统一的 atomicReplaceBinary 原语
 
 `updater.ts` SHALL 将"把一个临时文件原子替换到目标可执行路径"的逻辑抽出为独立函数 `atomicReplaceBinary(src, dst)`，所有平台差异收敛在该函数内部。`runUpdate` 主流程 SHALL NOT 出现 `isWindows` / `process.platform` 分支。
@@ -173,3 +111,38 @@ soulkiller 二进制启动时（在任何其他命令派发之前）SHALL 尝试
 - **THEN** SHALL 输出一条 warning 但继续升级（保留现有 fallback 行为）
 - **AND** 不阻断升级流程
 
+## MODIFIED Requirements
+
+### Requirement: 原子替换二进制
+
+更新过程 SHALL 先下载到临时文件，验证完整后（archive sha256 校验通过）再根据平台执行替换，确保失败不损坏当前二进制。
+
+#### Scenario: 下载中断不影响当前版本
+
+- **WHEN** 下载新版本过程中网络中断
+- **THEN** 当前二进制 SHALL 保持不变，可继续正常使用
+
+#### Scenario: checksum 校验失败不影响当前版本
+
+- **WHEN** 下载完成后 checksum 校验失败
+- **THEN** 当前二进制 SHALL 保持不变
+- **AND** 临时 archive 文件 SHALL 被清理
+
+#### Scenario: macOS / Linux 替换路径
+
+- **WHEN** `atomicReplaceBinary` 在 Unix 平台上被调用
+- **THEN** SHALL 优先尝试 `renameSync(src, dst)` 原子覆盖
+- **AND** 遇到 `EXDEV`（跨设备）错误时 SHALL 回退到 `writeFileSync(dst, read(src))`
+- **AND** SHALL 保持 POSIX 权限位 `0o755`
+
+#### Scenario: Windows 替换路径
+
+- **WHEN** `atomicReplaceBinary` 在 Windows 上被调用
+- **THEN** SHALL 走 Windows rename-self 策略（见上方 Requirement）
+- **AND** SHALL NOT 直接 rename 或 writeFileSync 覆盖运行中的 exe
+
+#### Scenario: 调用方只看到统一接口
+
+- **WHEN** `runUpdate` 调用 `atomicReplaceBinary(src, dst)`
+- **THEN** 调用方 SHALL 以相同的 API 处理 Unix / Windows 两条路径的结果
+- **AND** SHALL NOT 观察到平台特定字段或异常类型

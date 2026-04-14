@@ -63,4 +63,4 @@
 - [x] 9.2 运行脚本后解包 `examples/skills/fate-zero.skill`：`engine.md` 中 `Step 0: Runtime Health Check` / `soulkiller runtime doctor` 字面量出现次数为 0，Step -1.1 为首个 step + Install Guide 分支存在
 - [x] 9.3 三款 skill 的 `soulkiller.json` 全部为 `engine_version: 2`（与 `CURRENT_ENGINE_VERSION` 一致）
 - [x] 9.4 跳过 — 本次不涉及 soul/world 数据层
-- [ ] 9.5 git commit `examples/skills/` 新版文件，附带 tag push 触发 CI 上传到 R2（由用户按需执行）
+- [x] 9.5 git commit `examples/skills/` 新版文件（commit 17b6f91），tag v0.3.7 已推送触发 CI 上传 R2
