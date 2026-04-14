@@ -26,6 +26,8 @@ import { WorldCommand } from './world/world.js'
 import { ExportCommand } from './export/export.js'
 import { PackCommand } from './export/pack.js'
 import { UnpackCommand } from './export/unpack.js'
+import { InstallCommand } from './system/install.js'
+import { UpgradeCommand } from './system/upgrade.js'
 
 // ─── 3.4 Special: exit ───
 
@@ -117,6 +119,34 @@ const setupCommand: CommandHandler = {
       interactiveMode: true,
       commandOutput: null,
     }))
+  },
+}
+
+const installCommand: CommandHandler = {
+  name: 'install',
+  descriptionKey: 'cmd.install',
+  groupKey: 'cmd.group.settings',
+  interactive: true,
+  handle(ctx) {
+    const slug = ctx.args?.trim() || undefined
+    return React.createElement(InstallCommand, {
+      onClose: ctx.closeInteractive,
+      preselectSlug: slug,
+    })
+  },
+}
+
+const upgradeCommand: CommandHandler = {
+  name: 'upgrade',
+  descriptionKey: 'cmd.upgrade',
+  groupKey: 'cmd.group.settings',
+  interactive: true,
+  handle(ctx) {
+    const checkOnly = ctx.args?.trim() === '--check'
+    return React.createElement(UpgradeCommand, {
+      onClose: ctx.closeInteractive,
+      checkOnly,
+    })
   },
 }
 
@@ -387,6 +417,8 @@ export function registerAllCommands(): void {
     statusCommand,
     configCommand,
     setupCommand,
+    installCommand,
+    upgradeCommand,
     createCommand,
     listCommand,
     worldCommand,

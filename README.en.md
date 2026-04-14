@@ -97,6 +97,16 @@ Character → World → Export. Three steps to a distributable text adventure ga
 |---------|----------|
 | `/export <name>` | Export soul × world as a playable text adventure visual novel Skill archive |
 | `/pack <name>` | Package a soul into a portable `.soul.pack` archive |
+| `/unpack <file>` | Unpack a `.soul.pack` / `.world.pack` archive (interactive conflict handling) |
+
+**Settings & distribution**
+
+| Command | Function |
+|---------|----------|
+| `/install [<slug>]` | Install a prebuilt skill — multi-step wizard (pick skills / targets / scope / preview) |
+| `/upgrade` | Download + replace the soulkiller binary from inside the REPL (current session keeps running the old version until `/exit` + restart) |
+| `/setup` | Re-run the onboarding wizard, all fields pre-filled from current config |
+| `/config` | Edit individual config entries (API key / model / language / search engine) |
 | `/help` | Display the complete command reference |
 
 ### Author Workflow
@@ -153,9 +163,16 @@ Exported `.skill` archives automatically start a local branch tree visualization
 ## System Maintenance
 
 ```bash
-soulkiller --version    # Confirm current protocol version
-soulkiller --update     # Execute self-update to latest version
+soulkiller --version                                   # Current version
+soulkiller --update                                    # Self-update binary
+soulkiller skill catalog                               # List prebuilt skills
+soulkiller skill install <slug> --to claude-code       # Install a skill
+soulkiller skill install --all --to claude-code --to codex   # Multi-target
+soulkiller skill list                                  # Installed skills across all targets
+soulkiller skill upgrade <name>                        # Upgrade engine files
 ```
+
+Targets: `claude-code`, `codex`, `opencode`, `openclaw`. Cursor is not supported (no skills-directory concept).
 
 ## Data Storage
 

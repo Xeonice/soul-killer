@@ -51,61 +51,41 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 
 不想从零开始？以下预制档案托管于 Cloudflare R2，覆盖 Fate/Zero、三国、白色相簿2 和赛博朋克 2077 四个宇宙。
 
-### Skill 档案 — 直接下载，立刻开玩
+### Skill 档案 — CLI 一键装
 
-`.skill` 是 zip 归档，解压后安装到 Claude Code / OpenClaw 的 skills 目录即可加载游玩。
+装好 soulkiller 后，一条命令搞定下载 + 解压 + 落位——跨 Windows / Linux / macOS 同一套指令：
 
-| 档案 | 世界 | 说明 |
+```bash
+# 查看可装列表
+soulkiller skill catalog
+
+# 装全部三款到 Claude Code 全局目录
+soulkiller skill install --all --to claude-code
+
+# 指定单款并同时装到多个平台
+soulkiller skill install fate-zero --to claude-code --to codex --to openclaw
+```
+
+可选的目标（`--to` 可多次重复）：
+
+| 目标 | 全局路径 | 说明 |
+|------|----------|------|
+| `claude-code` | `~/.claude/skills/` | opencode 也会自动识别此路径 |
+| `codex` | `~/.agents/skills/` | opencode 也会自动识别此路径 |
+| `opencode` | `~/.config/opencode/skills/` | opencode 原生路径 |
+| `openclaw` | `~/.openclaw/workspace/skills/` | OpenClaw 专用 |
+
+当前可装列表：
+
+| slug | 世界 | 说明 |
 |------|------|------|
-| [fate-zero.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill) | Fate/Zero | 第四次圣杯战争，含伊斯坎达尔、言峰绮礼、卫宫切嗣等完整卡司 |
-| [three-kingdoms.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/three-kingdoms.skill) | 三国 | 乱世争霸，曹操、刘备、诸葛亮等群雄并立 |
-| [white-album-2.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/white-album-2.skill) | 白色相簿2 | 冬马和纱、小木曾雪菜的遗憾与救赎 IF 线 |
+| `fate-zero` | Fate/Zero | 第四次圣杯战争，含伊斯坎达尔、言峰绮礼、卫宫切嗣等完整卡司 |
+| `three-kingdoms` | 三国 | 乱世争霸，曹操、刘备、诸葛亮等群雄并立 |
+| `white-album-2` | 白色相簿2 | 冬马和纱、小木曾雪菜的遗憾与救赎 IF 线 |
 
-下面的脚本会：下载 `.skill` 到 `/tmp` → 解压到临时目录 → 把内层顶层目录改名为目标 skill 名移动到 skills 目录。复制整段粘贴即可。
+更交互的方式：在 REPL 里输入 `/install`（不带参数）启动多步骤向导——勾选 skill → 勾选目标 → 预览安装矩阵 → 执行。项目级作用域加 `--scope project` 或在向导第三步选 Project，会落到 `<cwd>/.<target>/skills/`。
 
-**Claude Code · 全局安装（推荐）**
-
-```bash
-# 一键安装全部三款
-for s in fate-zero three-kingdoms white-album-2; do
-  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
-  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
-  mkdir -p ~/.claude/skills && rm -rf "$HOME/.claude/skills/$s"
-  mv "$t"/*/ "$HOME/.claude/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
-done
-```
-
-单独安装任一款（替换 `SKILL` 为 `fate-zero` / `three-kingdoms` / `white-album-2`）：
-
-```bash
-SKILL=fate-zero && curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$SKILL.skill" -o "/tmp/$SKILL.skill" && t=$(mktemp -d) && unzip -q "/tmp/$SKILL.skill" -d "$t" && mkdir -p ~/.claude/skills && rm -rf "$HOME/.claude/skills/$SKILL" && mv "$t"/*/ "$HOME/.claude/skills/$SKILL" && rm -rf "$t" "/tmp/$SKILL.skill"
-```
-
-**Claude Code · 项目级安装**
-
-需在 git 仓库根目录执行，装到 `.claude/skills/`（只对当前项目生效）：
-
-```bash
-for s in fate-zero three-kingdoms white-album-2; do
-  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
-  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
-  mkdir -p .claude/skills && rm -rf ".claude/skills/$s"
-  mv "$t"/*/ ".claude/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
-done
-```
-
-**OpenClaw**
-
-```bash
-for s in fate-zero three-kingdoms white-album-2; do
-  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
-  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
-  mkdir -p ~/.openclaw/workspace/skills && rm -rf "$HOME/.openclaw/workspace/skills/$s"
-  mv "$t"/*/ "$HOME/.openclaw/workspace/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
-done
-```
-
-> 未安装 soulkiller 会在 Skill 首次加载时自动提示；如已按上一节安装则无需再动。
+> 未装 soulkiller 先跑上一节的自安装脚本；接收 `.skill` 的用户首次加载时也会提示先装 soulkiller 做 Phase 2 运行时。Cursor 不支持（无 skills 目录约定）。直链下载仍可用：`https://soulkiller-download.ad546971975.workers.dev/examples/skills/<slug>.skill`。
 
 ### Soul 档案 — 批量导入所有角色
 
@@ -195,6 +175,15 @@ soulkiller 本体是一个**本地启动器** —— 安装后在终端运行 `s
 | `/pack soul\|world <name>` | 打包单个 Soul 或 World |
 | `/unpack <file>` | 解包 pack 文件（bundle 或单体，交互式冲突解决） |
 | `/unpack <dir>` | 批量解包目录下所有 pack 文件（`--overwrite` 覆盖已有） |
+
+**设置与分发**
+
+| 指令 | 功能 |
+|------|------|
+| `/install [<slug>]` | 安装预制 skill 档案——多步骤向导（选 skill / 目标 / 作用域 / 预览） |
+| `/upgrade` | 在 REPL 内下载 + 替换 soulkiller 二进制（当前会话仍为旧版，`/exit` 重启生效） |
+| `/setup` | 重跑初始化向导，所有字段以当前配置预填 |
+| `/config` | 单项修改配置（API key / 模型 / 语言 / 搜索引擎等） |
 | `/help` | 显示完整指令列表 |
 
 ### 作者工作流

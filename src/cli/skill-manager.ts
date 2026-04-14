@@ -6,17 +6,27 @@
 
 import { existsSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync, mkdirSync } from 'node:fs'
 import { join, basename } from 'node:path'
-import { homedir } from 'node:os'
+import { TARGETS, type TargetId, type Scope } from './skill-install/targets.js'
 
-const SKILLS_DIR = join(homedir(), '.claude', 'skills')
+type ScopedTargetLabel = `${TargetId}` | `${TargetId}-project`
+
+interface SkillLocation {
+  target: TargetId
+  scope: Scope
+  label: ScopedTargetLabel
+  dir: string
+}
 
 interface SkillInfo {
   name: string
-  dir: string
+  /** All directories where this skill is installed. */
+  locations: SkillLocation[]
   engineVersion: number | null
   soulkillerVersion: string | null
   needsMigration: boolean
   needsUpdate: boolean
+  /** True if multiple locations report different versions. */
+  versionDrift: boolean
 }
 
 import { CURRENT_ENGINE_VERSION, generateEngineTemplate } from '../export/spec/skill-template.js'
@@ -47,76 +57,115 @@ function readSoulkillerJson(dir: string): { engine_version?: number; soulkiller_
   }
 }
 
-function getSkillInfo(name: string, dir: string): SkillInfo {
-  const meta = readSoulkillerJson(dir)
-  const currentEngine = getCurrentEngineVersion()
+// ── Multi-target scanning ──────────────────────────────────────
 
-  if (meta) {
-    const engineVersion = meta.engine_version ?? null
-    return {
-      name,
-      dir,
-      engineVersion,
-      soulkillerVersion: meta.soulkiller_version ?? null,
-      needsMigration: false,
-      needsUpdate: engineVersion !== null && engineVersion < currentEngine,
+function collectScanDirs(): SkillLocation[] {
+  const dirs: SkillLocation[] = []
+  // All 4 globals
+  for (const id of Object.keys(TARGETS) as TargetId[]) {
+    try {
+      dirs.push({
+        target: id,
+        scope: 'global',
+        label: id,
+        dir: TARGETS[id].resolveDir('global'),
+      })
+    } catch { /* skip if resolver throws */ }
+  }
+  // Project scopes (claude-code / codex / opencode only)
+  for (const id of ['claude-code', 'codex', 'opencode'] as TargetId[]) {
+    try {
+      dirs.push({
+        target: id,
+        scope: 'project',
+        label: `${id}-project` as ScopedTargetLabel,
+        dir: TARGETS[id].resolveDir('project'),
+      })
+    } catch { /* skip */ }
+  }
+  return dirs
+}
+
+function scanSkills(): Map<string, { locations: SkillLocation[]; sampleDir: string }> {
+  const byName = new Map<string, { locations: SkillLocation[]; sampleDir: string }>()
+  for (const loc of collectScanDirs()) {
+    if (!existsSync(loc.dir)) continue
+    let entries
+    try { entries = readdirSync(loc.dir, { withFileTypes: true }) } catch { continue }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const skillDir = join(loc.dir, entry.name)
+      if (!isSoulkillerSkill(skillDir)) continue
+      const rec = byName.get(entry.name) ?? { locations: [], sampleDir: skillDir }
+      rec.locations.push({ ...loc, dir: skillDir })
+      byName.set(entry.name, rec)
     }
   }
+  return byName
+}
 
-  // Legacy skill — no soulkiller.json
+function buildSkillInfo(name: string, locations: SkillLocation[]): SkillInfo {
+  const currentEngine = getCurrentEngineVersion()
+  const metas = locations.map((loc) => ({ loc, meta: readSoulkillerJson(loc.dir) }))
+
+  // Pick the first meta as representative; check drift across others
+  const first = metas[0]!
+  const repEngine = first.meta?.engine_version ?? null
+  const repSoul = first.meta?.soulkiller_version ?? null
+  const versionDrift = metas.some((m) =>
+    (m.meta?.engine_version ?? null) !== repEngine ||
+    (m.meta?.soulkiller_version ?? null) !== repSoul,
+  )
+
+  const hasMeta = first.meta !== null
+  const needsMigration = !hasMeta
+  const needsUpdate = hasMeta && repEngine !== null && repEngine < currentEngine
+
   return {
     name,
-    dir,
-    engineVersion: null,
-    soulkillerVersion: null,
-    needsMigration: true,
-    needsUpdate: false,
+    locations,
+    engineVersion: repEngine,
+    soulkillerVersion: repSoul,
+    needsMigration,
+    needsUpdate,
+    versionDrift,
   }
 }
 
 // ── skill list ──────────────────────────────────────────────────
 
 export function skillList(): number {
-  if (!existsSync(SKILLS_DIR)) {
+  const byName = scanSkills()
+
+  if (byName.size === 0) {
     console.log('  No soulkiller skills found.')
     return 0
   }
 
-  const entries = readdirSync(SKILLS_DIR, { withFileTypes: true })
-  const skills: SkillInfo[] = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dir = join(SKILLS_DIR, entry.name)
-    if (!isSoulkillerSkill(dir)) continue
-    skills.push(getSkillInfo(entry.name, dir))
-  }
-
-  if (skills.length === 0) {
-    console.log('  No soulkiller skills found.')
-    return 0
-  }
+  const skills: SkillInfo[] = [...byName.entries()].map(([n, rec]) => buildSkillInfo(n, rec.locations))
 
   const currentEngine = getCurrentEngineVersion()
   console.log(`  Current engine version: ${currentEngine}\n`)
 
-  // Header
-  const nameWidth = Math.max(30, ...skills.map((s) => s.name.length + 2))
+  const nameWidth = Math.max(20, ...skills.map((s) => s.name.length + 2))
+  const targetsCol = (s: SkillInfo) => s.locations.map((l) => l.label).join(',')
+  const targetsWidth = Math.max(10, ...skills.map((s) => targetsCol(s).length + 2))
+
   console.log(
-    `  ${'NAME'.padEnd(nameWidth)}${'ENGINE'.padEnd(10)}${'SOULKILLER'.padEnd(14)}STATUS`,
+    `  ${'NAME'.padEnd(nameWidth)}${'ENGINE'.padEnd(8)}${'STATUS'.padEnd(18)}${'TARGETS'.padEnd(targetsWidth)}`,
   )
-  console.log(`  ${'─'.repeat(nameWidth + 10 + 14 + 16)}`)
+  console.log(`  ${'─'.repeat(nameWidth + 8 + 18 + targetsWidth)}`)
 
   for (const s of skills) {
     const engineCol = s.engineVersion !== null ? String(s.engineVersion) : '—'
-    const versionCol = s.soulkillerVersion ?? '—'
     let status: string
     if (s.needsMigration) status = 'needs migration'
     else if (s.needsUpdate) status = 'needs update'
     else status = 'up to date'
+    if (s.versionDrift) status += ' ⚠'
 
     console.log(
-      `  ${s.name.padEnd(nameWidth)}${engineCol.padEnd(10)}${versionCol.padEnd(14)}${status}`,
+      `  ${s.name.padEnd(nameWidth)}${engineCol.padEnd(8)}${status.padEnd(18)}${targetsCol(s).padEnd(targetsWidth)}`,
     )
   }
 
@@ -127,20 +176,16 @@ export function skillList(): number {
 // ── skill upgrade ───────────────────────────────────────────────
 
 export async function skillUpgrade(target?: string): Promise<number> {
-  if (!existsSync(SKILLS_DIR)) {
+  const byName = scanSkills()
+  if (byName.size === 0) {
     console.log('  No soulkiller skills found.')
     return 0
   }
 
-  const entries = readdirSync(SKILLS_DIR, { withFileTypes: true })
   const skills: SkillInfo[] = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dir = join(SKILLS_DIR, entry.name)
-    if (!isSoulkillerSkill(dir)) continue
-    const info = getSkillInfo(entry.name, dir)
-    if (target && target !== '--all' && entry.name !== target) continue
+  for (const [name, rec] of byName) {
+    if (target && target !== '--all' && name !== target) continue
+    const info = buildSkillInfo(name, rec.locations)
     if (info.needsMigration || info.needsUpdate) {
       skills.push(info)
     }
@@ -151,28 +196,30 @@ export async function skillUpgrade(target?: string): Promise<number> {
     return 0
   }
 
-  console.log(`  Found ${skills.length} skill(s) to upgrade:\n`)
+  const locationCount = skills.reduce((sum, s) => sum + s.locations.length, 0)
+  console.log(`  Found ${skills.length} skill(s) across ${locationCount} location(s) to upgrade:\n`)
 
   let upgraded = 0
   let migrated = 0
   let failed = 0
 
   for (const skill of skills) {
-    process.stdout.write(`  ${skill.name}... `)
-
-    try {
-      if (skill.needsMigration) {
-        await migrateSkill(skill.dir)
-        migrated++
-        console.log('migrated ✓')
-      } else {
-        upgradeEngine(skill.dir)
-        upgraded++
-        console.log('upgraded ✓')
+    for (const loc of skill.locations) {
+      process.stdout.write(`  ${skill.name} [${loc.label}]... `)
+      try {
+        if (skill.needsMigration) {
+          await migrateSkill(loc.dir)
+          migrated++
+          console.log('migrated ✓')
+        } else {
+          upgradeEngine(loc.dir)
+          upgraded++
+          console.log('upgraded ✓')
+        }
+      } catch (err) {
+        failed++
+        console.log(`FAILED: ${(err as Error).message}`)
       }
-    } catch (err) {
-      failed++
-      console.log(`FAILED: ${(err as Error).message}`)
     }
   }
 

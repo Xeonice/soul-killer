@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { execFile } from 'node:child_process'
+import { extractTarGz } from '../../infra/archive/index.js'
 import { parseMeta, validateVersion, type PackMeta } from './meta.js'
 import { verifyChecksum } from './checksum.js'
 import { worldExists } from '../../world/manifest.js'
@@ -58,17 +58,15 @@ export async function inspectPack(filePath: string): Promise<{
 
   const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulkiller-unpack-'))
 
-  // Extract tar.gz
-  await new Promise<void>((resolve, reject) => {
-    execFile('tar', ['-xzf', filePath, '-C', stagingDir], (error, _stdout, stderr) => {
-      if (error) {
-        fs.rmSync(stagingDir, { recursive: true, force: true })
-        reject(new Error(`tar extraction failed: ${stderr || error.message}`))
-      } else {
-        resolve()
-      }
-    })
-  })
+  // Extract tar.gz (pure TS — fflate gunzip + nanotar parseTar, no shell)
+  try {
+    const buf = fs.readFileSync(filePath)
+    extractTarGz(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), stagingDir)
+  } catch (err) {
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`tar extraction failed: ${msg}`)
+  }
 
   // Read and validate pack-meta.json
   const metaPath = path.join(stagingDir, 'pack-meta.json')

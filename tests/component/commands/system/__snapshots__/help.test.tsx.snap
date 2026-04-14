@@ -26,6 +26,8 @@ exports[`HelpCommand > renders full help output 1`] = `
   设置
     /config               查看/修改配置
     /setup                重跑初始化向导（按当前配置预填）
+    /install              安装预制 skill 档案（多目标：claude-code/codex/opencode/openclaw）
+    /upgrade              在 REPL 内升级 soulkiller 二进制（当前会话仍为旧版，/exit 重启生效）
 
   其他
     /help                 帮助

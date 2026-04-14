@@ -7,6 +7,8 @@ import { runRuntime } from './cli/runtime.js'
 import { runUpdate } from './cli/updater.js'
 import { runDoctor } from './cli/doctor.js'
 import { skillList, skillUpgrade } from './cli/skill-manager.js'
+import { runInstall } from './cli/skill-install/cli.js'
+import { runCatalog } from './cli/catalog/cli.js'
 
 /**
  * Remove any stale `<exe>.old` left behind by a previous Windows self-update.
@@ -59,10 +61,18 @@ if (args[0] === 'skill') {
   } else if (sub === 'upgrade') {
     const code = await skillUpgrade(args[2])
     process.exit(code)
+  } else if (sub === 'install') {
+    const code = await runInstall(args.slice(2))
+    process.exit(code)
+  } else if (sub === 'catalog') {
+    const code = await runCatalog(args.slice(2))
+    process.exit(code)
   } else {
-    console.log('Usage: soulkiller skill <list|upgrade>')
-    console.log('  list                  List installed soulkiller skills')
-    console.log('  upgrade [--all|name]  Upgrade skill engine')
+    console.log('Usage: soulkiller skill <list|upgrade|install|catalog>')
+    console.log('  list                          List installed soulkiller skills')
+    console.log('  upgrade [--all|name]          Upgrade skill engine files')
+    console.log('  install <slug|url|path>       Download and install a skill')
+    console.log('  catalog [--json]              List available skills from the remote catalog')
     process.exit(sub ? 2 : 0)
   }
 }

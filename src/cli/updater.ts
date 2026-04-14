@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync, existsSync, rmSync, realpathSync, mkdirSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { extractZip, extractTarGz } from '../infra/archive/index.js'
 
 const REPO = 'Xeonice/soul-killer'
 const CDN_BASE = 'https://soulkiller-download.ad546971975.workers.dev'
@@ -279,28 +280,59 @@ export function reportReplaceFailure(reason: ReplaceFailure): void {
 
 // ── Main ────────────────────────────────────────────────────────
 
-export async function runUpdate(): Promise<void> {
+export type UpdateProgress =
+  | { phase: 'checking' }
+  | { phase: 'dev-mode' }
+  | { phase: 'up-to-date';        version: string }
+  | { phase: 'new-version';       from: string; to: string }
+  | { phase: 'hash-change';       version: string; local: string; remote: string }
+  | { phase: 'no-asset';          platform: string; available: string[] }
+  | { phase: 'downloading';       assetName: string }
+  | { phase: 'checksum-missing';  assetName: string }
+  | { phase: 'extracting' }
+  | { phase: 'replacing' }
+  | { phase: 'viewer-updated' }
+  | { phase: 'complete';          version: string }
+  | { phase: 'error';             message: string }
+
+export interface RunUpdateOptions {
+  /** When true, suppress console.log/warn/error output. Callers use `onProgress` to observe. */
+  silent?: boolean
+  /** Fired at every phase transition. Always called (regardless of `silent`). */
+  onProgress?: (event: UpdateProgress) => void
+}
+
+export async function runUpdate(opts: RunUpdateOptions = {}): Promise<void> {
+  const { silent = false, onProgress } = opts
+  const log   = (msg: string) => { if (!silent) console.log(msg) }
+  const warn  = (msg: string) => { if (!silent) console.warn(msg) }
+  const errLog = (msg: string) => { if (!silent) console.error(msg) }
+  const emit = (event: UpdateProgress) => { onProgress?.(event) }
+
   const currentVersion = process.env.SOULKILLER_VERSION ?? 'dev'
   const platform = detectPlatform()
 
-  console.log(`  soulkiller ${currentVersion}`)
-  console.log(`  Platform: ${platform}`)
-  console.log()
+  log(`  soulkiller ${currentVersion}`)
+  log(`  Platform: ${platform}`)
+  log('')
 
   if (currentVersion === 'dev') {
-    console.log('  Running in dev mode — update is only available for compiled binaries.')
-    console.log('  Use git pull to update the source.')
+    log('  Running in dev mode — update is only available for compiled binaries.')
+    log('  Use git pull to update the source.')
+    emit({ phase: 'dev-mode' })
     return
   }
 
-  console.log('  Checking for updates...')
+  log('  Checking for updates...')
+  emit({ phase: 'checking' })
 
   let release: GitHubRelease
   try {
     release = await fetchLatestRelease()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`  Failed to check for updates: ${msg}`)
+    errLog(`  Failed to check for updates: ${msg}`)
+    emit({ phase: 'error', message: `Failed to check for updates: ${msg}` })
     process.exitCode = 1
     return
   }
@@ -315,27 +347,32 @@ export async function runUpdate(): Promise<void> {
 
   if (latestVersion !== currentVersion) {
     needsUpdate = true
-    console.log(`  New version available: ${currentVersion} → ${latestVersion}`)
+    log(`  New version available: ${currentVersion} → ${latestVersion}`)
+    emit({ phase: 'new-version', from: currentVersion, to: latestVersion })
   } else if (checksums) {
     const remoteHash = checksums[binaryName]
     if (remoteHash) {
       const localHash = await hashFile(process.execPath)
       if (localHash !== remoteHash) {
         needsUpdate = true
-        console.log(`  Same version (${currentVersion}) but binary updated on remote.`)
-        console.log(`    Local:  ${localHash.slice(0, 16)}...`)
-        console.log(`    Remote: ${remoteHash.slice(0, 16)}...`)
+        log(`  Same version (${currentVersion}) but binary updated on remote.`)
+        log(`    Local:  ${localHash.slice(0, 16)}...`)
+        log(`    Remote: ${remoteHash.slice(0, 16)}...`)
+        emit({ phase: 'hash-change', version: currentVersion, local: localHash, remote: remoteHash })
       } else {
-        console.log(`  Already up to date (${currentVersion}).`)
+        log(`  Already up to date (${currentVersion}).`)
+        emit({ phase: 'up-to-date', version: currentVersion })
         return
       }
     } else {
-      console.log(`  Already up to date (${currentVersion}).`)
+      log(`  Already up to date (${currentVersion}).`)
+      emit({ phase: 'up-to-date', version: currentVersion })
       return
     }
   } else {
     // No checksums available — fallback to version-only check
-    console.log(`  Already up to date (${currentVersion}).`)
+    log(`  Already up to date (${currentVersion}).`)
+    emit({ phase: 'up-to-date', version: currentVersion })
     return
   }
 
@@ -347,13 +384,15 @@ export async function runUpdate(): Promise<void> {
   const asset = release.assets.find(a => a.name === assetName)
 
   if (!asset) {
-    console.error(`  No binary found for ${platform} in release ${release.tag_name}`)
-    console.error(`  Available: ${release.assets.map(a => a.name).join(', ')}`)
+    errLog(`  No binary found for ${platform} in release ${release.tag_name}`)
+    errLog(`  Available: ${release.assets.map(a => a.name).join(', ')}`)
+    emit({ phase: 'no-asset', platform, available: release.assets.map(a => a.name) })
     process.exitCode = 1
     return
   }
 
-  console.log(`  Downloading ${assetName}...`)
+  log(`  Downloading ${assetName}...`)
+  emit({ phase: 'downloading', assetName })
 
   let archiveData: ArrayBuffer
   try {
@@ -364,7 +403,8 @@ export async function runUpdate(): Promise<void> {
     archiveData = await res.arrayBuffer()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`  Download failed: ${msg}`)
+    errLog(`  Download failed: ${msg}`)
+    emit({ phase: 'error', message: `Download failed: ${msg}` })
     process.exitCode = 1
     return
   }
@@ -378,38 +418,34 @@ export async function runUpdate(): Promise<void> {
     if (archiveHash) {
       const localArchiveHash = hashBuffer(archiveData)
       if (localArchiveHash !== archiveHash) {
-        console.error(`  ✗ checksum mismatch for ${assetName} — aborting update.`)
-        console.error(`    Local:  ${localArchiveHash.slice(0, 16)}...`)
-        console.error(`    Remote: ${archiveHash.slice(0, 16)}...`)
+        errLog(`  ✗ checksum mismatch for ${assetName} — aborting update.`)
+        errLog(`    Local:  ${localArchiveHash.slice(0, 16)}...`)
+        errLog(`    Remote: ${archiveHash.slice(0, 16)}...`)
+        emit({ phase: 'error', message: `checksum mismatch for ${assetName}` })
         process.exitCode = 1
         return
       }
     } else {
-      console.warn(`  ⚠ no remote checksum for ${assetName}; skipping integrity check.`)
+      warn(`  ⚠ no remote checksum for ${assetName}; skipping integrity check.`)
+      emit({ phase: 'checksum-missing', assetName })
     }
   }
 
-  // Extract archive to temp directory
+  // Extract archive to temp directory (pure TS — fflate + nanotar, no shell)
   const extractDir = join(tmpdir(), `soulkiller-update-${Date.now()}`)
-  const { execSync } = await import('node:child_process')
+  emit({ phase: 'extracting' })
 
   try {
+    mkdirSync(extractDir, { recursive: true })
     if (isWindows) {
-      const zipPath = extractDir + '.zip'
-      writeFileSync(zipPath, Buffer.from(archiveData))
-      execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}'"`, { stdio: 'pipe' })
-      unlinkSync(zipPath)
+      extractZip(new Uint8Array(archiveData), extractDir)
     } else {
-      const tarPath = extractDir + '.tar.gz'
-      writeFileSync(tarPath, Buffer.from(archiveData))
-      const { mkdirSync } = await import('node:fs')
-      mkdirSync(extractDir, { recursive: true })
-      execSync(`tar -xzf "${tarPath}" -C "${extractDir}"`, { stdio: 'pipe' })
-      unlinkSync(tarPath)
+      extractTarGz(new Uint8Array(archiveData), extractDir)
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`  Extraction failed: ${msg}`)
+    errLog(`  Extraction failed: ${msg}`)
+    emit({ phase: 'error', message: `Extraction failed: ${msg}` })
     process.exitCode = 1
     return
   }
@@ -424,7 +460,8 @@ export async function runUpdate(): Promise<void> {
     const files = readdirSync(extractDir)
     const bin = isWindows ? files.find(f => f.endsWith('.exe')) : files.find(f => f === 'soulkiller')
     if (!bin) {
-      console.error('  No binary found in archive')
+      errLog('  No binary found in archive')
+      emit({ phase: 'error', message: 'No binary found in archive' })
       rmSync(extractDir, { recursive: true, force: true })
       process.exitCode = 1
       return
@@ -432,10 +469,12 @@ export async function runUpdate(): Promise<void> {
     extractedBinary = join(extractDir, bin)
   }
 
+  emit({ phase: 'replacing' })
   // One-call replace — all platform logic lives in atomicReplaceBinary.
   const replaceResult = await atomicReplaceBinary(extractedBinary, process.execPath)
   if (!replaceResult.ok) {
-    reportReplaceFailure(replaceResult.reason)
+    if (!silent) reportReplaceFailure(replaceResult.reason)
+    emit({ phase: 'error', message: replaceResult.reason.message })
     rmSync(extractDir, { recursive: true, force: true })
     process.exitCode = 1
     return
@@ -445,11 +484,13 @@ export async function runUpdate(): Promise<void> {
   const extractedViewer = join(extractDir, 'viewer')
   if (existsSync(extractedViewer)) {
     replaceViewer(extractedViewer, join(homedir(), '.soulkiller', 'viewer'))
-    console.log('  ✓ Viewer files updated')
+    log('  ✓ Viewer files updated')
+    emit({ phase: 'viewer-updated' })
   }
 
   // Cleanup
   rmSync(extractDir, { recursive: true, force: true })
 
-  console.log(`  ✓ Updated to ${latestVersion} — please run \`soulkiller\` again to start the new version.`)
+  log(`  ✓ Updated to ${latestVersion} — please run \`soulkiller\` again to start the new version.`)
+  emit({ phase: 'complete', version: latestVersion })
 }

@@ -1,6 +1,6 @@
 {
   "name": "soulkiller",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Extract your digital soul and create distributable AI avatars",
   "type": "module",
   "main": "dist/index.js",
@@ -40,6 +40,7 @@
     "fflate": "^0.8.2",
     "ink": "^6.8.0",
     "linkedom": "^0.18.12",
+    "nanotar": "^0.3.0",
     "openai": "^6.33.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

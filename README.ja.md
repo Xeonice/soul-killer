@@ -97,6 +97,16 @@ soulkiller 本体は**ローカルランチャー**である — 導入後にタ
 |----------|------|
 | `/export <name>` | 魂 × 世界をプレイ可能なテキストアドベンチャー・ビジュアルノベル Skill アーカイブとして出力 |
 | `/pack <name>` | 魂を `.soul.pack` 携帯アーカイブとしてパッケージ |
+| `/unpack <file>` | `.soul.pack` / `.world.pack` を展開（競合は対話的に解決） |
+
+**設定と配布**
+
+| コマンド | 機能 |
+|----------|------|
+| `/install [<slug>]` | 配布済み skill を多段ウィザードでインストール（skill / ターゲット / スコープ / プレビュー） |
+| `/upgrade` | REPL 内で soulkiller バイナリをダウンロード＋置換（現セッションは旧版のまま、`/exit` 後の再起動で切り替わる） |
+| `/setup` | 初期化ウィザードを再実行（現在の設定を事前入力） |
+| `/config` | 設定項目を個別に変更（API キー / モデル / 言語 / 検索エンジン） |
 | `/help` | 全コマンドリファレンスを表示 |
 
 ### 作者ワークフロー
@@ -152,9 +162,16 @@ soulkiller 本体は**ローカルランチャー**である — 導入後にタ
 ## システム保守
 
 ```bash
-soulkiller --version    # 現行プロトコルバージョンを確認
-soulkiller --update     # 最新版への自己更新を実行
+soulkiller --version                                   # 現在のバージョン
+soulkiller --update                                    # バイナリを自己更新
+soulkiller skill catalog                               # 配布済み skill の一覧
+soulkiller skill install <slug> --to claude-code       # skill をインストール
+soulkiller skill install --all --to claude-code --to codex   # 複数ターゲット
+soulkiller skill list                                  # 全ターゲットでインストール済み skill を一覧
+soulkiller skill upgrade <name>                        # エンジンファイルを更新
 ```
+
+対応ターゲット: `claude-code`, `codex`, `opencode`, `openclaw`。Cursor は skills ディレクトリの概念を持たないため非対応。
 
 ## データ保管
 
