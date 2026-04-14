@@ -65,7 +65,7 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 
 ### Skill 档案 — 直接下载，立刻开玩
 
-`.skill` 是 zip 归档，解压到 Claude Code 或 OpenClaw 的 skills 目录后即可加载游玩。下面用 `fate-zero` 举例，三款 skill 同理（替换文件名即可）。
+`.skill` 是 zip 归档，解压后安装到 Claude Code / OpenClaw 的 skills 目录即可加载游玩。
 
 | 档案 | 世界 | 说明 |
 |------|------|------|
@@ -73,28 +73,48 @@ irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | ie
 | [three-kingdoms.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/three-kingdoms.skill) | 三国 | 乱世争霸，曹操、刘备、诸葛亮等群雄并立 |
 | [white-album-2.skill](https://soulkiller-download.ad546971975.workers.dev/examples/skills/white-album-2.skill) | 白色相簿2 | 冬马和纱、小木曾雪菜的遗憾与救赎 IF 线 |
 
-**Claude Code**
+下面的脚本会：下载 `.skill` 到 `/tmp` → 解压到临时目录 → 把内层顶层目录改名为目标 skill 名移动到 skills 目录。复制整段粘贴即可。
 
-Claude Code 从 git 仓库根目录的 `.claude/skills/` 查找 skill。请在正确位置执行：
+**Claude Code · 全局安装（推荐）**
 
 ```bash
-# 安装到当前项目（在 git 仓库根目录执行）
-mkdir -p .claude/skills/fate-zero && \
-  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
-  unzip -q /tmp/fate-zero.skill -d .claude/skills/fate-zero
+# 一键安装全部三款
+for s in fate-zero three-kingdoms white-album-2; do
+  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
+  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
+  mkdir -p ~/.claude/skills && rm -rf "$HOME/.claude/skills/$s"
+  mv "$t"/*/ "$HOME/.claude/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
+done
+```
 
-# 或安装到全局（所有项目都能用）
-mkdir -p ~/.claude/skills/fate-zero && \
-  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
-  unzip -q /tmp/fate-zero.skill -d ~/.claude/skills/fate-zero
+单独安装任一款（替换 `SKILL` 为 `fate-zero` / `three-kingdoms` / `white-album-2`）：
+
+```bash
+SKILL=fate-zero && curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$SKILL.skill" -o "/tmp/$SKILL.skill" && t=$(mktemp -d) && unzip -q "/tmp/$SKILL.skill" -d "$t" && mkdir -p ~/.claude/skills && rm -rf "$HOME/.claude/skills/$SKILL" && mv "$t"/*/ "$HOME/.claude/skills/$SKILL" && rm -rf "$t" "/tmp/$SKILL.skill"
+```
+
+**Claude Code · 项目级安装**
+
+需在 git 仓库根目录执行，装到 `.claude/skills/`（只对当前项目生效）：
+
+```bash
+for s in fate-zero three-kingdoms white-album-2; do
+  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
+  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
+  mkdir -p .claude/skills && rm -rf ".claude/skills/$s"
+  mv "$t"/*/ ".claude/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
+done
 ```
 
 **OpenClaw**
 
 ```bash
-mkdir -p ~/.openclaw/workspace/skills/fate-zero && \
-  curl -sL https://soulkiller-download.ad546971975.workers.dev/examples/skills/fate-zero.skill -o /tmp/fate-zero.skill && \
-  unzip -q /tmp/fate-zero.skill -d ~/.openclaw/workspace/skills/fate-zero
+for s in fate-zero three-kingdoms white-album-2; do
+  curl -sL "https://soulkiller-download.ad546971975.workers.dev/examples/skills/$s.skill" -o "/tmp/$s.skill"
+  t=$(mktemp -d) && unzip -q "/tmp/$s.skill" -d "$t"
+  mkdir -p ~/.openclaw/workspace/skills && rm -rf "$HOME/.openclaw/workspace/skills/$s"
+  mv "$t"/*/ "$HOME/.openclaw/workspace/skills/$s" && rm -rf "$t" "/tmp/$s.skill"
+done
 ```
 
 > 未安装 soulkiller 会在 Skill 首次加载时自动提示；如已按上一节安装则无需再动。
