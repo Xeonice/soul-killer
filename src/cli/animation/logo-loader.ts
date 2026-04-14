@@ -11,15 +11,14 @@ const FALLBACK_LOGO = [
   '',
 ]
 
-/** Strip ANSI escape sequences to get the visible character width of a string. */
-function visibleWidth(str: string): number {
-  return str.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length
-}
-
 /**
  * Load the ANSI art Arasaka logo.
  * The logo is embedded at compile time via Bun text import — no runtime filesystem access.
  * Falls back to simple text if terminal is too narrow.
+ *
+ * The ANS logo is designed for a 130-column canvas with internal spacing that centers
+ * the graphic within that canvas. Callers should render it in a plain left-aligned
+ * Box of width=contentWidth (no alignItems="center") to preserve the design intent.
  */
 export function loadArasakaLogo(terminalWidth?: number): string[] {
   const width = terminalWidth ?? process.stdout.columns ?? 80
@@ -34,21 +33,4 @@ export function loadArasakaLogo(terminalWidth?: number): string[] {
     lines.pop()
   }
   return lines
-}
-
-/**
- * Load the logo pre-padded for manual horizontal centering within contentWidth.
- *
- * ink's yoga-layout counts raw string .length (including ANSI escape bytes) when
- * computing alignItems="center" margins, which displaces logo lines to the left.
- * This function strips escapes to get the true visible width, then prepends the
- * correct number of spaces so the caller can render with a plain left-aligned Box.
- */
-export function loadArasakaLogoCentered(contentWidth: number): string[] {
-  const lines = loadArasakaLogo(contentWidth)
-  return lines.map(line => {
-    const vw = visibleWidth(line)
-    const pad = Math.max(0, Math.floor((contentWidth - vw) / 2))
-    return ' '.repeat(pad) + line
-  })
 }

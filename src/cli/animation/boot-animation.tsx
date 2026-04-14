@@ -3,7 +3,7 @@ import { Text, Box } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DIM, DARK } from './colors.js'
 import { bootingBar } from './booting-bar.js'
-import { loadArasakaLogoCentered } from './logo-loader.js'
+import { loadArasakaLogo } from './logo-loader.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { CenteredStage, getContentWidth } from './layout.js'
 import { t } from '../../infra/i18n/index.js'
@@ -164,7 +164,7 @@ export function BootAnimation({ onComplete }: BootAnimationProps) {
   void frame
 
   const barWidth = contentWidth
-  const logoLines = loadArasakaLogoCentered(contentWidth)
+  const logoLines = loadArasakaLogo(contentWidth)
 
   // Visible portion of the scroll buffer (last N lines)
   const visibleLines = scrollBuffer.slice(-SCROLL_VISIBLE)

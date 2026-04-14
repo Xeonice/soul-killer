@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Text, Box } from 'ink'
 import { getGlitchEngine } from './glitch-engine.js'
 import { PRIMARY, ACCENT, DARK, DIM } from './colors.js'
-import { loadArasakaLogoCentered } from './logo-loader.js'
+import { loadArasakaLogo } from './logo-loader.js'
 import { LogoAnnihilator } from './logo-annihilator.js'
 import { isAnimationEnabled } from './use-animation.js'
 import { CenteredStage, getContentWidth } from './layout.js'
@@ -47,9 +47,9 @@ export function ExitAnimation({ onComplete }: ExitAnimationProps) {
     const timers: NodeJS.Timeout[] = []
 
     // === Phase 1: Logo appears immediately, annihilates (0-5s) ===
-    // Use pre-padded lines so the logo renders centered without relying on
-    // yoga's alignItems (which miscounts ANSI escape bytes as visible width)
-    const rawLines = loadArasakaLogoCentered(contentWidth)
+    // ANS logo has internal spacing that centers it within contentWidth.
+    // Use raw lines — the plain Box wrapper avoids yoga's ANSI byte miscounting.
+    const rawLines = loadArasakaLogo(contentWidth)
     setLogoLines(rawLines)
     setLogoReady(true)
     annihilatorRef.current = new LogoAnnihilator(rawLines)
