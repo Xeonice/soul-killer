@@ -8,14 +8,16 @@ import {
 describe('lintSkillTemplate — yaml block parsing', () => {
   it('passes a clean SKILL.md with valid yaml example', () => {
     // Realistic skeleton includes the state CLI markers so that the runtime
-    // CLI rules (PHASE_0_DOCTOR_PRESENT / STATE_APPLY_PRESENT) don't fire.
+    // CLI rules (PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT / STATE_APPLY_PRESENT) don't fire.
     const skill = `---
 name: test
 ---
 
 # Phase -1
 
-soulkiller runtime doctor
+Run \`soulkiller runtime scripts\`. If command not found, use AskUserQuestion for install:
+- install.sh for Unix
+- install.ps1 for Windows
 
 # Phase 1
 
@@ -310,23 +312,37 @@ name: test
 
 # Phase -1
 
-soulkiller runtime doctor
+Run \`soulkiller runtime scripts\`. If the shell responds with command not found, use AskUserQuestion to present install instructions:
+- macOS/Linux: curl -fsSL install.sh | sh
+- Windows: irm install.ps1 | iex
 
 # Phase 2
 
 soulkiller runtime apply slot-1 scene-001 choice-1
 `
 
-  describe('PHASE_0_DOCTOR_PRESENT', () => {
-    it('passes when skill references state doctor', () => {
+  describe('PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT', () => {
+    it('passes when Phase -1 has the full install guide anchors', () => {
       const r = lintSkillTemplate(goodSkill)
-      expect(r.errors.filter((e) => e.rule === 'PHASE_0_DOCTOR_PRESENT')).toHaveLength(0)
+      expect(
+        r.errors.filter((e) => e.rule === 'PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT')
+      ).toHaveLength(0)
     })
 
-    it('fails when skill omits state doctor call', () => {
-      const skill = `# Phase -1\n\nsome prose without doctor call\n\n# Phase 2\n\nbash runtime/bin/state apply slot-1 scene-001 choice-1\n`
+    it('fails when skill omits the command-not-found branch', () => {
+      const skill = `# Phase -1\n\nsome prose without any install guide\n\n# Phase 2\n\nsoulkiller runtime apply slot-1 scene-001 choice-1\n`
       const r = lintSkillTemplate(skill)
-      expect(r.errors.some((e) => e.rule === 'PHASE_0_DOCTOR_PRESENT')).toBe(true)
+      expect(
+        r.errors.some((e) => e.rule === 'PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT')
+      ).toBe(true)
+    })
+
+    it('fails when skill only has partial install guide anchors', () => {
+      const skill = `# Phase -1\n\nIf command not found, do something.\n\n# Phase 2\n\nsoulkiller runtime apply slot-1 scene-001 choice-1\n`
+      const r = lintSkillTemplate(skill)
+      expect(
+        r.errors.some((e) => e.rule === 'PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT')
+      ).toBe(true)
     })
   })
 
@@ -337,7 +353,7 @@ soulkiller runtime apply slot-1 scene-001 choice-1
     })
 
     it('fails when skill omits state apply call', () => {
-      const skill = `# Phase -1\n\nbash runtime/bin/state doctor\n\n# Phase 2\n\nsome prose without state apply\n`
+      const skill = `# Phase -1\n\ncommand not found -> AskUserQuestion with install.sh and install.ps1\n\n# Phase 2\n\nsome prose without state apply\n`
       const r = lintSkillTemplate(skill)
       expect(r.errors.some((e) => e.rule === 'STATE_APPLY_PRESENT')).toBe(true)
     })
@@ -401,7 +417,7 @@ soulkiller runtime apply slot-1 scene-001 choice-1
         default_acts: 3,
       })
       const r = lintSkillTemplate(md)
-      expect(r.errors.filter((e) => e.rule === 'PHASE_0_DOCTOR_PRESENT')).toHaveLength(0)
+      expect(r.errors.filter((e) => e.rule === 'PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT')).toHaveLength(0)
       expect(r.errors.filter((e) => e.rule === 'STATE_APPLY_PRESENT')).toHaveLength(0)
       expect(r.errors.filter((e) => e.rule === 'NO_EDIT_STATE_YAML')).toHaveLength(0)
     })

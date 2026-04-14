@@ -300,28 +300,39 @@ function lintFencedBlocksOnly(content: string): LintReport {
 
 /**
  * Verify the skill template consistently routes state management through
- * the `runtime/bin/state` CLI instead of having the LLM do it manually.
+ * the `soulkiller runtime` CLI instead of having the LLM do it manually.
  *
  * Three scan-level rules:
- *   - PHASE_0_DOCTOR_PRESENT  — Phase -1 must call `state doctor`
- *   - STATE_APPLY_PRESENT     — Phase 2 must reference `state apply`
- *   - NO_EDIT_STATE_YAML      — no literal "Edit state.yaml" / "Edit meta.yaml"
- *                               instructions anywhere in the template
+ *   - PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT — Phase -1 must provide a
+ *     command-not-found → AskUserQuestion install guide branch
+ *   - STATE_APPLY_PRESENT — Phase 2 must reference `soulkiller runtime apply`
+ *   - NO_EDIT_STATE_YAML  — no literal "Edit state.yaml" / "Edit meta.yaml"
+ *                           instructions anywhere in the template
  *
  * These are the structural guarantees that make Group 4's SKILL.md rewrite
  * robust to accidental regressions in future template edits.
  */
 function lintRuntimeCliUsage(skillContent: string, report: LintReport): void {
-  // PHASE_0_DOCTOR_PRESENT — the Phase -1 Step 0 health check must exist.
-  // We scan for the literal CLI invocation rather than a prose match so that
-  // prose refactors don't break the rule.
-  const doctorMarker = 'soulkiller runtime doctor'
-  if (!skillContent.includes(doctorMarker)) {
+  // PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT — Phase -1 must surface a
+  // command-not-found → install-guide branch so the LLM knows what to do
+  // when `soulkiller runtime <subcommand>` is unavailable. We require all
+  // four literal anchors to appear anywhere in SKILL.md. Missing any means
+  // the install-recovery branch is incomplete and users without soulkiller
+  // installed would be stuck.
+  const installGuideMarkers = [
+    'command not found',
+    'AskUserQuestion',
+    'install.sh',
+    'install.ps1',
+  ]
+  const missingMarkers = installGuideMarkers.filter((m) => !skillContent.includes(m))
+  if (missingMarkers.length > 0) {
     pushError(report, {
-      rule: 'PHASE_0_DOCTOR_PRESENT',
+      rule: 'PHASE_MINUS_ONE_INSTALL_GUIDE_PRESENT',
       message:
-        'Phase -1 Step 0 Runtime 健康检查缺失 — SKILL.md 必须至少出现一次 ' +
-        `"${doctorMarker}" 调用。未找到意味着 LLM 不会触发安装引导 / 只读降级分支。`,
+        'Phase -1 安装引导分支不完整 — SKILL.md 必须在 Phase -1 里保留完整的 ' +
+        'command-not-found → AskUserQuestion 安装引导（含 macOS/Linux 的 install.sh ' +
+        `和 Windows 的 install.ps1 两条命令）。缺失: ${missingMarkers.join(', ')}`,
     })
   }
 

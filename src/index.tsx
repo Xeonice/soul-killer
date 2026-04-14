@@ -4,6 +4,7 @@ import React from 'react'
 import { App } from './cli/app.js'
 import { runRuntime } from './cli/runtime.js'
 import { runUpdate } from './cli/updater.js'
+import { runDoctor } from './cli/doctor.js'
 import { skillList, skillUpgrade } from './cli/skill-manager.js'
 
 // Pre-ink flag handling — intercept before React renders
@@ -22,6 +23,11 @@ if (args.includes('--update')) {
 
 if (args[0] === 'runtime') {
   const code = await runRuntime(args.slice(1))
+  process.exit(code)
+}
+
+if (args[0] === 'doctor') {
+  const code = await runDoctor(args.slice(1))
   process.exit(code)
 }
 

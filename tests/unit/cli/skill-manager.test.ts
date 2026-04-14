@@ -89,18 +89,20 @@ describe('skill-manager helpers', () => {
     expect(existsSync(join(dir, 'soulkiller.json'))).toBe(false)
   })
 
-  it('identifies modern skill by soulkiller.json', () => {
-    const dir = createMockSkill('modern-skill', { engineVersion: 1 })
+  it('identifies modern skill by soulkiller.json', async () => {
+    const { CURRENT_ENGINE_VERSION } = await import('../../../src/export/spec/skill-template.js')
+    const dir = createMockSkill('modern-skill', { engineVersion: CURRENT_ENGINE_VERSION })
     expect(existsSync(join(dir, 'soulkiller.json'))).toBe(true)
     const meta = JSON.parse(readFileSync(join(dir, 'soulkiller.json'), 'utf8'))
-    expect(meta.engine_version).toBe(1)
+    expect(meta.engine_version).toBe(CURRENT_ENGINE_VERSION)
   })
 
-  it('detects outdated engine version', () => {
+  it('detects outdated engine version', async () => {
+    const { CURRENT_ENGINE_VERSION } = await import('../../../src/export/spec/skill-template.js')
     const dir = createMockSkill('outdated-skill', { engineVersion: 0 })
     const meta = JSON.parse(readFileSync(join(dir, 'soulkiller.json'), 'utf8'))
-    // CURRENT_ENGINE_VERSION is 1, skill has 0 → needs update
-    expect(meta.engine_version).toBeLessThan(1)
+    // Any engine_version < CURRENT_ENGINE_VERSION needs upgrade
+    expect(meta.engine_version).toBeLessThan(CURRENT_ENGINE_VERSION)
   })
 })
 

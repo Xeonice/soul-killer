@@ -127,12 +127,18 @@ export async function runCli(argv: string[]): Promise<number> {
 
   try {
     if (sub === 'doctor') {
-      // Invoked via `soulkiller runtime doctor`. If we land here the
-      // soulkiller binary (with embedded bun) is working — trivially OK.
+      // Compat: old skill archives still invoke `soulkiller runtime doctor`
+      // during Phase -1 Step 0. New SKILL.md templates no longer include that
+      // step, but this branch keeps the historical stdout protocol intact so
+      // older skills' LLM parsers don't trip. stderr carries a deprecation
+      // pointer to the top-level `soulkiller doctor` command.
       process.stdout.write('STATUS: OK\n')
       process.stdout.write(`SOULKILLER_VERSION: ${process.env.SOULKILLER_VERSION ?? 'unknown'}\n`)
       process.stdout.write(`BUN_VERSION: ${process.versions.bun ?? 'unknown'}\n`)
       process.stdout.write(`PLATFORM: ${process.platform}-${process.arch}\n`)
+      process.stderr.write(
+        "DEPRECATED: 'soulkiller runtime doctor' is deprecated; use 'soulkiller doctor' instead\n"
+      )
       return 0
     }
 

@@ -3,8 +3,12 @@ import type { CharacterSpec, ActOption } from './story-spec.js'
 /**
  * Engine template version — bump this when engine.md structure changes
  * so the packager / loader can detect stale archives.
+ *
+ * v2: Phase -1 Step 0 Runtime Health Check removed. soulkiller install
+ * detection now falls out of the first real `soulkiller runtime <xxx>`
+ * call's command-not-found signal. See change consolidate-doctor-to-cli.
  */
-export const CURRENT_ENGINE_VERSION = 1
+export const CURRENT_ENGINE_VERSION = 2
 
 /**
  * `CharacterSpec` extended with the ASCII slug used as the souls/<slug>/
@@ -1184,7 +1188,7 @@ This skill requires the \`soulkiller\` CLI to be installed. Supported platforms:
 - ✅ **Linux** (x86_64 / arm64)
 - ✅ **Windows** (x64)
 
-If \`soulkiller\` is not available, Phase -1 Step 0 will provide installation instructions.
+If \`soulkiller\` is not available, the first \`soulkiller runtime\` call in Phase -1 will trigger the Install Guide branch with installation instructions.
 `
 }
 
@@ -1202,23 +1206,22 @@ function buildPhaseMinusOne(): string {
 
 **Enter this phase first** every time the skill is loaded. This phase determines whether to reuse a previously generated script or generate a new one.
 
-## Step 0: Runtime Health Check (Must Execute First)
+## Step -1.1: List Existing Scripts
 
-**Before any other Phase -1 actions**, run the soulkiller runtime doctor:
+Run the following command and parse the JSON output:
 
 \`\`\`
-soulkiller runtime doctor
+soulkiller runtime scripts
 \`\`\`
 
-This command returns structured stdout, one \`KEY: value\` pair per line. Parse the \`STATUS\` field:
+**Install check**: this is the first \`soulkiller runtime\` call in the flow. If the shell responds with \`command not found\` (or any equivalent "executable not on PATH" error), do NOT retry blindly — jump to the **Install Guide** branch below, then resume here once the user confirms installation. The same rule applies to any later \`soulkiller runtime <subcommand>\` call in this phase.
 
-### STATUS: OK
+- **If \`count\` is 0** -> skip Step -1.2, proceed directly to **Phase 0** (first playthrough, no menu needed)
+- **If \`count\` > 0** -> proceed to Step -1.2, using the \`scripts\` array entries for each script's metadata
 
-Everything is ready. Record \`SOULKILLER_VERSION\` and \`BUN_VERSION\` for debugging, then proceed directly to **Step -1.1**.
+### Install Guide (triggered by command-not-found)
 
-### Command not found (soulkiller is not installed)
-
-Use **AskUserQuestion** to present installation instructions:
+When any \`soulkiller runtime <subcommand>\` call in this phase returns command-not-found, use **AskUserQuestion** to present installation instructions.
 
 **Question body (must contain the following content verbatim)**:
 
@@ -1233,7 +1236,7 @@ After installation, open a new terminal and retry.
 
 **Options (must be these two, in this order)**:
 
-1. **"I've installed it"** — when selected, re-run \`soulkiller runtime doctor\`. If STATUS: OK -> continue. Otherwise show error and offer retry.
+1. **"I've installed it"** — when selected, re-run the triggering \`soulkiller runtime <subcommand>\` call. If it succeeds, continue the flow. Otherwise show error and offer retry.
 2. **"Cancel (enter read-only mode)"** — when selected, enter read-only mode (see below)
 
 ### Read-only mode
@@ -1249,17 +1252,6 @@ Prohibited:
 - Any writes (init / apply / reset / rebuild / save)
 - Entering Phase 1 (new script creation)
 - Entering Phase 2 (scene transitions)
-
-## Step -1.1: List Existing Scripts
-
-Run the following command and parse the JSON output:
-
-\`\`\`
-soulkiller runtime scripts
-\`\`\`
-
-- **If \`count\` is 0** -> skip Step -1.2, proceed directly to **Phase 0** (first playthrough, no menu needed)
-- **If \`count\` > 0** -> proceed to Step -1.2, using the \`scripts\` array entries for each script's metadata
 
 ## Step -1.2: Parse Each Script's Header Fields
 

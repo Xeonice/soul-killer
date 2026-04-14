@@ -185,7 +185,7 @@ export async function skillUpgrade(target?: string): Promise<number> {
   return failed > 0 ? 1 : 0
 }
 
-function upgradeEngine(skillDir: string): void {
+export function upgradeEngine(skillDir: string): void {
   const enginePath = join(skillDir, 'runtime', 'engine.md')
   const engineContent = getCurrentEngineTemplate()
   if (!engineContent) throw new Error('Engine template not available')

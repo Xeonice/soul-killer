@@ -89,12 +89,26 @@ describe('runCli — CLI dispatcher', () => {
     })
   })
 
-  describe('doctor (trivial case when bun is already running)', () => {
-    it('returns STATUS: OK + BUN_VERSION', async () => {
+  describe('doctor (legacy compat — deprecated)', () => {
+    it('returns STATUS: OK + BUN_VERSION on stdout (protocol unchanged)', async () => {
       const code = await runCli(['doctor'])
       expect(code).toBe(0)
       expect(stdoutBuf).toContain('STATUS: OK')
       expect(stdoutBuf).toMatch(/BUN_VERSION: /)
+    })
+
+    it('emits deprecation notice on stderr pointing to `soulkiller doctor`', async () => {
+      await runCli(['doctor'])
+      expect(stderrBuf).toContain('DEPRECATED')
+      expect(stderrBuf).toContain('soulkiller doctor')
+    })
+
+    it('deprecation notice must not contaminate stdout KEY: value protocol', async () => {
+      await runCli(['doctor'])
+      for (const line of stdoutBuf.split('\n')) {
+        if (line === '') continue
+        expect(line).toMatch(/^[A-Z][A-Z0-9_]*: .+$/)
+      }
     })
   })
 
