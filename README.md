@@ -25,6 +25,40 @@
 >
 > **怎么玩？** 导出的 `.skill` 文件可以在任何支持 Skill 协议的应用中直接运行——比如 [Claude](https://claude.ai) 或 [OpenClaw](https://github.com/nicepkg/openclaw)。导入后作为 Skill 加载，即可开始游玩。每个剧本支持存档，同一个故事可以生成多个不同剧本，随时查看当前剧本的选择分支线。接收方在首次游玩前也需要安装 soulkiller CLI——Skill 首次加载时会自动检测并提示安装。也特别适合开发者在 Claude Code 终端里加载——在老板眼皮底下，你只是在"调试 AI Skill"而已。
 
+## 前置准备
+
+SOULKILLER 需要以下 API 密钥才能运行。请在安装前完成注册：
+
+| 服务 | 用途 | 是否必须 | 获取地址 |
+|------|------|:--------:|----------|
+| [OpenRouter](https://openrouter.ai/keys) | LLM 推理（角色蒸馏、世界构建、剧本生成） | **必须** | https://openrouter.ai/keys |
+| [Tavily](https://app.tavily.com/home) | Web 搜索（采集数字足迹） | 二选一 | https://app.tavily.com/home |
+| [Exa](https://dashboard.exa.ai/api-keys) | Web 搜索（替代 Tavily） | 二选一 | https://dashboard.exa.ai/api-keys |
+
+> **说明：** 搜索服务在 Tavily 和 Exa 中选一个即可。首次启动时配置向导会引导你逐步填入这些密钥。
+
+## 安装
+
+支持 macOS、Linux 和 Windows。二进制通过 Cloudflare CDN 全球加速分发。
+
+```bash
+curl -fsSL https://soulkiller-download.ad546971975.workers.dev/scripts/install.sh | sh
+```
+
+Windows 环境使用 PowerShell：
+
+```powershell
+irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | iex
+```
+
+安装完成后，按终端提示复制执行 PATH 命令即可立即使用，或打开新的终端窗口，执行 `soulkiller` 启动。
+
+> **为什么先装 soulkiller？** 下面的预制档案库（Skill/Soul/World）都依赖 soulkiller 二进制作为运行时：
+> - `.skill` 档案在 Claude Code / OpenClaw 中游玩时，由 soulkiller 执行状态管理、存档读档、分支树可视化等逻辑
+> - `.soul.pack` / `.world.pack` 档案通过 REPL 里的 `/unpack` 指令导入
+>
+> 所以请先完成安装，再继续下一节。
+
 ## 预制档案库
 
 不想从零开始？以下预制档案托管于 Cloudflare R2，覆盖 Fate/Zero、三国、白色相簿2 和赛博朋克 2077 四个宇宙。
@@ -63,11 +97,11 @@ mkdir -p ~/.openclaw/workspace/skills/fate-zero && \
   unzip -q /tmp/fate-zero.skill -d ~/.openclaw/workspace/skills/fate-zero
 ```
 
-> 首次游玩需要安装 soulkiller CLI（Skill 加载时会自动检测并提示）。
+> 未安装 soulkiller 会在 Skill 首次加载时自动提示；如已按上一节安装则无需再动。
 
 ### Soul 档案 — 批量导入所有角色
 
-包含全部 55 个角色（三国、Fate/Zero、Fate/Stay Night、白色相簿2、赛博朋克2077），一次导入即可全部到位。
+包含全部 55 个角色（三国、Fate/Zero、Fate/Stay Night、白色相簿2、赛博朋克2077），一次导入即可全部到位。在 soulkiller REPL 里执行：
 
 ```bash
 # 一次性安装全部角色（默认跳过本地已有）
@@ -82,7 +116,7 @@ mkdir -p ~/.openclaw/workspace/skills/fate-zero && \
 
 ### World 档案 — 批量导入所有世界
 
-包含全部 6 个世界观，安装后可用 `/create` 创建自己的角色并绑定到任意世界。
+包含全部 6 个世界观，安装后可用 `/create` 创建自己的角色并绑定到任意世界。同样在 soulkiller REPL 里执行：
 
 ```bash
 # 安装全部世界
@@ -93,36 +127,6 @@ mkdir -p ~/.openclaw/workspace/skills/fate-zero && \
 /world bind 三国
 /export 貂蝉
 ```
-
----
-
-## 前置准备
-
-SOULKILLER 需要以下 API 密钥才能运行。请在安装前完成注册：
-
-| 服务 | 用途 | 是否必须 | 获取地址 |
-|------|------|:--------:|----------|
-| [OpenRouter](https://openrouter.ai/keys) | LLM 推理（角色蒸馏、世界构建、剧本生成） | **必须** | https://openrouter.ai/keys |
-| [Tavily](https://app.tavily.com/home) | Web 搜索（采集数字足迹） | 二选一 | https://app.tavily.com/home |
-| [Exa](https://dashboard.exa.ai/api-keys) | Web 搜索（替代 Tavily） | 二选一 | https://dashboard.exa.ai/api-keys |
-
-> **说明：** 搜索服务在 Tavily 和 Exa 中选一个即可。首次启动时配置向导会引导你逐步填入这些密钥。
-
-## 安装
-
-支持 macOS、Linux 和 Windows。二进制通过 Cloudflare CDN 全球加速分发。
-
-```bash
-curl -fsSL https://soulkiller-download.ad546971975.workers.dev/scripts/install.sh | sh
-```
-
-Windows 环境使用 PowerShell：
-
-```powershell
-irm https://soulkiller-download.ad546971975.workers.dev/scripts/install.ps1 | iex
-```
-
-安装完成后，按终端提示复制执行 PATH 命令即可立即使用，或打开新的终端窗口，执行 `soulkiller` 启动。
 
 ## 30 秒速览
 
