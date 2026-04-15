@@ -43,10 +43,10 @@ if (!arg) {
   process.exit(2)
 }
 
-// 1. Clean working tree
-const status = sh('git status --porcelain')
+// 1. Clean working tree — only tracked files; untracked local artifacts ignored.
+const status = sh('git status --porcelain -uno')
 if (status.length > 0) {
-  console.error('✗ working tree not clean; commit or stash first')
+  console.error('✗ tracked files have uncommitted changes; commit or stash first')
   console.error(status)
   process.exit(1)
 }
