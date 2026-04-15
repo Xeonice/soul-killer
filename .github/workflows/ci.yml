@@ -56,8 +56,8 @@ jobs:
       - name: Check example skills against current engine + deprecated paths
         run: bun scripts/upgrade-example-skills.ts --check
 
-  verify-state-manifest:
-    name: Verify state manifest in sync
+  verify-skill-archive-purity:
+    name: Verify skill archive is pure data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,21 +65,12 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - name: Regenerate manifest
-        run: bun scripts/gen-state-manifest.ts
-      - name: Fail if committed manifest drifted from state/
-        shell: bash
-        run: |
-          if ! git diff --exit-code src/export/state/manifest.ts; then
-            echo "::error::src/export/state/manifest.ts is out of sync."
-            echo "  Fix: run 'bun scripts/gen-state-manifest.ts' and commit the result."
-            exit 1
-          fi
+      - name: Scan packaged archive for any forbidden runtime code
+        run: bun scripts/ci/verify-skill-archive-purity.ts
 
   compiled-binary-smoke:
-    name: Compiled binary smoke (runtime manifest embed)
+    name: Compiled binary launches
     runs-on: ubuntu-latest
-    needs: verify-state-manifest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -92,7 +83,7 @@ jobs:
         run: bun scripts/build.ts
       - name: Extract binary from archive
         run: tar -xzf dist/soulkiller-linux-x64.tar.gz -C dist/
-      - name: Binary launches
+      - name: Binary version
         run: ./dist/soulkiller --version
-      - name: Runtime manifest embedded
-        run: bun scripts/ci/compiled-export-smoke.ts
+      - name: Binary runtime help
+        run: ./dist/soulkiller runtime --help

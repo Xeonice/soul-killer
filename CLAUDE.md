@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Soulkiller is a Cyberpunk 2077-themed CLI REPL that extracts "souls" from digital footprints (Markdown docs, Twitter archives) and creates distributable AI avatars. Users can create their own soul, distill it into identity/style/behavior files, and others can load and chat with the soul via RAG + LLM.
 
+## Skill / Binary Contract (Invariant)
+
+This is a first-class invariant, not a style preference. Any PR that breaks it is rejected.
+
+**Skill archive = data.** The `.skill` file is a pure data archive. Allowed top-level contents (prefix match):
+
+- `SKILL.md`, `soulkiller.json`, `story-spec.md` (prompts + metadata)
+- `souls/**`, `world/**` (authored content)
+- `runtime/engine.md` (execution-protocol prompt — prose for the LLM, not code)
+- `runtime/scripts/**` (binary-written script JSON + `.gitkeep`)
+- `runtime/saves/**` (binary-written state / meta yaml + `.gitkeep`)
+
+**Skill archive SHALL NOT** contain any `.ts` / `.js` / `.sh` / `.bat` / any executable or modifiable logic. In particular, no `runtime/lib/`, `runtime/bin/`, `src/`, or user-space source.
+
+**Binary = behavior.** `soulkiller` is the sole authority for mutating skill data. All runtime CLI code (`src/export/state/*.ts`) is bundled into the binary at build time — never shipped inside an archive. SKILL.md / engine.md instruct the LLM to call `soulkiller <subcommand>`; the LLM never loads code from the skill directory.
+
+**Communication is one-way via CLI.** Skill prompts direct the LLM to invoke `soulkiller runtime <sub>` for mutations. The binary reads the skill directory (data), writes only to `runtime/scripts/` and `runtime/saves/`. LLM reads data via host Read tool; writes go through semantic commands (`init` / `apply` / `reset` / `rebuild` / `save` / `load` / `script *`), never via Edit/Write of `state.yaml` / `meta.yaml`.
+
+**Violations are caught by:**
+- Unit test: `tests/unit/export/packager-contract.test.ts` asserts archive whitelist
+- CI job: `verify-skill-archive-purity` in `.github/workflows/ci.yml`
+- Prompt-level: SKILL.md contains explicit `Never use Edit/Write to directly modify state.yaml` directives
+- Template lint: `NO_INTERNAL_RUNTIME_EXEC` rule rejects `bash runtime/` / `bun runtime/` / `node runtime/` in generated SKILL.md / engine.md
+
+See `openspec/changes/archive/*-skill-binary-contract/` for the historical rationale.
+
 ## Commands
 
 ```bash
@@ -154,7 +180,6 @@ src/cli/app.tsx        → Main state machine (boot → setup → idle → comma
 - **Install**: `scripts/install.sh` (macOS/Linux) and `scripts/install.ps1` (Windows). Detect platform, download binary from GitHub Release, install to `~/.soulkiller/bin/`, configure PATH.
 - **Self-update**: `soulkiller --update` queries GitHub API for latest release, verifies the downloaded archive against `checksums.txt`, and delegates replacement to `atomicReplaceBinary(src, dst)` in `src/cli/updater.ts`. Platform logic is unified inside that primitive: Unix uses `rename` (with `EXDEV` fallback to read+write); Windows uses the rename-self trick (rename running exe to `<exe>.old`, write new binary at original path), the same pattern Deno's `deno upgrade` uses. Failures are reported via typed `ReplaceFailure` codes (`LOCKED` / `PERMISSION` / `DISK_FULL` / `UNKNOWN`). On Windows, `<exe>.old` lingers briefly and is cleaned on the next cold start via `cleanupStaleOld()` in `src/index.tsx`.
 - **Version**: Injected at build time via `process.env.SOULKILLER_VERSION`. `soulkiller --version` prints it. Dev mode falls back to `dev`.
-- **Runtime asset bundling** (runtime-manifest-bundling change): any file that `packager.ts` needs to inject into an exported archive MUST be reachable by Bun's static bundler — either explicitly imported, or inlined through `src/export/state/manifest.ts` (auto-generated from `src/export/state/*.ts` via `scripts/gen-state-manifest.ts`). **Never** use runtime `fs.readdir(dirname(import.meta.url) + '...')` to enumerate bundled resources; it works in dev but breaks in compiled binaries (`/$bunfs/root/...` ENOENT). CI job `verify-state-manifest` catches manifest drift; `compiled-binary-smoke` catches broken bundler visibility end-to-end.
 - **Example skill freshness**: `examples/skills/*.skill` are checked-in build artifacts. `scripts/upgrade-example-skills.ts` has two modes: default upgrades in place (bump engine.md + soulkiller.json + strip `DEPRECATED_PATHS` like pre-skill-runtime-binary `runtime/bin/`), `--check` is dry-run for CI. The `verify-examples` job in `.github/workflows/ci.yml` runs `--check` on every PR and blocks merges if any archive is outdated. To retire a path from all shipped skills, append it to the `DEPRECATED_PATHS` list in the script.
 
 ## Testing

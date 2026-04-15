@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { zipSync, strToU8 } from 'fflate'
-import { RUNTIME_FILES } from './state/manifest.js'
 import { readManifest, readSoulFiles } from '../soul/package.js'
 import { loadWorld, getWorldDir } from '../world/manifest.js'
 import { generateSkillMd, generateEngineTemplate, CURRENT_ENGINE_VERSION } from './spec/skill-template.js'
@@ -312,12 +311,11 @@ export function packageSkill(config: PackageConfig): PackageResult {
   unprefixedFiles['runtime/scripts/.gitkeep'] = strToU8('')
   unprefixedFiles['runtime/saves/.gitkeep'] = strToU8('')
 
-  // 5.5 Runtime code — inject bun .ts libs from src/export/state/.
-  //     These are the same files Soulkiller's vitest suite exercises,
-  //     copied byte-for-byte into the archive. Shell wrappers are no
-  //     longer needed — the soulkiller binary itself serves as the
-  //     cross-platform runtime entry point via `soulkiller runtime`.
-  injectRuntimeFiles(unprefixedFiles)
+  // NOTE: No runtime code is injected into the archive (skill-binary-contract).
+  //       Skill is data, binary is behavior. `soulkiller runtime <sub>` uses
+  //       the binary's own bundled state CLI; archive must not contain any
+  //       .ts / .js / .sh executable source. CI job verify-skill-archive-purity
+  //       + unit test packager-contract.test.ts enforce this.
 
   // ── Apply top-level directory prefix ─────────────────────────────
   //
@@ -431,6 +429,45 @@ export function buildSoulkillerManifest(input: {
   return JSON.stringify(body, null, 2) + '\n'
 }
 
+/**
+ * Skill archive whitelist (skill-binary-contract invariant).
+ *
+ * Allowed entry patterns (prefix matching for directories, exact for files):
+ *   - SKILL.md, soulkiller.json, story-spec.md
+ *   - souls/** / world/**
+ *   - runtime/engine.md (prompt text, not code)
+ *   - runtime/scripts/** + runtime/saves/** (binary-written data)
+ *
+ * See CLAUDE.md "Skill / Binary Contract (Invariant)".
+ */
+export interface ContractViolation {
+  path: string
+  reason: string
+}
+
+const ALLOWED_FILES = new Set(['SKILL.md', 'soulkiller.json', 'story-spec.md', 'runtime/engine.md'])
+const ALLOWED_PREFIXES = ['souls/', 'world/', 'runtime/scripts/', 'runtime/saves/', 'runtime/tree/']
+const FORBIDDEN_EXTENSIONS = ['.ts', '.js', '.mjs', '.cjs', '.sh', '.bat', '.ps1', '.py', '.rb']
+
+export function checkArchiveContract(
+  files: Record<string, Uint8Array> | string[],
+): ContractViolation[] {
+  const paths = Array.isArray(files) ? files : Object.keys(files)
+  const violations: ContractViolation[] = []
+  for (const p of paths) {
+    if (ALLOWED_FILES.has(p)) continue
+    if (ALLOWED_PREFIXES.some((pre) => p.startsWith(pre))) {
+      // Even under allowed prefixes, forbid executable extensions
+      if (FORBIDDEN_EXTENSIONS.some((ext) => p.endsWith(ext))) {
+        violations.push({ path: p, reason: `executable extension inside allowed dir (${p})` })
+      }
+      continue
+    }
+    violations.push({ path: p, reason: `path "${p}" is not in Skill/Binary contract whitelist` })
+  }
+  return violations
+}
+
 export function countMdFilesInMap(files: Record<string, Uint8Array>): number {
   let count = 0
   for (const key of Object.keys(files)) {
@@ -463,36 +500,3 @@ export function estimateMdTextSizeKb(files: Record<string, Uint8Array>): number 
   return Math.max(1, Math.round(totalBytes / 1024))
 }
 
-/**
- * Inject skill runtime TypeScript files into the in-memory archive map.
- *
- * The list comes from `src/export/state/manifest.ts` — a generated file
- * that uses `with { type: 'text' }` imports so Bun's bundler can statically
- * embed every state/*.ts into the compiled binary. Previously this
- * function used `fs.readdirSync(path.join(dirname(import.meta.url), 'state'))`,
- * which worked in dev but broke in the compiled binary because
- * `/$bunfs/root/state` doesn't exist — bundler couldn't see the runtime
- * fs call and left the state files out of the bundle.
- *
- * File placement inside the archive:
- *   src/export/state/*.ts → runtime/lib/<name>.ts
- *
- * Shell wrappers (state.sh, doctor.sh) are no longer shipped — the
- * soulkiller binary itself serves as the cross-platform runtime entry
- * point via `soulkiller runtime <subcommand>`.
- *
- * Exported for tests.
- */
-export function injectRuntimeFiles(files: Record<string, Uint8Array>): void {
-  const entries = Object.entries(RUNTIME_FILES)
-  if (entries.length === 0) {
-    throw new Error(
-      'injectRuntimeFiles: RUNTIME_FILES manifest is empty — ' +
-        "run 'bun scripts/gen-state-manifest.ts' to regenerate src/export/state/manifest.ts",
-    )
-  }
-  const encoder = new TextEncoder()
-  for (const [name, content] of entries) {
-    files[`runtime/lib/${name}`] = encoder.encode(content)
-  }
-}

@@ -38,7 +38,31 @@ export interface SaveError {
   message: string
 }
 
+export interface SaveDeleteResult {
+  ok: true
+  op: 'delete'
+  scriptId: string
+  timestamp: string
+}
+
 export type SaveOutcome = SaveResult | SaveLimitError | SaveError
+
+export function runSaveDelete(
+  skillRoot: string,
+  scriptId: string,
+  timestamp: string,
+): SaveDeleteResult | SaveError {
+  const dir = join(skillRoot, 'runtime', 'saves', scriptId, 'manual', timestamp)
+  if (!existsSync(dir)) {
+    return {
+      ok: false,
+      code: 'MANUAL_NOT_FOUND',
+      message: `manual save "${timestamp}" not found for script "${scriptId}"`,
+    }
+  }
+  rmSync(dir, { recursive: true, force: true })
+  return { ok: true, op: 'delete', scriptId, timestamp }
+}
 
 export function runSave(
   skillRoot: string,

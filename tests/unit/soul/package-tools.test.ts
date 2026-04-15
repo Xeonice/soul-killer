@@ -258,19 +258,10 @@ mode: always
     // Runtime placeholder dirs ship empty so the skill can write scripts/saves at runtime
     expect(entries).toContain(`${prefix}runtime/scripts/.gitkeep`)
     expect(entries).toContain(`${prefix}runtime/saves/.gitkeep`)
-    // Runtime state command implementation — bun .ts files (no node_modules)
-    // Shell wrappers (state, doctor.sh) are no longer shipped;
-    // soulkiller binary serves as the cross-platform entry point.
-    expect(entries).toContain(`${prefix}runtime/lib/main.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/apply.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/init.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/validate.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/rebuild.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/reset.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/schema.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/script.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/mini-yaml.ts`)
-    expect(entries).toContain(`${prefix}runtime/lib/io.ts`)
+    // skill-binary-contract: NO runtime/lib/*.ts inside archive — binary owns runtime code
+    for (const entry of entries) {
+      expect(entry.startsWith(`${prefix}runtime/lib/`)).toBe(false)
+    }
     // file_count matches actual archive contents
     expect(result.file_count).toBe(entries.length)
 

@@ -17,6 +17,7 @@ import {
   renameSync,
   unlinkSync,
   rmSync,
+  statSync,
 } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { loadStateSchema, type StateSchema } from './schema.js'
@@ -661,4 +662,45 @@ export function runScriptBuild(skillRoot: string, scriptId: string): BuildResult
   rmSync(bd, { recursive: true, force: true })
 
   return { ok: true, scriptId, scenes: Object.keys(scenes).length, endings: endings.length, sizeBytes: json.length }
+}
+
+// ── runScriptClean ───────────────────────────────────────────────
+
+export interface CleanResult {
+  ok: true
+  scriptId: string
+  draftsRemoved: number
+  scriptPreserved: string | null
+}
+
+/**
+ * Wipe the `.build-<scriptId>/` directory (plan.json + drafts + scenes/
+ * endings/). Preserves `runtime/scripts/script-<scriptId>.json` (the final
+ * merged product, if any). Idempotent — safe to run when nothing is there.
+ *
+ * Motivation: when a Phase 1 generation is abandoned mid-flight (for example
+ * after several plan iterations), `.build-<id>/` accumulates stale drafts.
+ * Successful `runScriptBuild` already removes it; this exposes the cleanup
+ * as an explicit command.
+ */
+export function runScriptClean(skillRoot: string, scriptId: string): CleanResult {
+  const bd = buildDir(skillRoot, scriptId)
+  let draftsRemoved = 0
+  if (existsSync(bd)) {
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const abs = join(dir, entry)
+        const s = statSync(abs)
+        if (s.isDirectory()) walk(abs)
+        else draftsRemoved++
+      }
+    }
+    walk(bd)
+    rmSync(bd, { recursive: true, force: true })
+  }
+
+  const finalPath = join(skillRoot, 'runtime', 'scripts', `script-${scriptId}.json`)
+  const scriptPreserved = existsSync(finalPath) ? finalPath : null
+
+  return { ok: true, scriptId, draftsRemoved, scriptPreserved }
 }

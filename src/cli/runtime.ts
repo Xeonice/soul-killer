@@ -23,6 +23,13 @@ export async function runRuntime(args: string[]): Promise<number> {
   }
   skillRoot ??= process.env.CLAUDE_SKILL_DIR
 
+  // --help / -h doesn't need a skill root — short-circuit so users can
+  // discover available subcommands without setting CLAUDE_SKILL_DIR.
+  const sub = filteredArgs[0]
+  if (sub === undefined || sub === '--help' || sub === '-h') {
+    return runCli(filteredArgs)
+  }
+
   if (!skillRoot) {
     process.stderr.write(
       'error: CLAUDE_SKILL_DIR not set (pass --root <path> for manual use)\n',

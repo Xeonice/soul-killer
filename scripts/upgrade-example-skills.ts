@@ -35,13 +35,26 @@ const SKILLS_DIR = resolve(import.meta.dir, '..', 'examples', 'skills')
 const DEPRECATED_PATHS: string[] = [
   'runtime/bin/state',
   'runtime/bin/doctor.sh',
-  'runtime/bin/', // strip the parent dir + any other contents
+  'runtime/bin/',  // strip the parent dir + any other contents
+  // skill-binary-contract: runtime code is never shipped inside archives;
+  // binary is the sole authority. Everything under runtime/lib/ is dead
+  // weight that the binary never reads.
+  'runtime/lib/',
+  // macOS Finder metadata that sneaks in from dev machines
+  '.DS_Store',
 ]
 
 function isDeprecated(relPath: string): boolean {
+  const basename = relPath.slice(relPath.lastIndexOf('/') + 1)
   for (const p of DEPRECATED_PATHS) {
-    if (p.endsWith('/') ? relPath === p.slice(0, -1) || relPath.startsWith(p) : relPath === p) {
-      return true
+    if (p.endsWith('/')) {
+      if (relPath === p.slice(0, -1) || relPath.startsWith(p)) return true
+    } else if (p.startsWith('/') || p.includes('/')) {
+      // path-anchored rule
+      if (relPath === p) return true
+    } else {
+      // basename rule (matches at any depth, e.g. .DS_Store)
+      if (basename === p) return true
     }
   }
   return false

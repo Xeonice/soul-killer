@@ -27,21 +27,50 @@ if (args.includes('--update')) {
   process.exit(0)
 }
 
-if (args[0] === '__runtime-manifest-check') {
-  // Hidden CI smoke-test subcommand — verifies RUNTIME_FILES is embedded in
-  // the compiled binary. If bun's bundler missed the state/*.ts imports
-  // (historical regression in compiled mode) this outputs 0 keys and exits
-  // non-zero. See runtime-manifest-bundling change.
-  const { RUNTIME_FILES } = await import('./export/state/manifest.js')
-  const keys = Object.keys(RUNTIME_FILES).sort()
-  const miniYaml = RUNTIME_FILES['mini-yaml.ts'] ?? ''
-  console.log(JSON.stringify({
-    count: keys.length,
-    keys,
-    miniYamlLen: miniYaml.length,
-    miniYamlFirstLine: miniYaml.split('\n')[0] ?? '',
-  }, null, 2))
-  process.exit(keys.length === 0 || miniYaml.length === 0 ? 1 : 0)
+if (args[0] === '__pack-fixture') {
+  // Hidden smoke command for skill-binary-contract verification:
+  //   soulkiller __pack-fixture <story-name> <soul-name> <world-name> <out-dir>
+  // Drives packageSkill directly from the compiled binary so we can audit
+  // the resulting .skill against the contract whitelist. NOT user-facing.
+  const [, story, soul, world, outDir] = args
+  if (!story || !soul || !world || !outDir) {
+    console.error('usage: soulkiller __pack-fixture <story> <soul> <world> <out-dir>')
+    process.exit(2)
+  }
+  const { packageSkill } = await import('./export/packager.js')
+  // Minimal story_spec — the only contract-relevant axes are file presence,
+  // not narrative content; defaults are fine for a smoke.
+  const result = packageSkill({
+    souls: [soul],
+    world_name: world,
+    story_name: story,
+    output_base_dir: outDir,
+    story_spec: {
+      story_name: story,
+      genre: 'unset',
+      tone: 'unset',
+      constraints: [],
+      acts_options: [{ acts: 3, label_zh: 'short', rounds_total: '24-36', endings_count: 3 }],
+      default_acts: 3,
+      characters: [
+        { name: soul, display_name: soul, role: 'protagonist', axes: [] },
+      ],
+      story_state: { shared_axes_custom: ['trust', 'openness'], flags: [] },
+      prose_style: {
+        target_language: 'zh',
+        voice_anchor: 'smoke-test prose anchor with at least twenty characters',
+        forbidden_patterns: [
+          { id: 'p1', bad: 'a', good: 'b', reason: 'r' },
+          { id: 'p2', bad: 'c', good: 'd', reason: 'r' },
+          { id: 'p3', bad: 'e', good: 'f', reason: 'r' },
+        ],
+        ip_specific: ['rule one for ip', 'rule two for ip', 'rule three for ip'],
+      },
+      author_version: '0.0.0',
+    },
+  })
+  console.log(JSON.stringify({ output_file: result.output_file, file_count: result.file_count }, null, 2))
+  process.exit(0)
 }
 
 if (args[0] === 'runtime') {

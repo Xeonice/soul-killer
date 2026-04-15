@@ -374,6 +374,32 @@ function lintRuntimeCliUsage(skillContent: string, report: LintReport): void {
       })
     }
   }
+
+  // NO_INTERNAL_RUNTIME_EXEC — skill-binary-contract: prompts must NOT instruct
+  // the LLM to bash/bun/node anything inside the skill archive's runtime/.
+  // All execution goes through the soulkiller binary's own CLI.
+  const internalExecPatterns: { pattern: RegExp; snippet: string }[] = [
+    { pattern: /bash\s+\$\{?CLAUDE_SKILL_DIR\}?\/?runtime\//, snippet: 'bash $CLAUDE_SKILL_DIR/runtime/...' },
+    { pattern: /bun\s+\$\{?CLAUDE_SKILL_DIR\}?\/?runtime\//, snippet: 'bun $CLAUDE_SKILL_DIR/runtime/...' },
+    { pattern: /node\s+\$\{?CLAUDE_SKILL_DIR\}?\/?runtime\//, snippet: 'node $CLAUDE_SKILL_DIR/runtime/...' },
+    { pattern: /bash\s+runtime\/(bin|lib)\//, snippet: 'bash runtime/(bin|lib)/...' },
+    { pattern: /bun\s+runtime\/lib\//, snippet: 'bun runtime/lib/...' },
+  ]
+  for (const { pattern, snippet } of internalExecPatterns) {
+    const match = pattern.exec(skillContent)
+    if (match !== null) {
+      const line = skillContent.slice(0, match.index).split('\n').length
+      pushError(report, {
+        rule: 'NO_INTERNAL_RUNTIME_EXEC',
+        message:
+          'Skill / Binary contract violation: SKILL.md / engine.md must not instruct the LLM ' +
+          'to execute code from runtime/. All commands go through `soulkiller <subcommand>`. ' +
+          'See CLAUDE.md "Skill / Binary Contract (Invariant)".',
+        line,
+        snippet,
+      })
+    }
+  }
 }
 
 /**

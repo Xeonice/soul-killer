@@ -17,10 +17,11 @@ import { runValidate } from './validate.js'
 import { runRebuild } from './rebuild.js'
 import { runReset } from './reset.js'
 import { runList } from './list.js'
-import { runSave } from './save.js'
+import { runSave, runSaveDelete } from './save.js'
+import { runLoad, LoadError } from './load.js'
 import { runTree, runTreeStop } from './tree.js'
 import { AVAILABLE_VIEWS, startServer as startViewerServer } from './viewer-server.js'
-import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild } from './script-builder.js'
+import { runScriptPlan, runScriptScene, runScriptEnding, runScriptBuild, runScriptClean } from './script-builder.js'
 import { runRoute } from './route.js'
 import { runScripts } from './scripts.js'
 import type { ChangeEntry } from './schema.js'
@@ -34,6 +35,7 @@ const SUBCOMMANDS = [
   'rebuild',
   'reset',
   'save',
+  'load',
   'list',
   'scripts',
   'viewer',
@@ -60,7 +62,8 @@ function printHelp(): void {
       '  validate <script-id> [<save-type>] [--continue] Return JSON diagnostic (writes nothing)',
       '  rebuild <script-id> [<save-type>]              Repair state.yaml, preserving valid fields',
       '  reset <script-id> [<save-type>]                Wholesale reset to initial_state',
-      '  save <script-id> [--overwrite <timestamp>]     Snapshot auto save to manual/',
+      '  save <script-id> [--overwrite <ts>|--delete <ts>] Snapshot auto save to manual/ (or delete/overwrite)',
+      '  load <script-id> manual:<ts>                   Copy a manual save back to auto (resume timeline)',
       '  list <script-id>                               List all saves for a script (JSON)',
       '  scripts                                        List all generated scripts (JSON)',
       '  viewer <view> <script-id>                      Start viewer server (views: tree)',
@@ -70,6 +73,7 @@ function printHelp(): void {
       '  script scene <id> <scene-id>                   Validate + promote a scene draft',
       '  script ending <id> <ending-id>                 Validate + promote an ending draft',
       '  script build <id>                              Merge plan+scenes+endings into script.json',
+      '  script clean <id>                              Remove draft plan/scene/ending files (keep final script-<id>.json)',
       '  route <script-id> <gate-scene-id>               Evaluate affinity gate routing',
       '',
       'Save types: auto (default), manual:<timestamp>',
@@ -228,14 +232,59 @@ export async function runCli(argv: string[]): Promise<number> {
     if (sub === 'save') {
       const scriptId = argv[1]
       if (scriptId === undefined) {
-        process.stderr.write('usage: state save <script-id> [--overwrite <timestamp>]\n')
+        process.stderr.write('usage: state save <script-id> [--overwrite <ts>|--delete <ts>]\n')
         return 2
       }
       const overwriteIdx = argv.indexOf('--overwrite')
+      const deleteIdx = argv.indexOf('--delete')
+      if (overwriteIdx >= 0 && deleteIdx >= 0) {
+        process.stderr.write('error: --overwrite and --delete are mutually exclusive\n')
+        return 2
+      }
+      if (deleteIdx >= 0) {
+        const ts = argv[deleteIdx + 1]
+        if (!ts) {
+          process.stderr.write('usage: state save <script-id> --delete <timestamp>\n')
+          return 2
+        }
+        const result = runSaveDelete(skillRoot, scriptId, ts)
+        if (!result.ok) {
+          process.stderr.write(`error: ${result.message}\n`)
+          return 1
+        }
+        process.stdout.write(`DELETED\n  script: ${result.scriptId}\n  timestamp: ${result.timestamp}\n`)
+        return 0
+      }
       const overwrite = overwriteIdx >= 0 ? argv[overwriteIdx + 1] : undefined
       const result = runSave(skillRoot, scriptId, overwrite)
       process.stdout.write(JSON.stringify(result, null, 2) + '\n')
       return result.ok ? 0 : 1
+    }
+
+    if (sub === 'load') {
+      const scriptId = argv[1]
+      const saveTypeArg = argv[2]
+      if (!scriptId || !saveTypeArg) {
+        process.stderr.write('usage: state load <script-id> manual:<timestamp>\n')
+        return 2
+      }
+      const saveType = parseSaveType(saveTypeArg)
+      try {
+        const result = runLoad(skillRoot, scriptId, saveType)
+        if (result.autoOverwritten) {
+          process.stderr.write('WARNING: auto save was overwritten with loaded content\n')
+        }
+        process.stdout.write(
+          `LOADED\n  script: ${result.scriptId}\n  source: ${result.source}\n  target: ${result.target}\n  fields: ${result.fieldCount}\n`,
+        )
+        return 0
+      } catch (err) {
+        if (err instanceof LoadError) {
+          process.stderr.write(`error: ${err.message}\n`)
+          return err.code === 'INVALID_SAVE_TYPE' ? 2 : 1
+        }
+        throw err
+      }
     }
 
     if (sub === 'list') {
@@ -410,7 +459,16 @@ export async function runCli(argv: string[]): Promise<number> {
         return 0
       }
 
-      process.stderr.write('usage: state script <plan|scene|ending|build> ...\n')
+      if (subSub === 'clean') {
+        if (!id) { process.stderr.write('usage: state script clean <id>\n'); return 2 }
+        const result = runScriptClean(skillRoot, id)
+        process.stdout.write(
+          `CLEANED\n  script: ${result.scriptId}\n  drafts_removed: ${result.draftsRemoved}\n  script_preserved: ${result.scriptPreserved ?? '(none)'}\n`,
+        )
+        return 0
+      }
+
+      process.stderr.write('usage: state script <plan|scene|ending|build|clean> ...\n')
       return 2
     }
 

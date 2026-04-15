@@ -1351,8 +1351,9 @@ On failure:
 \`\`\`
 
 4. Parse the returned JSON; if \`ok: false\`, handle according to the error code table below
-4. After validation passes: Read \`runtime/scripts/script-<id>.json\` to load the script into context; Read the corresponding save directory's \`state.yaml\` to load state into context
-5. Proceed directly to **Phase 2**, continuing from the \`current_scene\` in state
+5. **If save-type is \`manual:<timestamp>\`**, call \`soulkiller runtime load <script-id> manual:<timestamp>\` to copy that manual save back to \`auto/\`. This is mandatory — without it, all subsequent \`apply\` calls would write to a stale auto save, silently diverging from the timeline the user just loaded. \`auto\` save-type skips this step.
+6. After validation (and load if applicable) passes: Read \`runtime/scripts/script-<id>.json\` to load the script into context; Read \`runtime/saves/<id>/auto/state.yaml\` to load state into context (always read auto — load already mirrored manual to auto)
+7. Proceed directly to **Phase 2**, continuing from the \`current_scene\` in state
 
 ### Start from Beginning
 
