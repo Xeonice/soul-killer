@@ -1,4 +1,5 @@
 import { fetchCatalog, CatalogError } from '../../catalog/client.js'
+import { resolveCatalogUrl } from '../../catalog/url.js'
 import { scanInstalled, type InstalledSkill } from '../scanner.js'
 import { diffAgainstCatalog, type SkillDiff } from '../diff.js'
 import { installOne, type InstallResultItem, summarize } from '../orchestrator.js'
@@ -52,11 +53,10 @@ export async function runUpdate(args: string[]): Promise<number> {
 
   // Catalog is mandatory — update is a catalog-driven operation.
   let catalog: CatalogV1
-  let catalogUrl: string
+  const catalogUrl = resolveCatalogUrl(parsed.catalogUrl)
   try {
     const result = await fetchCatalog(parsed.catalogUrl)
     catalog = result.catalog
-    catalogUrl = parsed.catalogUrl ?? ''
   } catch (err) {
     console.error(`  ✗ ${err instanceof CatalogError ? err.message : String(err)}`)
     return 1
