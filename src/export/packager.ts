@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { zipSync, strToU8 } from 'fflate'
+import { RUNTIME_FILES } from './state/manifest.js'
 import { readManifest, readSoulFiles } from '../soul/package.js'
 import { loadWorld, getWorldDir } from '../world/manifest.js'
 import { generateSkillMd, generateEngineTemplate, CURRENT_ENGINE_VERSION } from './spec/skill-template.js'
@@ -464,10 +464,15 @@ export function estimateMdTextSizeKb(files: Record<string, Uint8Array>): number 
 }
 
 /**
- * Inject skill runtime TypeScript files from `src/export/state/` into the
- * in-memory archive map. These are the same files Soulkiller's vitest
- * suite exercises, copied byte-for-byte so that the consumer-side runtime
- * is guaranteed to match what unit tests cover.
+ * Inject skill runtime TypeScript files into the in-memory archive map.
+ *
+ * The list comes from `src/export/state/manifest.ts` — a generated file
+ * that uses `with { type: 'text' }` imports so Bun's bundler can statically
+ * embed every state/*.ts into the compiled binary. Previously this
+ * function used `fs.readdirSync(path.join(dirname(import.meta.url), 'state'))`,
+ * which worked in dev but broke in the compiled binary because
+ * `/$bunfs/root/state` doesn't exist — bundler couldn't see the runtime
+ * fs call and left the state files out of the bundle.
  *
  * File placement inside the archive:
  *   src/export/state/*.ts → runtime/lib/<name>.ts
@@ -479,24 +484,15 @@ export function estimateMdTextSizeKb(files: Record<string, Uint8Array>): number 
  * Exported for tests.
  */
 export function injectRuntimeFiles(files: Record<string, Uint8Array>): void {
-  const stateSrcDir = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    'state'
-  )
-
-  const tsFiles = fs
-    .readdirSync(stateSrcDir)
-    .filter((f) => f.endsWith('.ts'))
-    .sort()
-  if (tsFiles.length === 0) {
+  const entries = Object.entries(RUNTIME_FILES)
+  if (entries.length === 0) {
     throw new Error(
-      `injectRuntimeFiles: no .ts files found in ${stateSrcDir}. ` +
-        `runtime lib is required for skill functionality.`
+      'injectRuntimeFiles: RUNTIME_FILES manifest is empty — ' +
+        "run 'bun scripts/gen-state-manifest.ts' to regenerate src/export/state/manifest.ts",
     )
   }
-  for (const ts of tsFiles) {
-    files[`runtime/lib/${ts}`] = new Uint8Array(
-      fs.readFileSync(path.join(stateSrcDir, ts))
-    )
+  const encoder = new TextEncoder()
+  for (const [name, content] of entries) {
+    files[`runtime/lib/${name}`] = encoder.encode(content)
   }
 }

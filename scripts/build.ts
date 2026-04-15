@@ -39,6 +39,14 @@ console.log(`\n  Building soulkiller v${version}\n`)
 if (existsSync(DIST)) rmSync(DIST, { recursive: true })
 mkdirSync(DIST, { recursive: true })
 
+// ── Phase 0: Runtime manifest ───────────────────────────────────
+// Ensure src/export/state/manifest.ts is in sync with state/*.ts so the
+// bundler's static imports cover every runtime file. See
+// runtime-manifest-bundling change.
+console.log('  Phase 0: Regenerating state manifest...')
+execSync('bun scripts/gen-state-manifest.ts', { cwd: ROOT, stdio: 'inherit' })
+console.log('  ✓ Manifest in sync\n')
+
 // ── Phase 0: Viewer Build ───────────────────────────────────────
 console.log('  Phase 0: Building viewer...')
 

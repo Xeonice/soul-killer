@@ -1,0 +1,236 @@
+## Context
+
+**失败路径的物理学**
+
+```
+dev（bun src/index.tsx）                release（soulkiller 二进制）
+──────────────────────────             ──────────────────────────────
+真实 FS:                                虚拟 FS (bun --compile):
+  src/export/                              /$bunfs/root/
+    packager.ts                              bundle.js   ← 所有 import
+    state/                                                  都 inline 到这里
+      apply.ts                             （没有 state/ 目录——bundler
+      mini-yaml.ts                           看不见 fs.readdirSync 的
+      ... (19 个 .ts)                        目标路径，所以没打包）
+
+packager.ts:
+  const dir = path.join(dirname(import.meta.url), 'state')
+  //    dev:     <repo>/src/export/state      ← 存在
+  //    binary:  /$bunfs/root/state           ← ENOENT
+
+  fs.readdirSync(dir)  // 直接死
+```
+
+**为什么从没被发现**
+
+| 测试层 | 运行模式 | 能看到这个 bug？ |
+|-------|---------|-----------------|
+| vitest unit | dev | ✗ fs 存在 |
+| vitest component | dev | ✗ fs 存在 |
+| vitest integration | dev | ✗ fs 存在 |
+| bun:test e2e (spawnCli) | dev | ✗ `bun src/index.tsx` 模式 |
+| PTY e2e (TestTerminal) | dev | ✗ 同上 |
+| CI verify-examples | dev | ✗ 走 `bun scripts/...` |
+| 手工装 release binary | **release** | **✓ 这里才炸** |
+
+所以要堵住**整类**"runtime asset missing in compiled binary" bug，光修这一处不够——需要一层 compiled-binary smoke 测试。
+
+**相关代码**
+
+- `src/export/packager.ts:481-501` — 当前的 `injectRuntimeFiles`
+- `src/export/state/*.ts` — 19 个 TypeScript 文件（每次 state CLI 新增 subcommand 会增加）
+- `scripts/build.ts` — `Bun.build` → `bun build --compile` 两阶段
+- `.github/workflows/ci.yml` — 现有 unit / e2e / integration / verify-examples 四个 job
+
+**约束**
+
+- 不能引入 npm 依赖（现役承诺：只用 bun stdlib + fflate）
+- `runtime/lib/<name>.ts` 在归档里必须字节完全一致——既有的 archive consumers（Phase -1 doctor 等）依赖这些文件
+- dev / test workflow 已有的 muscle memory（`bun run test`, `bun run dev`, `bun vitest run`）不能变更，否则团队/贡献者易忘
+
+## Goals / Non-Goals
+
+**Goals**
+
+- Release binary 能成功完成 `/export` 流程（即 compiled 模式下 `injectRuntimeFiles` 不再炸）
+- 加 state/*.ts 时不需要手动维护 manifest
+- 堵住同类 bug：任何 "runtime 需要的资源但 bundler 看不见" 的情况在 CI 被发现
+- Dev 工作流透明——贡献者不用学新命令
+
+**Non-Goals**
+
+- 不改 archive 布局（`runtime/lib/*.ts` 保持现状）
+- 不重构 state CLI 本身的代码
+- 不解决"用户老 skill 里的 runtime/lib 过期"问题（`skill upgrade` 已经覆盖）
+- 不加跨平台 compile matrix 的完整 smoke（只选 1 个 target 代表性验证；5 平台全跑成本高且价值边际递减）
+- 不做 `runtime/lib` 的 tree-shaking / minify（保持 TS 源文件原样——debug + user inspection 友好）
+
+## Decisions
+
+### D1. Manifest 生成策略：committed + pre-build hook
+
+**Choice:** `src/export/state/manifest.ts` 是 committed 文件。`scripts/gen-state-manifest.ts` 扫 `state/` 生成它；`package.json` 的 `dev` / `test` / `build` 等常用 script 前置这一步（`"dev": "bun scripts/gen-state-manifest.ts && bun src/index.tsx"`）。CI 加 `verify-state-manifest` job 强制校验 committed 版本 == 最新生成版本。
+
+**Why:**
+- Committed → bundler 一开始就能静态看到，无需特殊 build order
+- Pre-build hook → 日常开发自愈，忘记手动生成也没事
+- CI parity check → 防止漏同步（有人改 state/ 但没跑脚本就 push）
+
+**Alternatives considered:**
+- **完全手维护 manifest.ts**：19 个 import 行，不复杂，但每次加文件都要跟改——reviewer 负担、易漏。
+- **Build-time 生成到 tmp dir，运行时 import**：dev 不能用（每次 dev 都要跑脚本），工具链复杂。
+- **完全 runtime 生成**（不 committed）：bundler 看不见 → 回到原问题。
+
+### D2. Manifest 文件的格式
+
+**Choice:**
+```ts
+// src/export/state/manifest.ts  (GENERATED — DO NOT EDIT)
+import apply from './apply.ts' with { type: 'text' }
+import applyConsequences from './apply-consequences.ts' with { type: 'text' }
+// ... 按文件名字母序
+
+export const RUNTIME_FILES: Record<string, string> = {
+  'apply.ts': apply,
+  'apply-consequences.ts': applyConsequences,
+  // ...
+}
+```
+
+**Why:**
+- `with { type: 'text' }` 是 Bun 原生支持，不需要 plugin
+- Record 的 key 就是归档里 `runtime/lib/<key>` 的文件名，packager 直接用
+- 字母序排序让 diff 可读 + 可重复
+
+**Alternatives considered:**
+- 用 `with { type: 'file' }` 得到 File 对象：多绕一层，没收益
+- 用 glob import：Bun 不支持 `import.meta.glob`
+- 用 `Bun.embeddedFiles`：只在 compiled 模式有，dev 下返回空数组
+
+### D3. 包含 / 排除规则
+
+**Choice:** 扫 `src/export/state/*.ts`，排除：
+- `manifest.ts` 自己（防止循环）
+- 任何以 `.test.ts` / `.spec.ts` 结尾的文件（不应该出现在 state 目录，但防御性排除）
+- 隐藏文件（`.`开头）
+
+**Why:** 现在 state 目录干净，将来可能放测试 helper——规则显式排除降低踩坑。
+
+### D4. CI compiled-binary smoke 的最小触发面
+
+**Choice:** 新 CI job `compiled-binary-smoke`：
+1. 在 ubuntu 上 `bun scripts/build.ts`（只编 `linux-x64` target，通过 `SOULKILLER_TARGETS` 环境变量限制）
+2. 跑 `./dist/soulkiller-linux-x64 --version`（验证 binary 能起）
+3. 跑 `node scripts/ci/compiled-export-smoke.mjs` —— 一个伪造 soul + world 夹具，调 `injectRuntimeFiles` equivalent，确认 bundled binary 里 state/*.ts 能被访问
+
+**Why:**
+- 5 平台全跑太贵（linux+macOS+windows × arm/x64）；linux-x64 是覆盖率最高的代理
+- `--version` 是基础 health check；真正的新测是第二步
+- 脚本而非完整 e2e：避免搭 MockLLMServer 等重基础设施，只压最直接的 binary → injectRuntimeFiles 路径
+
+**Alternatives considered:**
+- 全平台 smoke：成本线性上升，bug 几乎都跨平台复现
+- 不加 smoke，只靠 parity test：parity 只能防 manifest 过期，防不了"有人改 packager 回到 fs.readdir"
+
+### D5. gen-state-manifest 的稳定性
+
+**Choice:** 脚本输出包含 header 注释：
+```ts
+/**
+ * GENERATED FILE — DO NOT EDIT.
+ * Regenerated by `bun scripts/gen-state-manifest.ts` on every dev / test / build.
+ * Source: src/export/state/*.ts (excluding manifest.ts itself).
+ *
+ * If you see a diff on this file you didn't make, run the generator.
+ */
+```
+
+**Why:**
+- 一眼能看出是生成物
+- diff 不变时脚本不写入（避免 mtime 改动触发无意义 rebuild）—— 用 `readFileSync → compare → conditional writeFileSync`
+
+### D6. CI 的 parity check 语义
+
+**Choice:**
+```yaml
+- name: Verify state manifest is up to date
+  run: |
+    bun scripts/gen-state-manifest.ts
+    git diff --exit-code src/export/state/manifest.ts
+  # 退出码 0 = 无变化（✓）；非 0 = 过期（✗），打印 hint
+```
+
+**Why:** 直接用 `git diff --exit-code` 是最简洁准确的 parity 判定。fail 时 stderr 有 diff，开发者一眼看到差异。
+
+### D7. 替换算法
+
+**Choice:** `injectRuntimeFiles` 简化为：
+```ts
+import { RUNTIME_FILES } from './state/manifest.js'
+
+export function injectRuntimeFiles(files: Record<string, Uint8Array>): void {
+  if (Object.keys(RUNTIME_FILES).length === 0) {
+    throw new Error('RUNTIME_FILES manifest is empty — run `bun scripts/gen-state-manifest.ts`')
+  }
+  for (const [name, content] of Object.entries(RUNTIME_FILES)) {
+    files[`runtime/lib/${name}`] = new TextEncoder().encode(content)
+  }
+}
+```
+
+**Why:** 极简；断言 manifest 非空保留了合理性检查；注入算法跟旧版字节等价。
+
+## Risks / Trade-offs
+
+**[贡献者忘了跑 gen 脚本]**
+→ 多层防御：package.json 前置 hook + CI parity check + manifest 本身 committed 可见。
+
+**[dev 启动多 50ms]**
+→ gen 脚本非常小（读 19 个文件名 + 写 1 个文件），冷启动 < 100ms。接受。
+
+**[CI compiled smoke 延长 pipeline]**
+→ 单 target compile ≈ 30-60s，smoke 自身 5s，合计 <2 分钟 —— 跟现有 e2e job 同量级。接受。
+
+**[Bun `with { type: 'text' }` 兼容性]**
+→ Bun 1.1+ 原生支持；我们 package.json.engines.bun 应显式要求 >= 1.1（已经是了，build.ts 里用的 bun 1.3.11）。
+
+**[manifest 里的 import 数膨胀]**
+→ 目前 19 个 import，将来可能到 30-40 个。Bundler 处理同量级 import 无压力；manifest 文件本身只是 ~60 行。
+
+**[文件名含特殊字符]**
+→ state 目录按约定全是 `kebab-case.ts`，生成器做 snake/camel 转换时遇到边缘情况（比如 `mini-yaml.ts`）需稳妥。决策：把 import 变量名从文件名派生（`mini-yaml.ts` → `miniYaml`）但加 lint —— 如出现新模式，generator 报错而非静默乱转。
+
+## Migration Plan
+
+**阶段 1：生成器 + manifest**
+1. `scripts/gen-state-manifest.ts` 新脚本（~60 行）
+2. 首次运行，产出 `src/export/state/manifest.ts`（committed）
+3. 单测 `tests/unit/export/state/manifest-parity.test.ts` 基于当前 state 目录生成预期，对比 committed 版本
+
+**阶段 2：packager 切换**
+4. `packager.ts` import `RUNTIME_FILES`；重写 `injectRuntimeFiles`
+5. 删除 `fs.readdirSync` / `fileURLToPath(import.meta.url)` 相关代码
+6. `tests/unit/export/packager-runtime.test.ts` 按需调整（断言用 `Object.keys(RUNTIME_FILES)` 而非 `readdirSync`）
+
+**阶段 3：脚本集成**
+7. `package.json`：`dev` / `build` / `test` / `test:integration` / `test:e2e` 脚本前置 `bun scripts/gen-state-manifest.ts &&`
+8. `scripts/build.ts` Phase 0.5 也调一次（double safety）
+
+**阶段 4：CI**
+9. `.github/workflows/ci.yml` 加 `verify-state-manifest` job
+10. 同文件加 `compiled-binary-smoke` job：build linux-x64 → 跑 smoke script
+
+**阶段 5：smoke script**
+11. `scripts/ci/compiled-export-smoke.ts`：模拟最小 export 场景，assert `injectRuntimeFiles` 后 files map 含 19 个 `runtime/lib/*.ts` key
+
+**阶段 6：文档**
+12. `CLAUDE.md` 的 "Export / Skill format" 段落加 1 条 authoring guideline
+13. `scripts/gen-state-manifest.ts` 顶部注释解释背景
+
+**Rollback:** 单 commit 即可 revert。但 revert 后 release binary 又会坏，仅作为紧急回退手段。
+
+## Open Questions
+
+1. **compiled-binary-smoke 在 fork PR 上怎么办？** —— 单 target compile 不需要 secret；可以直接跑。不需要特殊分流。
+2. **smoke 里要不要额外验证 `runtime/lib/mini-yaml.ts` 内容字节等于 dev 模式产物？** —— 可选；MVP 只验 keys 齐全。如果将来改 `with { type: 'text' }` 行为（比如 minify）再加内容比对。
+3. **manifest 里需不需要 `engine_version` 或其他 metadata？** —— 当前不加；manifest 只是文件清单，元数据留给 `soulkiller.json`。

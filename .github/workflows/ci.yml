@@ -55,3 +55,44 @@ jobs:
       - run: bun install
       - name: Check example skills against current engine + deprecated paths
         run: bun scripts/upgrade-example-skills.ts --check
+
+  verify-state-manifest:
+    name: Verify state manifest in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Regenerate manifest
+        run: bun scripts/gen-state-manifest.ts
+      - name: Fail if committed manifest drifted from state/
+        shell: bash
+        run: |
+          if ! git diff --exit-code src/export/state/manifest.ts; then
+            echo "::error::src/export/state/manifest.ts is out of sync."
+            echo "  Fix: run 'bun scripts/gen-state-manifest.ts' and commit the result."
+            exit 1
+          fi
+
+  compiled-binary-smoke:
+    name: Compiled binary smoke (runtime manifest embed)
+    runs-on: ubuntu-latest
+    needs: verify-state-manifest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Build linux-x64 binary
+        env:
+          SOULKILLER_TARGETS: linux-x64
+        run: bun scripts/build.ts
+      - name: Extract binary from archive
+        run: tar -xzf dist/soulkiller-linux-x64.tar.gz -C dist/
+      - name: Binary launches
+        run: ./dist/soulkiller --version
+      - name: Runtime manifest embedded
+        run: bun scripts/ci/compiled-export-smoke.ts

@@ -22,9 +22,10 @@ describe('injectRuntimeFiles', () => {
     expect(files['runtime/bin/state.sh']).toBeUndefined()
 
     // lib/*.ts — must include every .ts present in src/export/state/
+    // (excluding manifest.ts, which is the generated list itself)
     const sourceTs = fs
       .readdirSync(STATE_SRC)
-      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => f.endsWith('.ts') && f !== 'manifest.ts')
       .sort()
     expect(sourceTs.length).toBeGreaterThan(5)
     for (const ts of sourceTs) {
@@ -37,12 +38,9 @@ describe('injectRuntimeFiles', () => {
     const files: Record<string, Uint8Array> = {}
     injectRuntimeFiles(files)
 
-    const sourceMiniYaml = fs.readFileSync(
-      path.join(STATE_SRC, 'mini-yaml.ts')
-    )
-    expect(files['runtime/lib/mini-yaml.ts']).toEqual(
-      new Uint8Array(sourceMiniYaml)
-    )
+    const sourceText = fs.readFileSync(path.join(STATE_SRC, 'mini-yaml.ts'), 'utf8')
+    const injected = new TextDecoder().decode(files['runtime/lib/mini-yaml.ts']!)
+    expect(injected).toBe(sourceText)
   })
 
   it('returns void (no executable paths needed)', () => {

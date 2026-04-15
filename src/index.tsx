@@ -27,6 +27,23 @@ if (args.includes('--update')) {
   process.exit(0)
 }
 
+if (args[0] === '__runtime-manifest-check') {
+  // Hidden CI smoke-test subcommand — verifies RUNTIME_FILES is embedded in
+  // the compiled binary. If bun's bundler missed the state/*.ts imports
+  // (historical regression in compiled mode) this outputs 0 keys and exits
+  // non-zero. See runtime-manifest-bundling change.
+  const { RUNTIME_FILES } = await import('./export/state/manifest.js')
+  const keys = Object.keys(RUNTIME_FILES).sort()
+  const miniYaml = RUNTIME_FILES['mini-yaml.ts'] ?? ''
+  console.log(JSON.stringify({
+    count: keys.length,
+    keys,
+    miniYamlLen: miniYaml.length,
+    miniYamlFirstLine: miniYaml.split('\n')[0] ?? '',
+  }, null, 2))
+  process.exit(keys.length === 0 || miniYaml.length === 0 ? 1 : 0)
+}
+
 if (args[0] === 'runtime') {
   const code = await runRuntime(args.slice(1))
   process.exit(code)
