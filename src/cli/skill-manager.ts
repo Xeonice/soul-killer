@@ -283,14 +283,21 @@ function writeSoulkillerJson(skillDir: string): void {
   const soulkillerVersion = process.env.SOULKILLER_VERSION ?? 'dev'
   const skillId = basename(skillDir)
 
-  const existing = readSoulkillerJson(skillDir) ?? {}
+  const existing = (readSoulkillerJson(skillDir) ?? {}) as Record<string, unknown>
 
-  const json = {
+  // Preserve author-declared version (skill-author-version change); skill
+  // upgrade only touches engine fields, not author's release identity.
+  const authorVersion = typeof existing.version === 'string' && existing.version.length > 0
+    ? existing.version
+    : undefined
+
+  const json: Record<string, unknown> = {
     engine_version: currentEngine,
     soulkiller_version: soulkillerVersion,
-    exported_at: existing.soulkiller_version ? (existing as Record<string, unknown>).exported_at : new Date().toISOString(),
+    exported_at: existing.soulkiller_version ? existing.exported_at : new Date().toISOString(),
     skill_id: skillId,
   }
+  if (authorVersion) json.version = authorVersion
 
   writeFileSync(join(skillDir, 'soulkiller.json'), JSON.stringify(json, null, 2) + '\n', 'utf8')
 }

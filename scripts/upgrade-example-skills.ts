@@ -97,6 +97,7 @@ interface StaleReport {
   engineOutdated: { from: number | null; to: number } | null
   deprecatedPaths: string[]
   missingAuthorVersion: boolean
+  skillMdOutdatedCommands: boolean
 }
 
 /** Recursively list every file path in `dir`, relative to `dir`. */
@@ -118,6 +119,50 @@ function scanDeprecated(wrapperDir: string): string[] {
     if (isDeprecated(rel)) found.push(rel)
   }
   return found
+}
+
+/**
+ * Rewrite legacy command invocations in SKILL.md — the skill-runtime-binary
+ * change replaced `bash ${CLAUDE_SKILL_DIR}/runtime/bin/state <sub>` with
+ * `soulkiller runtime <sub>` (binary embeds bun; no bash wrapper shipped).
+ * Older exported archives still carry the bash-flavored instructions in
+ * SKILL.md even after their runtime/bin/ files got stripped — the LLM then
+ * tries to bash a path that no longer exists and exits 127.
+ *
+ * Textual only: we do not attempt to regenerate SKILL.md from template
+ * because doing so would require the original story-spec + soul + world
+ * source data. Narrative paragraphs around WSL / doctor.sh may remain
+ * slightly stale but are not fatal.
+ *
+ * Returns true when the content was modified.
+ */
+function migrateSkillMdCommands(content: string): { content: string; changed: boolean } {
+  let out = content
+  let changed = false
+
+  // 1. bash ${CLAUDE_SKILL_DIR}/runtime/bin/state <sub> → soulkiller runtime <sub>
+  const stateRe = /bash\s+\$\{CLAUDE_SKILL_DIR\}\/runtime\/bin\/state\b/g
+  if (stateRe.test(out)) {
+    out = out.replace(stateRe, 'soulkiller runtime')
+    changed = true
+  }
+
+  // 2. inline `runtime/bin/doctor.sh` → `soulkiller doctor`
+  const doctorRe = /`?runtime\/bin\/doctor\.sh`?/g
+  if (doctorRe.test(out)) {
+    out = out.replace(doctorRe, '`soulkiller doctor`')
+    changed = true
+  }
+
+  return { content: out, changed }
+}
+
+function scanSkillMdOutdated(wrapperDir: string): boolean {
+  const skillMdPath = join(wrapperDir, 'SKILL.md')
+  if (!existsSync(skillMdPath)) return false
+  const content = readFileSync(skillMdPath, 'utf8')
+  return /bash\s+\$\{CLAUDE_SKILL_DIR\}\/runtime\/bin\/state/.test(content)
+    || /runtime\/bin\/doctor\.sh/.test(content)
 }
 
 function stripDeprecated(wrapperDir: string): string[] {
@@ -163,7 +208,8 @@ async function inspectOne(archivePath: string): Promise<StaleReport> {
         }
       } catch { /* treat as missing */ }
     }
-    return { archive: archivePath, engineOutdated, deprecatedPaths, missingAuthorVersion }
+    const skillMdOutdatedCommands = scanSkillMdOutdated(wrapperDir)
+    return { archive: archivePath, engineOutdated, deprecatedPaths, missingAuthorVersion, skillMdOutdatedCommands }
   } finally {
     rmSync(tmpBase, { recursive: true, force: true })
   }
@@ -200,6 +246,16 @@ async function upgradeOne(archivePath: string): Promise<void> {
       console.log(`  stripped: ${removed.join(', ')}`)
     }
 
+    // Migrate SKILL.md command references (bash bin/state → soulkiller runtime)
+    const skillMdPath = join(wrapperDir, 'SKILL.md')
+    if (existsSync(skillMdPath)) {
+      const { content: migrated, changed } = migrateSkillMdCommands(readFileSync(skillMdPath, 'utf8'))
+      if (changed) {
+        writeFileSync(skillMdPath, migrated)
+        console.log(`  migrated SKILL.md commands: bin/state → soulkiller runtime`)
+      }
+    }
+
     // Back-fill author version (skill-author-version change) for archives
     // exported before the `version` field existed. Deliberately writes "0.0.0"
     // rather than 0.1.0 — it's an unambiguous marker for "no authorial intent
@@ -233,7 +289,12 @@ async function runCheck(): Promise<number> {
   const stale: StaleReport[] = []
   for (const name of skills) {
     const report = await inspectOne(join(SKILLS_DIR, name))
-    if (report.engineOutdated !== null || report.deprecatedPaths.length > 0 || report.missingAuthorVersion) {
+    if (
+      report.engineOutdated !== null
+      || report.deprecatedPaths.length > 0
+      || report.missingAuthorVersion
+      || report.skillMdOutdatedCommands
+    ) {
       stale.push(report)
     }
   }
@@ -256,6 +317,9 @@ async function runCheck(): Promise<number> {
     }
     if (r.missingAuthorVersion) {
       console.error(`      missing author version field (will back-fill 0.0.0)`)
+    }
+    if (r.skillMdOutdatedCommands) {
+      console.error(`      SKILL.md still references bash runtime/bin/state (pre skill-runtime-binary)`)
     }
   }
   console.error('')
