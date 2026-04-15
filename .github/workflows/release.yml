@@ -28,6 +28,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Verify package.json version matches tag
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
+            echo "  fix: run 'bun scripts/release.ts <version>' before tagging"
+            exit 1
+          fi
+          echo "✓ tag $GITHUB_REF_NAME == package.json $PKG_VERSION"
+
       - name: Run tests
         run: bun run test
 
