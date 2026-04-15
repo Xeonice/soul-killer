@@ -282,6 +282,12 @@ soulkiller --update     # 执行自我更新至最新版本
 └── exports/             # 导出的 Skill 档案
 ```
 
+## 🚩 友情链接
+
+感谢 **LinuxDo** 社区的支持！
+
+[![社区](https://img.shields.io/badge/社区-LINUXDO-blue?style=for-the-badge)](https://linux.do)
+
 ## 许可协议
 
 本项目采用 [GPL-3.0](./LICENSE) 开源协议。
