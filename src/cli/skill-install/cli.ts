@@ -2,6 +2,10 @@ import { fetchCatalog, CatalogError } from '../catalog/client.js'
 import { resolveCatalogUrl } from '../catalog/url.js'
 import { installOne, summarize, formatSummaryText, type InstallResultItem } from './orchestrator.js'
 import { parseTargetId, parseScope, isCwdHomeCollision, type TargetId, type Scope } from './targets.js'
+import { runList } from './commands/list.js'
+import { runUpdate } from './commands/update.js'
+import { runUninstall } from './commands/uninstall.js'
+import { runInfo } from './commands/info.js'
 
 interface ParsedArgs {
   sources: string[]
@@ -122,16 +126,47 @@ export async function runInstall(args: string[]): Promise<number> {
   return summary.counts.failed > 0 ? 1 : 0
 }
 
-function printUsage(): void {
+/**
+ * Dispatcher for `soulkiller skill <subcommand>`. Keeps `install` backward
+ * compatible; adds `list` / `update` / `uninstall` / `info`.
+ *
+ * Note: `upgrade` (engine sync) is still routed via src/index.tsx to the
+ * existing skillUpgrade in skill-manager.ts; this dispatcher only owns the
+ * catalog-driven subset.
+ */
+export async function runSkillSubcommand(sub: string, args: string[]): Promise<number> {
+  switch (sub) {
+    case 'install':   return runInstall(args)
+    case 'list':      return runList(args)
+    case 'update':    return runUpdate(args)
+    case 'uninstall': return runUninstall(args)
+    case 'info':      return runInfo(args)
+    default:
+      console.log(`Unknown subcommand: ${sub}`)
+      printUsage()
+      return 2
+  }
+}
+
+export function printUsage(): void {
   console.log('Usage:')
   console.log('  soulkiller skill install <slug|url|path>... [--to <target>]... [--scope global|project] [--overwrite] [--catalog <url>]')
   console.log('  soulkiller skill install --all [--to <target>]... [--overwrite]')
+  console.log('  soulkiller skill list [--updates] [--catalog] [--json] [--scan-dir <path>]')
+  console.log('  soulkiller skill update <slug>... | --all [--check] [--exit-code-if-updates] [--force] [--json]')
+  console.log('  soulkiller skill uninstall <slug> [--to <target>] [--scope …] [--all-targets] [--no-backup] [--json]')
+  console.log('  soulkiller skill info <slug> [--json]')
+  console.log('  soulkiller skill upgrade [--all|name]    # engine sync (local repair, offline)')
   console.log()
   console.log('Targets (multiple --to allowed):')
   console.log('  claude-code   ~/.claude/skills/          (also read by opencode)')
   console.log('  codex         ~/.agents/skills/          (also read by opencode)')
   console.log('  opencode      ~/.config/opencode/skills/ (native)')
   console.log('  openclaw      ~/.openclaw/workspace/skills/')
+  console.log()
+  console.log('update vs upgrade:')
+  console.log('  update   pulls a newer version of the skill itself from the catalog (requires network)')
+  console.log('  upgrade  syncs runtime/engine.md with this binary (local repair, no network)')
   console.log()
   console.log('Cursor is not supported (no skills directory concept).')
 }

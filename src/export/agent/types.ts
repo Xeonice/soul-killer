@@ -150,6 +150,7 @@ export class ExportBuilder {
   private storyState?: StoryState
   private proseStyle?: ProseStyle
   private routeCharacters?: RouteCharacter[]
+  private authorVersion?: string
   private readonly characters: Map<string, CharacterDraft> = new Map()
   private readonly insertionOrder: string[] = []
 
@@ -427,6 +428,18 @@ export class ExportBuilder {
     return this.preSelectedSouls.length
   }
 
+  /**
+   * Set the author-declared skill version (skill-author-version change).
+   * Must be a non-empty string; the wizard guards empty values at the UI layer.
+   * Callable at any point before `build()`.
+   */
+  setAuthorVersion(v: string): void {
+    if (typeof v !== 'string' || v.length === 0) {
+      throw new Error('author_version must be a non-empty string')
+    }
+    this.authorVersion = v
+  }
+
   build(): { souls: string[]; world_name: string; story_spec: StorySpecConfig } {
     if (!this.metadata) throw new Error('Missing set_story_metadata — call it before finalize_export')
     if (!this.storyState) throw new Error('Missing set_story_state — call it before finalize_export')
@@ -483,6 +496,7 @@ export class ExportBuilder {
         story_state: this.storyState,
         prose_style: finalProseStyle,
         route_characters: this.routeCharacters,
+        author_version: this.authorVersion ?? '0.0.0',
       },
     }
   }
@@ -582,6 +596,12 @@ export interface PreSelectedExportData {
   outputBaseDir: string
   /** Target language for exported skill content (zh/en/ja). Defaults to config.language. */
   exportLanguage: 'zh' | 'en' | 'ja'
+  /**
+   * Author-declared skill version (skill-author-version change) — the string
+   * the author typed into the wizard's version step. Written into the
+   * archive's `soulkiller.json.version` field.
+   */
+  authorVersion: string
 }
 
 /**

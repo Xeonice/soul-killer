@@ -77,6 +77,10 @@ export async function runExportAgent(
   // ─── Phase 3: Execution (3 independent sub-phases) ──────────────────
 
   const builder = new ExportBuilder(preSelected.souls, preSelected.worldName)
+  // Lock in the author-declared skill version so packager writes it to
+  // soulkiller.json. The wizard guarantees preSelected.authorVersion is
+  // non-empty at submit time.
+  builder.setAuthorVersion(preSelected.authorVersion)
 
   onProgress({ type: 'phase', phase: 'analyzing' })
 

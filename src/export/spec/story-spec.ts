@@ -205,6 +205,17 @@ export interface StorySpecConfig {
    * Optional: stories without routes are still valid linear narratives.
    */
   route_characters?: RouteCharacter[]
+  /**
+   * Author-declared skill version (skill-author-version change). Written
+   * into the archive's `soulkiller.json.version` field; surfaced by
+   * `soulkiller skill list` / `skill update` / catalog build.
+   * Distinct from `soulkiller_version` (build metadata) and `engine_version`
+   * (runtime contract). Optional for test paths that drive ExportBuilder
+   * directly; the wizard enforces non-empty at the UI layer. Missing value
+   * falls back to `"0.0.0"` at packager write time (reserved for legacy
+   * archives lacking this field).
+   */
+  author_version?: string
 }
 
 function formatCharactersBlock(characters: CharacterSpec[]): string {

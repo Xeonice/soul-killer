@@ -43,3 +43,15 @@ jobs:
       - run: bun install
       - name: Run integration tests (local engine)
         run: bun run test:integration
+
+  verify-examples:
+    name: Verify example skills are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Check example skills against current engine + deprecated paths
+        run: bun scripts/upgrade-example-skills.ts --check

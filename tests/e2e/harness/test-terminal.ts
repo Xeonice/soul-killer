@@ -71,6 +71,8 @@ export interface TestTerminalOptions {
   debug?: boolean
   /** Label shown at the top of timeline output (e.g. test file + scenario name) */
   label?: string
+  /** Extra env vars merged into the child process env (e.g. SOULKILLER_CATALOG_URL). */
+  env?: Record<string, string>
 }
 
 export class TestTerminal {
@@ -105,6 +107,7 @@ export class TestTerminal {
     if (opts.mockServerUrl) {
       env.SOULKILLER_API_URL = opts.mockServerUrl
     }
+    if (opts.env) Object.assign(env, opts.env)
 
     const entryPoint = path.join(PROJECT_ROOT, 'src', 'index.tsx')
 

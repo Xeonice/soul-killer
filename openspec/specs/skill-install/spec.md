@@ -78,19 +78,28 @@ CLI SHALL 在解包 `.skill` 档案后检测 root 结构：若 root 只有单一
 - **THEN** 原样写入
 
 ### Requirement: 冲突处理（已存在的 skill）
-CLI SHALL 在目标路径已存在同名 skill 时提供三种行为：默认跳过（输出 skipped 并继续其他 target）；`--overwrite` 标志下覆盖；交互模式下弹出确认菜单（Overwrite / Skip / Cancel）。
 
-#### Scenario: 默认跳过
-- **WHEN** `~/.claude/skills/fate-zero/` 已存在，用户执行 `soulkiller skill install fate-zero --to claude-code`（无 `--overwrite`）
-- **THEN** 该 target 输出 "skipped: already installed"，退出码非零
+CLI `skill install` SHALL 在目标目录已存在时默认 skip 并在摘要中标注 `skipped (use --overwrite or 'skill update')`；加 `--overwrite` 则 rename 旧目录为 `<path>.old-<ts>` 再写入。REPL `/install` 的 Available Tab SHALL **不再通过 UI state 硬编码 `overwrite=false`**：Available Tab 的安装动作始终以 `overwrite=false` 运行，冲突时引导用户去 Installed Tab 使用 Update 操作；Installed Tab 的 Update action 以 `overwrite=true` 运行。
 
-#### Scenario: 覆盖
-- **WHEN** `~/.claude/skills/fate-zero/` 已存在，用户执行 `soulkiller skill install fate-zero --to claude-code --overwrite`
-- **THEN** CLI 先删除旧目录再写入新版
+#### Scenario: CLI 默认 skip
 
-#### Scenario: 原子性
-- **WHEN** 安装过程中任一步骤失败（网络、校验、写盘）
-- **THEN** CLI 不得在目标位置留下半成品；采用 temp dir + rename 原子切换策略
+- **WHEN** 用户执行 `soulkiller skill install fate-zero --to claude-code`，且 `~/.claude/skills/fate-zero/` 已存在
+- **THEN** 摘要行 SHALL 为 `• fate-zero  claude-code  skipped  already installed (use --overwrite or 'skill update')`；退出码 0
+
+#### Scenario: CLI --overwrite
+
+- **WHEN** 用户执行 `soulkiller skill install fate-zero --to claude-code --overwrite`
+- **THEN** 原目录 SHALL 被 rename 为 `<path>.old-<timestamp>`；新内容写入后若成功则保留备份（或交给 `cleanupStaleOld`）；失败则 rollback（删除新目录，rename 备份回原位）
+
+#### Scenario: REPL Available Tab 冲突引导
+
+- **WHEN** 用户在 Available Tab 尝试安装一个已装 skill
+- **THEN** REPL SHALL 以 toast / 提示栏告知"该 target 已装该 skill；请切换到 Installed Tab 使用 Update 操作"；不执行任何写入
+
+#### Scenario: REPL Installed Tab Update 自动覆盖
+
+- **WHEN** 用户在 Installed Tab 触发 Update
+- **THEN** 底层等价 `installer.atomicInstall({ overwrite: true })`，原目录 rename 为 `.old-<ts>`
 
 ### Requirement: sha256 校验
 CLI SHALL 在通过 slug 从 catalog 安装时强制校验下载内容的 sha256 与 catalog 条目匹配；不匹配则 abort 并保留错误信息。
@@ -115,19 +124,28 @@ CLI SHALL 在安装前读取 skill 的 `soulkiller.json.engine_version`（catalo
 - **THEN** CLI abort，错误文案：`<slug> requires engine_version ≥ N; current soulkiller supports ≤ M. Run /upgrade (REPL) or soulkiller --update (CLI) first.`
 
 ### Requirement: 交互向导（REPL `/install` 无参）
-REPL `/install` 无参时 SHALL 进入 6 步向导：(1) 多选 skill（来自 catalog）；(2) 多选 target；(3) 若 target 含 claude-code/codex/opencode 则选 global/project scope；(4) 展示预览矩阵（每条 skill × 每个 target 的目标绝对路径 + 冲突提示）；(5) 并发下载 + 顺序安装 + 进度条；(6) 结果摘要（成功/失败/重试命令）。任何步骤可用 Esc 取消。
 
-#### Scenario: 完整向导流程
-- **WHEN** 用户在 REPL 输入 `/install`
-- **THEN** 依次渲染 Step 1 到 Step 6，每步用 ink 组件交互
+REPL `/install` 无参时 SHALL 进入**双 Tab 容器**：`Available`（可装）与 `Installed`（已装）。默认进入 Available Tab，其内容为原 6 步向导的前 5 步（pick-skills → pick-targets → pick-scope → preview → installing → done）；Installed Tab 的行为由 `skill-manage` 能力定义。用户 SHALL 能用 `Tab` / `Shift-Tab` 切换；Esc 在 Tab 层退出命令，在子流里先回到 Tab 层。带 slug 参数（`/install <slug>`）SHALL 直接进入 Available Tab 并跳过 pick-skills 步骤。
+
+#### Scenario: 完整向导流程（Available Tab）
+
+- **WHEN** 用户在 REPL 输入 `/install`，保持在 Available Tab
+- **THEN** 依次渲染 pick-skills → pick-targets → pick-scope → preview → installing → done，每步用 ink 组件交互
 
 #### Scenario: 带 slug 参数跳步
+
 - **WHEN** 用户在 REPL 输入 `/install fate-zero`
-- **THEN** 跳过 Step 1，直接进入 Step 2（target 选择）
+- **THEN** 默认进入 Available Tab，跳过 pick-skills，直接进入 pick-targets
+
+#### Scenario: 切换到 Installed Tab
+
+- **WHEN** 用户按 Tab 从 Available 切换到 Installed
+- **THEN** 视图切换为 Installed Tab 的列表视图（列表内容与操作菜单由 `skill-manage` 能力定义）；再按 Tab 切回 Available
 
 #### Scenario: Esc 取消
+
 - **WHEN** 向导任一步骤用户按 Esc
-- **THEN** 所有下载/写入操作回滚（若尚未开始则直接退出），返回 REPL 主界面
+- **THEN** 若在子流（pick-skills/pick-targets/…）中，回退到 Tab 层；若已在 Tab 层，退出 `/install` 命令；安装过程中的 Esc 按现有回滚语义处理
 
 ### Requirement: 结果摘要
 CLI SHALL 在 `skill install` 完成后输出结构化摘要：每个 (slug, target) 组合一行，显示成功（✓ + engine_version）、失败（✗ + 原因 + 重试命令）、跳过（skipped + 原因）。非交互模式下摘要用 stdout 纯文本；REPL 下用 ink 组件渲染。

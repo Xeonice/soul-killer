@@ -15,6 +15,7 @@ export {
   lintStorySpec,
   lintCharacterAxesConsistency,
   lintSharedAxesInTemplate,
+  lintAuthorVersion,
   type LintReport,
   type LintIssue,
 } from './lint-skill-template.js'

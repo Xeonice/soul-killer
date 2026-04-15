@@ -23,6 +23,8 @@ import { TextInput } from '../../components/text-input.js'
 import { readManifest, readSoulFiles } from '../../../soul/package.js'
 import { listWorlds, loadWorld } from '../../../world/manifest.js'
 import { loadAllEntries } from '../../../world/entry.js'
+import { deriveDefaultVersion } from '../../../export/support/bump-version.js'
+import { getSkillBaseName } from '../../../export/packager.js'
 import { t } from '../../../infra/i18n/index.js'
 import { getLocale } from '../../../infra/i18n/index.js'
 import type { SupportedLanguage } from '../../../config/schema.js'
@@ -44,6 +46,7 @@ type UIStep =
   | 'story-direction'
   | 'selecting-language'
   | 'selecting-output'
+  | 'entering-version'
   | 'loading-data'
   | 'running'
 
@@ -90,8 +93,10 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   // Text input overlay (used for naming-story, story-direction, and agent ask_user free text)
   const [textInputActive, setTextInputActive] = useState(false)
   const [textInputPrompt, setTextInputPrompt] = useState('')
+  const [textInputHint, setTextInputHint] = useState<string | undefined>()
   const [textInputOptional, setTextInputOptional] = useState(false)
   const [textInputError, setTextInputError] = useState<string | undefined>()
+  const [textInputInitialValue, setTextInputInitialValue] = useState<string>('')
 
   // Available lists
   const [availableSouls, setAvailableSouls] = useState<SoulListItem[]>([])
@@ -104,6 +109,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   const [storyDirection, setStoryDirection] = useState<string>('')
   const [exportLanguage, setExportLanguage] = useState<SupportedLanguage>(getLocale())
   const [outputBaseDir, setOutputBaseDir] = useState<string>('')
+  const [authorVersion, setAuthorVersion] = useState<string>('')
 
   // Output options (built once on mount)
   const outputOptionsRef = useRef<OutputOption[]>(buildOutputOptions())
@@ -218,6 +224,36 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
     setTextInputError(undefined)
   }
 
+  function showVersionInput(
+    soulsCount: number,
+    worldLabel: string,
+    story: string,
+    outBaseDir: string,
+  ) {
+    // Probe existing skill dir for a previous author_version; bump patch if found.
+    const baseName = getSkillBaseName(story, selectedWorld)
+    const existingDir = path.join(outBaseDir, baseName)
+    const existsThere = fs.existsSync(existingDir) ? existingDir : null
+    const defaultVersion = deriveDefaultVersion(existsThere)
+
+    setPanelState({
+      phase: 'selecting',
+      planningTrail: [],
+      trail: [
+        { description: t('export.step.select_souls'), summary: `${soulsCount} ${t('export.souls_unit')}` },
+        { description: t('export.step.select_world'), summary: worldLabel },
+        { description: t('export.step.naming_story'), summary: story },
+      ],
+      activeZone: { type: 'idle' },
+    })
+    setTextInputActive(true)
+    setTextInputPrompt(t('export.step.author_version'))
+    setTextInputHint(t('export.hint.author_version'))
+    setTextInputOptional(false)
+    setTextInputError(undefined)
+    setTextInputInitialValue(defaultVersion)
+  }
+
   function showOutputSelector(soulsCount: number, worldLabel: string, story: string, direction: string) {
     const options = outputOptionsRef.current
     const trailItems: { description: string; summary?: string }[] = [
@@ -319,6 +355,16 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       setTimeout(() => showLanguageSelector(), 0)
       return
     }
+    if (uiStep === 'entering-version') {
+      setTextInputActive(false)
+      setTextInputError(undefined)
+      setTextInputHint(undefined)
+      setTextInputInitialValue('')
+      setUiStep('selecting-output')
+      const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
+      setTimeout(() => showOutputSelector(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName, storyDirection), 0)
+      return
+    }
 
     // All other steps: cancel the entire flow
     cancelledRef.current = true
@@ -331,7 +377,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       askResolverRef.current = null
     }
     onCancel()
-  }, [uiStep, availableSouls, availableWorlds, selectedSouls, selectedWorld, storyName, onCancel])
+  }, [uiStep, availableSouls, availableWorlds, selectedSouls, selectedWorld, storyName, storyDirection, onCancel])
 
   // --- Step 1: Load available souls and worlds on mount ---
 
@@ -413,7 +459,27 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       setTimeout(() => showLanguageSelector(), 0)
       return
     }
-  }, [uiStep, availableWorlds, selectedWorld, selectedSouls.length, storyName])
+
+    // UI-driven author-version path (non-empty required)
+    if (uiStep === 'entering-version') {
+      const trimmed = value.trim()
+      if (trimmed.length === 0) {
+        setTextInputError(t('export.err.author_version_required'))
+        return
+      }
+      setAuthorVersion(trimmed)
+      setTextInputActive(false)
+      setTextInputHint(undefined)
+      setTextInputInitialValue('')
+      setTextInputError(undefined)
+      setUiStep('loading-data')
+      setTimeout(
+        () => beginExport(selectedSouls, selectedWorld, storyName, storyDirection, outputBaseDir, trimmed),
+        0,
+      )
+      return
+    }
+  }, [uiStep, availableWorlds, selectedWorld, selectedSouls, storyName, storyDirection, outputBaseDir])
 
   // --- Handle select confirm (for UI-driven selection + agent-driven ask_user) ---
 
@@ -497,8 +563,12 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
           const opt = options[optIdx]
           if (!opt) return prev
           setOutputBaseDir(opt.path)
-          setUiStep('loading-data')
-          setTimeout(() => beginExport(selectedSouls, selectedWorld, storyName, storyDirection, opt.path), 0)
+          setUiStep('entering-version')
+          const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
+          setTimeout(
+            () => showVersionInput(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName, opt.path),
+            0,
+          )
           return prev
         }
       } else {
@@ -526,7 +596,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
 
   // --- Begin export: load data + run agent ---
 
-  async function beginExport(souls: string[], worldName: string, name: string, direction: string, outBaseDir: string) {
+  async function beginExport(souls: string[], worldName: string, name: string, direction: string, outBaseDir: string, authorVersion: string) {
     const trail: { description: string; summary?: string }[] = [
       { description: t('export.step.select_souls'), summary: `${souls.length} ${t('export.souls_unit')}` },
       { description: t('export.step.select_world'), summary: worldName },
@@ -591,6 +661,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
         storyDirection: direction.trim().length > 0 ? direction.trim() : undefined,
         outputBaseDir: outBaseDir,
         exportLanguage,
+        authorVersion,
       }
 
       setUiStep('running')
@@ -631,8 +702,12 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       {textInputActive && (
         <Box flexDirection="column" marginLeft={2} marginTop={1}>
           <Text color={PRIMARY}>▓ {textInputPrompt}{textInputOptional && <Text color={DIM}> ({t('export.hint.optional')})</Text>}</Text>
+          {textInputHint && (
+            <Text color={DIM}>  {textInputHint}</Text>
+          )}
           <TextInput
             prompt="  ❯ "
+            initialValue={textInputInitialValue}
             onSubmit={handleTextSubmit}
             onEscape={handleCancel}
           />

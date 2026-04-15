@@ -1,34 +1,17 @@
 #!/usr/bin/env bun
 import { render } from 'ink'
 import React from 'react'
-import { existsSync, realpathSync, unlinkSync } from 'node:fs'
 import { App } from './cli/app.js'
+import { cleanupStaleOld, cleanupStaleSkillBackups } from './cli/cleanup.js'
 import { runRuntime } from './cli/runtime.js'
 import { runUpdate } from './cli/updater.js'
 import { runDoctor } from './cli/doctor.js'
-import { skillList, skillUpgrade } from './cli/skill-manager.js'
-import { runInstall } from './cli/skill-install/cli.js'
+import { skillUpgrade } from './cli/skill-manager.js'
+import { runSkillSubcommand } from './cli/skill-install/cli.js'
 import { runCatalog } from './cli/catalog/cli.js'
 
-/**
- * Remove any stale `<exe>.old` left behind by a previous Windows self-update.
- * On Windows the update path renames the running exe to `<exe>.old` before
- * writing the new binary — cleanup is deferred to the next cold start because
- * the just-updated process may still hold a lock at update completion time.
- * Runs silently; any failure (permission, still-locked, non-existent) is
- * swallowed and retried on the next start.
- */
-export function cleanupStaleOld(): void {
-  try {
-    const target = (() => {
-      try { return realpathSync(process.execPath) } catch { return process.execPath }
-    })()
-    const staleOld = target + '.old'
-    if (existsSync(staleOld)) unlinkSync(staleOld)
-  } catch { /* silent */ }
-}
-
 cleanupStaleOld()
+cleanupStaleSkillBackups()
 
 // Pre-ink flag handling — intercept before React renders
 const args = process.argv.slice(2)
@@ -56,22 +39,23 @@ if (args[0] === 'doctor') {
 
 if (args[0] === 'skill') {
   const sub = args[1]
-  if (sub === 'list') {
-    process.exit(skillList())
-  } else if (sub === 'upgrade') {
+  if (sub === 'upgrade') {
     const code = await skillUpgrade(args[2])
-    process.exit(code)
-  } else if (sub === 'install') {
-    const code = await runInstall(args.slice(2))
     process.exit(code)
   } else if (sub === 'catalog') {
     const code = await runCatalog(args.slice(2))
     process.exit(code)
+  } else if (sub === 'install' || sub === 'list' || sub === 'update' || sub === 'uninstall' || sub === 'info') {
+    const code = await runSkillSubcommand(sub, args.slice(2))
+    process.exit(code)
   } else {
-    console.log('Usage: soulkiller skill <list|upgrade|install|catalog>')
-    console.log('  list                          List installed soulkiller skills')
-    console.log('  upgrade [--all|name]          Upgrade skill engine files')
+    console.log('Usage: soulkiller skill <subcommand> [args...]')
     console.log('  install <slug|url|path>       Download and install a skill')
+    console.log('  list [--updates] [--json]     List installed skills + catalog diff')
+    console.log('  update <slug>... | --all      Pull newer version from catalog')
+    console.log('  uninstall <slug>              Remove an installed skill (with backup)')
+    console.log('  info <slug>                   Show detailed info for a skill')
+    console.log('  upgrade [--all|name]          Sync runtime/engine.md with this binary')
     console.log('  catalog [--json]              List available skills from the remote catalog')
     process.exit(sub ? 2 : 0)
   }

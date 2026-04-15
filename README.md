@@ -64,7 +64,18 @@ soulkiller skill install --all --to claude-code
 
 # 指定单款并同时装到多个平台
 soulkiller skill install fate-zero --to claude-code --to codex --to openclaw
+
+# 管理已装 skill
+soulkiller skill list                    # 扫描已装 + 对比 catalog（显示有无新版）
+soulkiller skill list --updates          # 仅显示有新版的
+soulkiller skill list --examples         # 扫仓库内 examples/skills/*.skill
+soulkiller skill update fate-zero        # 拉 catalog 新版覆盖安装
+soulkiller skill update --all --check    # dry-run：哪些有更新（CI 友好，加 --exit-code-if-updates 可 gate）
+soulkiller skill info fate-zero          # 查看已装位置 / 版本 / legacy runtime/bin 警告
+soulkiller skill uninstall fate-zero     # 带 .old-<ts> 备份（--no-backup 跳过）
 ```
+
+**`update` vs `upgrade`**：`skill update` 从 catalog 拉新版本 skill 包（联网）；`skill upgrade` 把本地 `runtime/engine.md` 与当前 soulkiller 二进制同步（不联网）。两者并存，对应不同场景。
 
 可选的目标（`--to` 可多次重复）：
 
@@ -212,10 +223,20 @@ soulkiller 本体是一个**本地启动器** —— 安装后在终端运行 `s
 /export johnny
 ┌─────────────────────────────────────┐
 │  → 基于角色 × 世界生成冒险脚本       │
+│  → 填入 skill 版本号（首次 0.1.0，   │
+│    再次导出自动建议 bump patch）     │
 │  → 打包为 .skill 可分发档案          │
 │  → 他人加载即可游玩                  │
 └─────────────────────────────────────┘
 ```
+
+**Skill 版本号**：这是作者自己的语义化版本，跟 soulkiller 二进制版本、engine_version 是三件事：
+
+- `version`（本字段）— 作者发布的 skill 版本，决定用户 `soulkiller skill update` 能否拉到新版
+- `soulkiller_version` — 构建时的 soulkiller 二进制版本（元数据）
+- `engine_version` — 运行契约版本，soulkiller 更新时通过 `skill upgrade` 同步
+
+推荐 semver（`1.0.0`），也接受日期（`2026.04.15`）或自定义格式。
 
 ## 游玩时的分支树可视化
 

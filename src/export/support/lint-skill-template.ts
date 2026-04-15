@@ -533,6 +533,48 @@ function lintSharedAxesCompleteness(block: FencedBlock, report: LintReport): voi
  * Public wrapper: run SHARED_AXES_COMPLETENESS across every yaml block in a
  * SKILL.md template.
  */
+/**
+ * Verify the archive's `soulkiller.json` carries a meaningful author-declared
+ * version (skill-author-version change). Warns on:
+ *   - missing `version` field
+ *   - `version === "0.0.0"` (reserved for legacy archives whose version was
+ *     back-filled by the upgrade script — new exports should start at 0.1.0+)
+ *
+ * Warnings never block export; the author sees them in stderr and can decide
+ * whether to re-export with an intentional value.
+ */
+export function lintAuthorVersion(soulkillerJsonContent: string): LintReport {
+  const report: LintReport = emptyReport()
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(soulkillerJsonContent) as Record<string, unknown>
+  } catch {
+    report.warnings.push({
+      severity: 'warning',
+      rule: 'AUTHOR_VERSION_PRESENT',
+      message: `soulkiller.json is malformed; cannot check author version`,
+    })
+    return report
+  }
+  const version = parsed.version
+  if (typeof version !== 'string' || version.length === 0) {
+    report.warnings.push({
+      severity: 'warning',
+      rule: 'AUTHOR_VERSION_PRESENT',
+      message: `soulkiller.json lacks 'version' field — author version is required for catalog diff to work. Re-export via /export to set it.`,
+    })
+    return report
+  }
+  if (version === '0.0.0') {
+    report.warnings.push({
+      severity: 'warning',
+      rule: 'AUTHOR_VERSION_PRESENT',
+      message: `soulkiller.json 'version' is "0.0.0" — reserved for legacy archives whose version was back-filled. New exports should start at 0.1.0+.`,
+    })
+  }
+  return report
+}
+
 export function lintSharedAxesInTemplate(skillContent: string): LintReport {
   const report = emptyReport()
   const blocks = extractFencedBlocks(skillContent)

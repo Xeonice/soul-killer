@@ -90,14 +90,25 @@ function buildEntry(skillPath: string): CatalogEntry {
   const fm = parseFrontmatter(skillMd)
 
   let engineVersion = 0
-  let soulkillerVersion = '0.0.0'
+  let authorVersion: string | null = null
   const jsonBytes = pick('soulkiller.json')
   if (jsonBytes) {
     try {
       const parsed = JSON.parse(new TextDecoder().decode(jsonBytes))
       if (typeof parsed.engine_version === 'number') engineVersion = parsed.engine_version
-      if (typeof parsed.soulkiller_version === 'string') soulkillerVersion = parsed.soulkiller_version
+      // Catalog `version` represents the **author-declared skill version**
+      // (skill-author-version change). Previously this read from
+      // `soulkiller_version`, which is build metadata — that was a bug.
+      if (typeof parsed.version === 'string' && parsed.version.length > 0) {
+        authorVersion = parsed.version
+      }
     } catch { /* ignore */ }
+  }
+  if (authorVersion === null) {
+    console.error(
+      `  ⚠ ${path.basename(skillPath)}: soulkiller.json lacks 'version' field; defaulting to 0.0.0`,
+    )
+    authorVersion = '0.0.0'
   }
 
   // Characters: scan souls/*/ directory entries
@@ -111,7 +122,7 @@ function buildEntry(skillPath: string): CatalogEntry {
     slug,
     display_name: fm.name || slug,
     description: fm.description || '',
-    version: soulkillerVersion,
+    version: authorVersion,
     engine_version: engineVersion,
     size_bytes: bytes.byteLength,
     sha256: sha256Hex(bytes),
@@ -156,4 +167,9 @@ function main(): void {
   console.log(`\n  catalog written to ${outPath} (${skills.length} skills)`)
 }
 
-main()
+// Only auto-run when invoked as the CLI entry point (so unit tests can
+// import buildEntry without side effects).
+if (import.meta.main) main()
+
+// Named exports for testability.
+export { buildEntry }

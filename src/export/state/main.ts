@@ -2,12 +2,12 @@
 /**
  * state CLI entry point.
  *
- * Invocation (from skill runtime/bin/state bash wrapper):
- *   bun runtime/lib/main.ts <subcommand> [args...]
+ * Invoked by the soulkiller binary via `soulkiller runtime <subcommand>`
+ * (since the skill-runtime-binary change). The binary spawns itself with
+ * BUN_BE_BUN=1 and SKILL_ROOT pointing at the installed skill root.
  *
- * The bash wrapper sets SKILL_ROOT environment variable pointing to the
- * directory containing runtime/. When run directly, SKILL_ROOT defaults to
- * two levels up from the script (runtime/lib/main.ts → skill root).
+ * SKILL_ROOT defaults to two levels up from this file
+ * (runtime/lib/main.ts → skill root) when unset.
  */
 
 import { dirname, resolve } from 'node:path'

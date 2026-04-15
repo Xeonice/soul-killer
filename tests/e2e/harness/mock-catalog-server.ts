@@ -18,6 +18,8 @@ export interface MockSkillOptions {
   displayName?: string
   description?: string
   engineVersion?: number
+  /** Skill version string embedded in catalog and soulkiller.json. Default '1.0.0'. */
+  version?: string
 }
 
 interface StoredSkill {
@@ -25,6 +27,7 @@ interface StoredSkill {
   bytes: Uint8Array
   sha256: string
   engineVersion: number
+  version: string
   displayName: string
   description: string
 }
@@ -37,20 +40,25 @@ export class MockCatalogServer {
   /** Add a skill to the catalog. Returns the sha256 for assertions if needed. */
   addSkill(opts: MockSkillOptions): string {
     const engineVersion = opts.engineVersion ?? 2
+    const version = opts.version ?? '1.0.0'
     const bytes = zipSync({
       [`${opts.slug}/SKILL.md`]: strToU8(`---\nname: ${opts.slug}\ndescription: ${opts.description ?? ''}\n---\nbody`),
       [`${opts.slug}/soulkiller.json`]: strToU8(JSON.stringify({
         engine_version: engineVersion,
         soulkiller_version: '0.4.0',
         skill_id: opts.slug,
+        version,
       })),
     })
     const sha256 = crypto.createHash('sha256').update(bytes).digest('hex')
+    // Replace if same slug exists (allows bumping versions in tests)
+    this.skills = this.skills.filter((s) => s.slug !== opts.slug)
     this.skills.push({
       slug: opts.slug,
       bytes,
       sha256,
       engineVersion,
+      version,
       displayName: opts.displayName ?? opts.slug,
       description: opts.description ?? '',
     })
@@ -96,7 +104,7 @@ export class MockCatalogServer {
           slug: s.slug,
           display_name: s.displayName,
           description: s.description,
-          version: '1.0.0',
+          version: s.version,
           engine_version: s.engineVersion,
           size_bytes: s.bytes.byteLength,
           sha256: s.sha256,

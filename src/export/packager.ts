@@ -11,6 +11,7 @@ import {
   lintSkillTemplate,
   lintStorySpec,
   lintCharacterAxesConsistency,
+  lintAuthorVersion,
   type LintReport,
 } from './support/lint-index.js'
 import {
@@ -279,12 +280,12 @@ export function packageSkill(config: PackageConfig): PackageResult {
 
   // 4.4b Engine template + version manifest (split format)
   unprefixedFiles['runtime/engine.md'] = strToU8(generateEngineTemplate())
-  unprefixedFiles['soulkiller.json'] = strToU8(JSON.stringify({
-    engine_version: CURRENT_ENGINE_VERSION,
-    soulkiller_version: process.env.SOULKILLER_VERSION ?? 'dev',
-    exported_at: new Date().toISOString(),
-    skill_id: baseName,
-  }, null, 2) + '\n')
+  unprefixedFiles['soulkiller.json'] = strToU8(
+    buildSoulkillerManifest({
+      skill_id: baseName,
+      author_version: story_spec.author_version,
+    }),
+  )
 
   // 4.5 Author-side template lint — runs in the soulkiller process, never on
   //     the player's machine. The lint catches static prompt bugs (yaml
@@ -298,6 +299,10 @@ export function packageSkill(config: PackageConfig): PackageResult {
     { source: 'SKILL.md', report: lintSkillTemplate(skillContent) },
     { source: 'story-spec.md', report: lintStorySpec(storySpecContent) },
     { source: 'cross-ref', report: lintCharacterAxesConsistency(skillContent, storySpecContent) },
+    {
+      source: 'soulkiller.json',
+      report: lintAuthorVersion(new TextDecoder().decode(unprefixedFiles['soulkiller.json']!)),
+    },
   ]
   reportLintIssues(reports)
 
@@ -396,6 +401,36 @@ function reportLintIssues(reports: { source: string; report: LintReport }[]): vo
  * Exported for tests; used internally by packageSkill to inject the count
  * into the Phase 1 context-budget declaration in SKILL.md.
  */
+/**
+ * Build the `soulkiller.json` manifest body for a skill archive. Split from
+ * packageSkill so unit tests can assert the JSON shape without wiring up the
+ * full soul/world fixtures.
+ *
+ *   - engine_version: runtime contract version (soulkiller binary decides)
+ *   - soulkiller_version: build metadata (the binary version at export time)
+ *   - exported_at: ISO-8601 timestamp (now)
+ *   - skill_id: archive wrapper name — stable identity
+ *   - version: author-declared skill version (skill-author-version change);
+ *              falls back to `"0.0.0"` — reserved for legacy archives
+ *              whose authors never set one. New exports SHOULD start at 0.1.0+.
+ */
+export function buildSoulkillerManifest(input: {
+  skill_id: string
+  author_version: string | undefined
+  now?: Date
+}): string {
+  const body = {
+    engine_version: CURRENT_ENGINE_VERSION,
+    soulkiller_version: process.env.SOULKILLER_VERSION ?? 'dev',
+    exported_at: (input.now ?? new Date()).toISOString(),
+    skill_id: input.skill_id,
+    version: input.author_version && input.author_version.length > 0
+      ? input.author_version
+      : '0.0.0',
+  }
+  return JSON.stringify(body, null, 2) + '\n'
+}
+
 export function countMdFilesInMap(files: Record<string, Uint8Array>): number {
   let count = 0
   for (const key of Object.keys(files)) {
