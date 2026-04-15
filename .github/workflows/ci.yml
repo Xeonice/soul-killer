@@ -56,6 +56,18 @@ jobs:
       - name: Check example skills against current engine + deprecated paths
         run: bun scripts/upgrade-example-skills.ts --check
 
+  verify-skill-catalog:
+    name: Verify README skill catalog is in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Check README catalog against examples/skills/*.skill manifests
+        run: bun scripts/build-skill-catalog.ts --check
+
   verify-skill-archive-purity:
     name: Verify skill archive is pure data
     runs-on: ubuntu-latest

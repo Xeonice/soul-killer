@@ -28,6 +28,16 @@ export interface PackageConfig {
   story_spec: StorySpecConfig
   /** Required absolute path of the parent directory where the .skill file will be created */
   output_base_dir: string
+  /**
+   * README catalog display fields (skill-catalog-autogen). Injected by
+   * finalize.ts after the LLM populates candidates and the user confirms via
+   * the entering-catalog-info wizard step. Optional for legacy / test paths.
+   */
+  catalog_info?: {
+    world_slug: string
+    world_name: string
+    summary: string
+  }
 }
 
 export interface PackageResult {
@@ -283,6 +293,9 @@ export function packageSkill(config: PackageConfig): PackageResult {
     buildSoulkillerManifest({
       skill_id: baseName,
       author_version: story_spec.author_version,
+      world_slug: config.catalog_info?.world_slug,
+      world_name: config.catalog_info?.world_name,
+      summary: config.catalog_info?.summary,
     }),
   )
 
@@ -415,6 +428,10 @@ function reportLintIssues(reports: { source: string; report: LintReport }[]): vo
 export function buildSoulkillerManifest(input: {
   skill_id: string
   author_version: string | undefined
+  /** README catalog display fields (skill-catalog-autogen). Empty string when missing. */
+  world_slug?: string
+  world_name?: string
+  summary?: string
   now?: Date
 }): string {
   const body = {
@@ -425,6 +442,9 @@ export function buildSoulkillerManifest(input: {
     version: input.author_version && input.author_version.length > 0
       ? input.author_version
       : '0.0.0',
+    world_slug: input.world_slug ?? '',
+    world_name: input.world_name ?? '',
+    summary: input.summary ?? '',
   }
   return JSON.stringify(body, null, 2) + '\n'
 }

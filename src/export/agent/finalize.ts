@@ -1,5 +1,5 @@
 import { packageSkill, getSkillFileName } from '../packager.js'
-import type { OnExportProgress, PreSelectedExportData } from './types.js'
+import type { OnExportProgress, OnCatalogConfirm, PreSelectedExportData } from './types.js'
 import { ExportBuilder } from './types.js'
 import { logger } from '../../infra/utils/logger.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
@@ -11,6 +11,7 @@ export async function finalizeAndPackage(
   preSelected: PreSelectedExportData,
   onProgress: OnExportProgress,
   agentLog: AgentLogger,
+  onCatalogConfirm: OnCatalogConfirm,
 ): Promise<boolean> {
   const tag = '[export-finalize]'
 
@@ -26,6 +27,19 @@ export async function finalizeAndPackage(
       story_spec.user_direction = preSelected.storyDirection.trim()
     }
 
+    // skill-catalog-autogen: pause for author confirmation of catalog fields.
+    // The LLM produced candidates during set_story_metadata; the wizard now
+    // shows them for edit/approve. A `null` response means the author pressed
+    // Esc to cancel the entire export.
+    const candidates = builder.getCatalogCandidates()
+    onProgress({ type: 'catalog_confirm_request', candidates })
+    const confirmed = await onCatalogConfirm(candidates)
+    if (confirmed === null) {
+      logger.info(`${tag} catalog confirm cancelled by user — skipping packageSkill`)
+      onProgress({ type: 'tool_end', tool: 'finalize_export', result_summary: 'cancelled by user' })
+      return false
+    }
+
     onProgress({ type: 'phase', phase: 'packaging' })
     const steps = ['copy_souls', 'copy_world', 'gen_story_spec', 'gen_skill']
     for (const s of steps) {
@@ -39,6 +53,7 @@ export async function finalizeAndPackage(
       story_name: preSelected.storyName,
       story_spec,
       output_base_dir: preSelected.outputBaseDir,
+      catalog_info: confirmed,
     })
 
     for (const s of steps) {

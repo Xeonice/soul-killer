@@ -6,6 +6,7 @@ import type {
   AskUserHandler,
   PreSelectedExportData,
   PlanConfirmHandler,
+  OnCatalogConfirm,
 } from './types.js'
 import { ExportBuilder } from './types.js'
 import { runPlanningLoop } from './planning.js'
@@ -21,7 +22,8 @@ export async function runExportAgent(
   preSelected: PreSelectedExportData,
   onProgress: OnExportProgress,
   askUser: AskUserHandler,
-  waitForPlanConfirm?: PlanConfirmHandler,
+  waitForPlanConfirm: PlanConfirmHandler | undefined,
+  onCatalogConfirm: OnCatalogConfirm,
 ): Promise<void> {
   const tag = '[export-agent]'
   logger.info(`${tag} Starting export agent`, {
@@ -97,7 +99,7 @@ export async function runExportAgent(
   if (!routeOk) { agentLog.close(); return }
 
   // Step 3: Finalize (pure code packaging)
-  const finalOk = await finalizeAndPackage(builder, preSelected, onProgress, agentLog)
+  const finalOk = await finalizeAndPackage(builder, preSelected, onProgress, agentLog, onCatalogConfirm)
   if (!finalOk) { agentLog.close(); return }
 
   agentLog.close()
@@ -121,6 +123,8 @@ export {
   type WorldFullData,
   type PreSelectedExportData,
   type PlanConfirmHandler,
+  type CatalogCandidates,
+  type OnCatalogConfirm,
 } from './types.js'
 
 export { validatePlan, __TEST_ONLY_validatePlan } from './planning.js'

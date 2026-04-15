@@ -29,6 +29,22 @@ export interface StoryMetadata {
   constraints: string[]
   acts_options: ActOption[]
   default_acts: number
+  /**
+   * README catalog display fields (skill-catalog-autogen). LLM produces
+   * candidates in set_story_metadata; user confirms / edits them via the
+   * entering-catalog-info wizard step before packageSkill writes
+   * soulkiller.json. Optional so legacy / test paths can skip them without
+   * TypeScript errors; format validation happens at the tool layer.
+   */
+  world_slug?: string
+  world_name?: string
+  summary?: string
+}
+
+export interface CatalogCandidates {
+  world_slug: string
+  world_name: string
+  summary: string
 }
 
 export interface CharacterDraft {
@@ -167,6 +183,20 @@ export class ExportBuilder {
       throw new Error(`default_acts (${m.default_acts}) must match one of acts_options[i].acts`)
     }
     this.metadata = m
+  }
+
+  /**
+   * Read the LLM-produced catalog display candidates after set_story_metadata
+   * has run. Used by finalize.ts to feed the entering-catalog-info wizard
+   * step (skill-catalog-autogen). Returns empty strings when metadata is not
+   * yet set (caller is responsible for ordering).
+   */
+  getCatalogCandidates(): CatalogCandidates {
+    return {
+      world_slug: this.metadata?.world_slug ?? '',
+      world_name: this.metadata?.world_name ?? '',
+      summary: this.metadata?.summary ?? '',
+    }
   }
 
   /**
@@ -547,6 +577,14 @@ export type ExportProgressEvent =
   | { type: 'reasoning_progress'; chars: number; tokens: number }
   | { type: 'plan_ready'; plan: ExportPlan; storyDirection?: string; exportLanguage?: string }
   | { type: 'plan_confirmed' }
+  /**
+   * skill-catalog-autogen: after agent finalize_export but before packageSkill
+   * writes soulkiller.json, finalize emits this event with the LLM-produced
+   * catalog candidates. The UI is expected to render the entering-catalog-info
+   * wizard step and resolve with the user-confirmed values (see
+   * OnCatalogConfirm).
+   */
+  | { type: 'catalog_confirm_request'; candidates: CatalogCandidates }
   | { type: 'complete'; output_file: string; file_count: number; size_bytes: number; skill_name: string }
   | { type: 'error'; error: string }
 
@@ -564,6 +602,13 @@ export type OnExportProgress = (event: ExportProgressEvent) => void
  * When `multiSelect` is true, the returned string is a comma-separated list of labels.
  */
 export type AskUserHandler = (question: string, options?: AskUserOption[], allowFreeInput?: boolean, multiSelect?: boolean, maxSelect?: number) => Promise<string>
+
+/**
+ * Bridges finalize.ts → export.tsx wizard for catalog info confirmation
+ * (skill-catalog-autogen). Returns the user-confirmed fields, or `null` when
+ * the user pressed Esc (signal to cancel packaging).
+ */
+export type OnCatalogConfirm = (candidates: CatalogCandidates) => Promise<CatalogCandidates | null>
 
 // --- Pre-selected export data (passed in from CLI layer) ---
 

@@ -17,6 +17,7 @@ import {
   type PreSelectedExportData,
   type SoulFullData,
   type WorldFullData,
+  type CatalogCandidates,
 } from '../../../export/agent/index.js'
 import { loadConfig } from '../../../config/loader.js'
 import { TextInput } from '../../components/text-input.js'
@@ -30,6 +31,7 @@ import { getLocale } from '../../../infra/i18n/index.js'
 import type { SupportedLanguage } from '../../../config/schema.js'
 import { SUPPORTED_LANGUAGES } from '../../../config/schema.js'
 import { PRIMARY, DIM, ACCENT } from '../../animation/colors.js'
+import { normalizeSlugCandidate, validateCatalogSubStep } from './catalog-input-helpers.js'
 
 interface ExportCommandProps {
   onComplete: () => void
@@ -49,6 +51,7 @@ type UIStep =
   | 'entering-version'
   | 'loading-data'
   | 'running'
+  | 'entering-catalog-info'
 
 interface SoulListItem {
   name: string
@@ -111,6 +114,18 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
   const [outputBaseDir, setOutputBaseDir] = useState<string>('')
   const [authorVersion, setAuthorVersion] = useState<string>('')
 
+  // skill-catalog-autogen: entering-catalog-info sub-wizard state.
+  // Populated when finalize emits `catalog_confirm_request`; cleared when the
+  // author confirms (or cancels via Esc).
+  type CatalogSubStep = 'slug' | 'world' | 'summary'
+  const [catalogSubStep, setCatalogSubStep] = useState<CatalogSubStep>('slug')
+  const [catalogDraft, setCatalogDraft] = useState<CatalogCandidates>({
+    world_slug: '',
+    world_name: '',
+    summary: '',
+  })
+  const catalogConfirmResolverRef = useRef<((r: CatalogCandidates | null) => void) | null>(null)
+
   // Output options (built once on mount)
   const outputOptionsRef = useRef<OutputOption[]>(buildOutputOptions())
 
@@ -122,8 +137,36 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
 
   const handleProgress = useCallback((event: ExportProgressEvent) => {
     if (cancelledRef.current) return
+    // skill-catalog-autogen: `catalog_confirm_request` is a control-flow event
+    // for the wizard and does not drive panel state; swallow it so the panel
+    // reducer doesn't see an unknown type.
+    if (event.type === 'catalog_confirm_request') return
     setPanelState((prev) => reducePanelEvent(prev, event))
   }, [])
+
+  // skill-catalog-autogen: bridge from finalize.ts. The agent's finalize step
+  // builds the story_spec, reads the LLM-produced catalog candidates from
+  // the builder, and awaits this promise. We normalize the slug (fix common
+  // LLM casing/underscore mistakes), open the first sub-step text input, and
+  // let handleTextSubmit / handleCancel walk through slug → world → summary.
+  const handleCatalogConfirm = useCallback(
+    (candidates: CatalogCandidates): Promise<CatalogCandidates | null> => {
+      return new Promise((resolve) => {
+        catalogConfirmResolverRef.current = resolve
+        const normalizedSlug = normalizeSlugCandidate(candidates.world_slug)
+        const draft: CatalogCandidates = {
+          world_slug: normalizedSlug,
+          world_name: candidates.world_name ?? '',
+          summary: candidates.summary ?? '',
+        }
+        setCatalogDraft(draft)
+        setCatalogSubStep('slug')
+        setUiStep('entering-catalog-info')
+        showCatalogInput('slug', normalizedSlug)
+      })
+    },
+    [],
+  )
 
   const handleAskUser = useCallback(
     (question: string, options?: AskUserOption[], allowFreeInput?: boolean, multiSelect?: boolean, maxSelect?: number): Promise<string> => {
@@ -307,6 +350,26 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
     setPanelState({ phase, planningTrail: [], trail, activeZone: { type: 'idle' } })
   }
 
+
+  function showCatalogInput(subStep: CatalogSubStep, initialValue: string) {
+    const promptKey = subStep === 'slug'
+      ? 'export.step.catalog.slug'
+      : subStep === 'world'
+        ? 'export.step.catalog.world_name'
+        : 'export.step.catalog.summary'
+    const hintKey = subStep === 'slug'
+      ? 'export.hint.catalog.slug'
+      : subStep === 'world'
+        ? 'export.hint.catalog.world_name'
+        : 'export.hint.catalog.summary'
+    setTextInputActive(true)
+    setTextInputPrompt(t(promptKey))
+    setTextInputHint(t(hintKey))
+    setTextInputOptional(false)
+    setTextInputError(undefined)
+    setTextInputInitialValue(initialValue)
+  }
+
   function showError(errorMsg: string) {
     setPanelState((prev) => ({
       ...prev,
@@ -363,6 +426,24 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       setUiStep('selecting-output')
       const worldItem = availableWorlds.find((w) => w.name === selectedWorld)
       setTimeout(() => showOutputSelector(selectedSouls.length, worldItem?.display_name || selectedWorld, storyName, storyDirection), 0)
+      return
+    }
+
+    // skill-catalog-autogen: Esc during entering-catalog-info cancels the
+    // entire export. The agent has already run, so there's no earlier step
+    // to rewind to — resolve the finalize promise with `null` so finalize.ts
+    // skips packageSkill and returns cleanly.
+    if (uiStep === 'entering-catalog-info') {
+      if (catalogConfirmResolverRef.current) {
+        catalogConfirmResolverRef.current(null)
+        catalogConfirmResolverRef.current = null
+      }
+      cancelledRef.current = true
+      setTextInputActive(false)
+      setTextInputError(undefined)
+      setTextInputHint(undefined)
+      setTextInputInitialValue('')
+      onCancel()
       return
     }
 
@@ -479,7 +560,46 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       )
       return
     }
-  }, [uiStep, availableWorlds, selectedWorld, selectedSouls, storyName, storyDirection, outputBaseDir])
+
+    // skill-catalog-autogen: entering-catalog-info sub-wizard.
+    // slug → world → summary, then resolve the finalize promise.
+    if (uiStep === 'entering-catalog-info') {
+      const errKey = validateCatalogSubStep(catalogSubStep, value)
+      if (errKey) {
+        setTextInputError(t(errKey))
+        return
+      }
+      const trimmed = value.trim()
+      setTextInputError(undefined)
+
+      if (catalogSubStep === 'slug') {
+        const next = { ...catalogDraft, world_slug: trimmed }
+        setCatalogDraft(next)
+        setCatalogSubStep('world')
+        showCatalogInput('world', next.world_name)
+        return
+      }
+      if (catalogSubStep === 'world') {
+        const next = { ...catalogDraft, world_name: trimmed }
+        setCatalogDraft(next)
+        setCatalogSubStep('summary')
+        showCatalogInput('summary', next.summary)
+        return
+      }
+      // summary — final sub-step; resolve the bridge promise.
+      const final = { ...catalogDraft, summary: trimmed }
+      setCatalogDraft(final)
+      setTextInputActive(false)
+      setTextInputHint(undefined)
+      setTextInputInitialValue('')
+      setUiStep('running')
+      if (catalogConfirmResolverRef.current) {
+        catalogConfirmResolverRef.current(final)
+        catalogConfirmResolverRef.current = null
+      }
+      return
+    }
+  }, [uiStep, catalogSubStep, catalogDraft, availableWorlds, selectedWorld, selectedSouls, storyName, storyDirection, outputBaseDir])
 
   // --- Handle select confirm (for UI-driven selection + agent-driven ask_user) ---
 
@@ -681,7 +801,7 @@ export function ExportCommand({ onComplete, onCancel }: ExportCommandProps) {
       const waitForPlanConfirm = () => new Promise<boolean>((resolve) => {
         planConfirmResolverRef.current = resolve
       })
-      await runExportAgent(config, preSelected, handleProgress, handleAskUser, waitForPlanConfirm)
+      await runExportAgent(config, preSelected, handleProgress, handleAskUser, waitForPlanConfirm, handleCatalogConfirm)
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err))
     }

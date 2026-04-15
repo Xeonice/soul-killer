@@ -13,6 +13,48 @@ import { logger } from '../../infra/utils/logger.js'
 import type { AgentLogger } from '../../infra/utils/agent-logger.js'
 import { createArrayArgRepair } from '../../infra/utils/repair-tool-call.js'
 
+/**
+ * Validate the README catalog display fields passed by the LLM in
+ * set_story_metadata. Returns an error message when any field violates its
+ * format rule, or `null` when all three are valid.
+ *
+ * Rules (see openspec/changes/skill-catalog-autogen/specs/export-agent/spec.md):
+ * - world_slug: kebab-case ASCII /^[a-z0-9]+(-[a-z0-9]+)*$/, length 2-32
+ * - world_name: non-empty, length <= 40
+ * - summary: non-empty, no newlines, length <= 80
+ */
+export function validateCatalogFields(input: {
+  world_slug: string
+  world_name: string
+  summary: string
+}): string | null {
+  const slug = input.world_slug
+  if (typeof slug !== 'string' || slug.length < 2 || slug.length > 32) {
+    return 'world_slug length must be between 2 and 32 characters'
+  }
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+    return 'world_slug must be kebab-case ASCII [a-z0-9-]+ (no uppercase, underscores, leading/trailing hyphens, or consecutive hyphens)'
+  }
+  const name = input.world_name
+  if (typeof name !== 'string' || name.length === 0) {
+    return 'world_name must be a non-empty string'
+  }
+  if (name.length > 40) {
+    return 'world_name must be at most 40 characters'
+  }
+  const summary = input.summary
+  if (typeof summary !== 'string' || summary.length === 0) {
+    return 'summary must be a non-empty string'
+  }
+  if (summary.length > 80) {
+    return 'summary must be at most 80 characters'
+  }
+  if (/[\r\n]/.test(summary)) {
+    return 'summary must be a single line (no \\r / \\n characters)'
+  }
+  return null
+}
+
 export function makeStorySetupTools(
   builder: ExportBuilder,
   onProgress: OnExportProgress,
@@ -52,7 +94,7 @@ export function makeStorySetupTools(
     }),
 
     set_story_metadata: tool({
-      description: 'Set story-level framework (genre / tone / constraints / acts_options / default_acts). This is the first step of the staged workflow.',
+      description: 'Set story-level framework (genre / tone / constraints / acts_options / default_acts) plus README catalog display candidates (world_slug / world_name / summary). This is the first step of the staged workflow.',
       strict: true,
       inputSchema: z.object({
         genre: z.string().describe('Story genre, e.g. "urban fantasy / psychological drama"'),
@@ -65,6 +107,9 @@ export function makeStorySetupTools(
           endings_count: z.number().describe('Number of endings'),
         })).describe('2-3 length presets for the story'),
         default_acts: z.number().describe('Recommended default, must equal one of the acts values in acts_options'),
+        world_slug: z.string().describe('kebab-case ASCII short slug for the world, used in the repo README catalog. 2-32 chars, [a-z0-9-]+. Example: "fate-zero", "three-kingdoms"'),
+        world_name: z.string().describe('Human-readable world name (<=40 chars, any language/symbols allowed). Example: "Fate/Zero", "三国"'),
+        summary: z.string().describe('Single-line story summary (<=80 chars, no newlines) combining world + main conflict or cast. Example: "第四次圣杯战争，七位御主与英灵的死斗"'),
       }),
       inputExamples: [{
         input: {
@@ -81,21 +126,38 @@ export function makeStorySetupTools(
             { acts: 7, label: 'long', rounds_total: '56-84', endings_count: 6 },
           ],
           default_acts: 5,
+          world_slug: 'fate-zero',
+          world_name: 'Fate/Zero',
+          summary: '第四次圣杯战争，七位御主与英灵的死斗',
         },
       }],
-      execute: async ({ genre, tone, constraints, acts_options: rawActsOptions, default_acts }) => {
+      execute: async ({ genre, tone, constraints, acts_options: rawActsOptions, default_acts, world_slug, world_name, summary }) => {
         try {
           onProgress({ type: 'tool_start', tool: 'set_story_metadata' })
+          const catalogErr = validateCatalogFields({ world_slug, world_name, summary })
+          if (catalogErr) {
+            onProgress({ type: 'tool_end', tool: 'set_story_metadata', result_summary: `error: ${catalogErr}` })
+            return { error: catalogErr }
+          }
           const acts_options: ActOption[] = rawActsOptions.map((o) => ({
             acts: o.acts,
             label_zh: o.label,
             rounds_total: o.rounds_total,
             endings_count: o.endings_count,
           }))
-          builder.setMetadata({ genre, tone, constraints, acts_options, default_acts })
-          const summary = `Metadata saved: ${acts_options.length} length options (default ${default_acts} acts)`
-          onProgress({ type: 'tool_end', tool: 'set_story_metadata', result_summary: summary })
-          return { ok: true, summary }
+          builder.setMetadata({
+            genre,
+            tone,
+            constraints,
+            acts_options,
+            default_acts,
+            world_slug,
+            world_name,
+            summary,
+          })
+          const summaryMsg = `Metadata saved: ${acts_options.length} length options (default ${default_acts} acts); catalog: ${world_slug} / ${world_name}`
+          onProgress({ type: 'tool_end', tool: 'set_story_metadata', result_summary: summaryMsg })
+          return { ok: true, summary: summaryMsg }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err)
           onProgress({ type: 'tool_end', tool: 'set_story_metadata', result_summary: `error: ${errMsg}` })

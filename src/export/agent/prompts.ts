@@ -192,8 +192,13 @@ If any call returns \`{ error: ... }\`, fix the error based on the error message
   - characters ≥ 5 → \`"5:medium:40-60:5|7:long:56-84:6|9:epic:72-108:7"\`, default_acts = 7 (longer stories accommodate more characters)
   Format: acts:label_zh:rounds_total:endings_count
 - **default_acts**: recommended value; must be in the acts_options list
+- **world_slug**: kebab-case ASCII short slug (2-32 chars, \`[a-z0-9-]+\`) used as the first column in the repo README catalog. Derive from the world name, lowercase + hyphen-only. Examples: \`fate-zero\`, \`three-kingdoms\`, \`white-album-2\`. NOT the same as the skill_id (which includes the author handle prefix).
+- **world_name**: human-readable world name (<=40 chars). Keep original casing and symbols. Examples: \`Fate/Zero\`, \`三国\`, \`White Album 2\`.
+- **summary**: single-line story summary (<=80 chars, **no newlines**) blending the world + main conflict or main cast. Write this as the market-facing one-liner a reader skims on GitHub. Examples: \`第四次圣杯战争，七位御主与英灵的死斗\`, \`乱世争霸，曹操、刘备、诸葛亮等群雄并立\`.
 
 **Important**: The final act count is chosen by the user when launching the skill. You only provide reasonable options; do not lock in a single act count.
+
+**Note**: The catalog fields (world_slug / world_name / summary) will be shown to the author for confirmation at the end of export. Produce your best candidate; the author can edit them before the archive is written.
 
 ## 3. Story State Design (set_story_state) ★ Core Design Step
 
@@ -433,6 +438,7 @@ If any call returns \`{ error: ... }\`, fix the error based on the error message
   - characters 3-4 → \`"3:short:24-36:4|5:medium:40-60:5|7:long:56-84:6"\`, default_acts = 5
   - characters ≥ 5 → \`"5:medium:40-60:5|7:long:56-84:6|9:epic:72-108:7"\`, default_acts = 7
   Format: acts:label_zh:rounds_total:endings_count
+- **world_slug** / **world_name** / **summary**: README catalog display candidates (skill-catalog-autogen). world_slug is kebab-case ASCII 2-32 chars (\`[a-z0-9-]+\`, e.g. \`fate-zero\`); world_name is human-readable (<=40 chars, e.g. \`Fate/Zero\`); summary is single-line <=80 chars blending world + main conflict. Author will confirm / edit these before the archive is written.
 
 ## 2. Story State Design (set_story_state)
 

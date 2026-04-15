@@ -60,4 +60,54 @@ describe('buildSoulkillerManifest', () => {
     })
     expect(json.endsWith('\n')).toBe(true)
   })
+
+  describe('catalog display fields (skill-catalog-autogen)', () => {
+    it('writes world_slug / world_name / summary when provided', () => {
+      const json = buildSoulkillerManifest({
+        skill_id: 'fz-in-fate-zero',
+        author_version: '0.2.0',
+        world_slug: 'fate-zero',
+        world_name: 'Fate/Zero',
+        summary: '第四次圣杯战争，含完整卡司',
+        now: fixedNow,
+      })
+      const parsed = JSON.parse(json)
+      expect(parsed.world_slug).toBe('fate-zero')
+      expect(parsed.world_name).toBe('Fate/Zero')
+      expect(parsed.summary).toBe('第四次圣杯战争，含完整卡司')
+      expect(typeof parsed.world_slug).toBe('string')
+      expect(typeof parsed.world_name).toBe('string')
+      expect(typeof parsed.summary).toBe('string')
+    })
+
+    it('falls back to empty string when fields are omitted', () => {
+      const json = buildSoulkillerManifest({
+        skill_id: 'x',
+        author_version: '1.0.0',
+        now: fixedNow,
+      })
+      const parsed = JSON.parse(json)
+      expect(parsed.world_slug).toBe('')
+      expect(parsed.world_name).toBe('')
+      expect(parsed.summary).toBe('')
+    })
+
+    it('emits all three fields as strings even when empty (never null/undefined)', () => {
+      const json = buildSoulkillerManifest({
+        skill_id: 'x',
+        author_version: '1.0.0',
+        world_slug: undefined,
+        world_name: undefined,
+        summary: undefined,
+        now: fixedNow,
+      })
+      const parsed = JSON.parse(json)
+      expect(parsed).toHaveProperty('world_slug')
+      expect(parsed).toHaveProperty('world_name')
+      expect(parsed).toHaveProperty('summary')
+      expect(typeof parsed.world_slug).toBe('string')
+      expect(typeof parsed.world_name).toBe('string')
+      expect(typeof parsed.summary).toBe('string')
+    })
+  })
 })
