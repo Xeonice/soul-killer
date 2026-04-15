@@ -140,6 +140,38 @@ async function serveExample(env: Env, r2Path: string, filename: string): Promise
   })
 }
 
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  avif: 'image/avif',
+  ico: 'image/x-icon',
+}
+
+async function serveScreenshot(env: Env, filename: string): Promise<Response> {
+  const r2Obj = await env.RELEASES.get(`screenshot/${filename}`)
+  if (!r2Obj) {
+    return new Response(`Screenshot not found: ${filename}`, { status: 404 })
+  }
+  const ext = filename.toLowerCase().split('.').pop() ?? ''
+  const contentType = IMAGE_CONTENT_TYPES[ext] ?? 'application/octet-stream'
+  return new Response(r2Obj.body, {
+    headers: {
+      'Content-Type': contentType,
+      // Inline disposition so browsers render the image instead of offering
+      // a download. README / docs embed these via <img src>.
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Length': String(r2Obj.size),
+      'Cache-Control': 'public, max-age=2592000, immutable',
+      'Access-Control-Allow-Origin': '*',
+      'X-Source': 'r2',
+    },
+  })
+}
+
 async function serveInstallScript(env: Env, filename: string): Promise<Response> {
   const r2Obj = await env.RELEASES.get(`scripts/${filename}`)
   if (r2Obj) {
@@ -222,6 +254,14 @@ export default {
       return serveExample(env, `examples/skills/${exampleSkillMatch[1]}`, exampleSkillMatch[1]!)
     }
 
+    // GET /screenshot/:file — screenshots / images uploaded to R2 at
+    // soulkiller-releases/screenshot/. Served inline with an image/* content
+    // type so README and docs can reference them via <img src>.
+    const screenshotMatch = path.match(/^\/screenshot\/([\w.-]+)$/)
+    if (screenshotMatch) {
+      return serveScreenshot(env, screenshotMatch[1]!)
+    }
+
     // GET /examples/:file — example pack files
     const exampleMatch = path.match(/^\/examples\/([\w.-]+)$/)
     if (exampleMatch) {
@@ -241,6 +281,7 @@ export default {
           '/examples/catalog.json': 'Skill catalog (JSON, listing downloadable .skill archives)',
           '/examples/:file': 'Example pack files (all-souls.soul.pack, all-worlds.world.pack)',
           '/examples/skills/:file': 'Example skill files (fate-zero.skill, three-kingdoms.skill, ...)',
+          '/screenshot/:file': 'Screenshots / images (served inline, image/* content type)',
         },
         platforms: Object.keys(PLATFORM_MAP),
       })
