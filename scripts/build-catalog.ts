@@ -74,7 +74,7 @@ interface CatalogEntry {
 function buildEntry(skillPath: string): CatalogEntry {
   const bytes = new Uint8Array(fs.readFileSync(skillPath))
   const entries = unzipSync(bytes)
-  const slug = path.basename(skillPath).replace(/\.skill$/, '')
+  const fileSlug = path.basename(skillPath).replace(/\.skill$/, '')
 
   // Find SKILL.md and soulkiller.json (with or without wrapper dir)
   function pick(name: string): Uint8Array | null {
@@ -91,6 +91,9 @@ function buildEntry(skillPath: string): CatalogEntry {
 
   let engineVersion = 0
   let authorVersion: string | null = null
+  let manifestWorldSlug: string | null = null
+  let manifestWorldName: string | null = null
+  let manifestSummary: string | null = null
   const jsonBytes = pick('soulkiller.json')
   if (jsonBytes) {
     try {
@@ -102,6 +105,19 @@ function buildEntry(skillPath: string): CatalogEntry {
       if (typeof parsed.version === 'string' && parsed.version.length > 0) {
         authorVersion = parsed.version
       }
+      // skill-catalog-autogen: prefer the author-curated catalog fields from
+      // soulkiller.json over technical identifiers (skill_id / frontmatter
+      // name / frontmatter description). Legacy archives without these
+      // fields fall back to the previous behavior.
+      if (typeof parsed.world_slug === 'string' && parsed.world_slug.length > 0) {
+        manifestWorldSlug = parsed.world_slug
+      }
+      if (typeof parsed.world_name === 'string' && parsed.world_name.length > 0) {
+        manifestWorldName = parsed.world_name
+      }
+      if (typeof parsed.summary === 'string' && parsed.summary.length > 0) {
+        manifestSummary = parsed.summary
+      }
     } catch { /* ignore */ }
   }
   if (authorVersion === null) {
@@ -110,6 +126,10 @@ function buildEntry(skillPath: string): CatalogEntry {
     )
     authorVersion = '0.0.0'
   }
+
+  const slug = manifestWorldSlug ?? fileSlug
+  const displayName = manifestWorldName ?? fm.name ?? fileSlug
+  const description = manifestSummary ?? fm.description ?? ''
 
   // Characters: scan souls/*/ directory entries
   const characterSet = new Set<string>()
@@ -120,12 +140,13 @@ function buildEntry(skillPath: string): CatalogEntry {
 
   return {
     slug,
-    display_name: fm.name || slug,
-    description: fm.description || '',
+    display_name: displayName,
+    description,
     version: authorVersion,
     engine_version: engineVersion,
     size_bytes: bytes.byteLength,
     sha256: sha256Hex(bytes),
+    // url stays keyed by the archive filename — that's what R2 stores.
     url: ARG_URL_PREFIX + path.basename(skillPath),
     soulkiller_version_min: ARG_SOULKILLER_MIN,
     ...(characterSet.size > 0 ? { characters: [...characterSet].sort() } : {}),

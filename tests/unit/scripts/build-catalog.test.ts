@@ -70,4 +70,46 @@ describe('build-catalog buildEntry', () => {
     const entry = buildEntry(skillPath)
     expect(entry.version).toBe('2026.04.15')
   })
+
+  describe('catalog display fields (skill-catalog-autogen)', () => {
+    it('prefers world_slug / world_name / summary over technical identifiers', () => {
+      const skillPath = makeSkill(tmp, '2077-in-cyberpunk-2077', {
+        engine_version: 2,
+        version: '0.1.0',
+        world_slug: 'cyberpunk-2077',
+        world_name: '2077',
+        summary: '赛博朋克 2077 的故事',
+      })
+      const entry = buildEntry(skillPath)
+      expect(entry.slug).toBe('cyberpunk-2077')
+      expect(entry.display_name).toBe('2077')
+      expect(entry.description).toBe('赛博朋克 2077 的故事')
+      // url stays keyed by archive filename (backwards-compat with R2 layout)
+      expect(entry.url).toContain('2077-in-cyberpunk-2077.skill')
+    })
+
+    it('falls back to filename slug + SKILL.md frontmatter when manifest lacks catalog fields', () => {
+      const skillPath = makeSkill(tmp, 'legacy-skill', {
+        engine_version: 2,
+        version: '0.1.0',
+      })
+      const entry = buildEntry(skillPath)
+      expect(entry.slug).toBe('legacy-skill')
+      expect(entry.display_name).toBe('legacy-skill') // fm.name
+      expect(entry.description).toBe('test') // fm.description
+    })
+
+    it('uses manifest summary but falls back to fm.name when world_name is missing', () => {
+      const skillPath = makeSkill(tmp, 'partial-skill', {
+        engine_version: 2,
+        version: '0.1.0',
+        world_slug: 'partial',
+        summary: 'only summary is set',
+      })
+      const entry = buildEntry(skillPath)
+      expect(entry.slug).toBe('partial')
+      expect(entry.display_name).toBe('partial-skill') // fm.name fallback
+      expect(entry.description).toBe('only summary is set')
+    })
+  })
 })
